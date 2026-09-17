@@ -1,0 +1,262 @@
+from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Theme
+from gpu import Color
+from interop import Connection
+from document import Document
+from canvas import Canvas
+
+pub class Panels:
+    pub let body: VStack
+    pub let canvas: Canvas
+    pub let document: Document
+    pub let status: Text
+    pub let prompt: TextPrompt
+    pub let layers: ListView
+    let font: Font
+    let connections: list[Connection]
+    pub let geometry: Text
+    pub let dpi: Text
+    pub let tool: Text
+    pub let diameter: Text
+    pub let hardness: Text
+    pub let opacity: Text
+    var prompt_mode: str = ""
+
+    pub func init(self, document: Document, font: Font) -> unit!:
+        self.document = document
+        self.font = font
+        self.connections = []
+        self.canvas = Canvas(document)
+        self.prompt = TextPrompt(font = font)
+        self.layers = ListView([], font = font)
+        self.status = Text("Session only | B brush / E eraser | Undo: current layer", font = font)
+        self.geometry = Text("", font = font)
+        self.dpi = Text("", font = font)
+        self.tool = Text("", font = font)
+        self.diameter = Text("", font = font)
+        self.hardness = Text("", font = font)
+        self.opacity = Text("", font = font)
+        let toolbar = Toolbar([self.button("Brush", self.brush), self.button("Eraser", self.erase), self.button("Undo", self.undo), self.button("Redo", self.redo), self.swatch("Black", Color(0.0, 0.0, 0.0), Color(1.0, 1.0, 1.0)), self.swatch("White", Color(1.0, 1.0, 1.0), Color(0.0, 0.0, 0.0)), self.swatch("Blue", Color(0.02, 0.18, 0.65), Color(1.0, 1.0, 1.0)), self.swatch("Red", Color(0.75, 0.03, 0.02), Color(1.0, 1.0, 1.0))], font = font)
+        let properties = VStack([Text("PROPERTIES", font = font), self.geometry, HStack([self.button("Width", func () -> unit!:
+            self.edit_property("width")), self.button("Height", func () -> unit!:
+            self.edit_property("height"))], spacing = 4.0), HStack([self.button("DPI", func () -> unit!:
+            self.edit_property("dpi")), self.dpi], spacing = 4.0), self.tool, HStack([self.button("Diameter", func () -> unit!:
+            self.edit_property("diameter")), self.diameter], spacing = 4.0), HStack([self.button("Hardness", func () -> unit!:
+            self.edit_property("hardness")), self.hardness], spacing = 4.0), HStack([self.button("Opacity", func () -> unit!:
+            self.edit_property("opacity")), self.opacity], spacing = 4.0)], spacing = 4.0, padding = 8.0)
+        let layer_content = VStack([Text("LAYERS (top first)", font = font), self.layers, HStack([self.button("Add", self.add_layer), self.button("Delete", self.delete_layer)], spacing = 4.0), HStack([self.button("Up", func () -> unit!:
+            self.move_layer(1)), self.button("Down", func () -> unit!:
+            self.move_layer(-1)), self.button("Visible", self.toggle_visibility)], spacing = 4.0), HStack([self.button("Rename", func () -> unit!:
+            self.edit_property("rename")), self.button("Clear", self.clear_layer)], spacing = 4.0)], spacing = 4.0, padding = 8.0)
+        layer_content.layout().set_flex()
+        let layer_panel = Panel("LAYERS", layer_content, minimum = Size(280.0, 180.0), closable = false)
+        let property_panel = Panel("PROPERTIES", properties, minimum = Size(280.0, 240.0), closable = false)
+        property_panel.layout().set_flex(vertical = 0.0)
+        let inspector = VStack([property_panel, layer_panel], spacing = 0.0)
+        inspector.layout().set_flex()
+        inspector.layout().set_limits(Size(280.0, 480.0), Size(16384.0, 16384.0))
+        let canvas_panel = Panel("CANVAS", self.canvas, minimum = Size(200.0, 160.0), closable = false)
+        let split = SplitView(canvas_panel, inspector, fraction = 0.72)
+        self.body = VStack([toolbar, split, Toolbar([self.status], font = font), self.prompt], spacing = 0.0)
+        self.body.layout().set_flex()
+        self.connections.append(self.layers.on_activate(self.select_layer))
+        self.connections.append(self.prompt.on_submit(self.apply))
+        self.refresh()
+
+    func button(self, text: str, callback: func() -> unit!) -> Button!:
+        let button = Button(text, font = self.font)
+        self.connections.append(button.on_click(callback))
+        return button
+
+    func swatch(self, text: str, color: Color, foreground: Color) -> Button!:
+        let button = self.button(text, func () -> unit!:
+            self.choose_color(color))
+        button.layout().set_theme(Theme(button = color, hover = color, pressed = color, foreground = foreground))
+        return button
+
+    func choose_color(self, color: Color) -> unit!:
+        self.cancel_prompt()
+        self.document.color = color
+        self.document.touch()
+        self.refresh()
+
+    func cancel_prompt(self):
+        self.prompt_mode = ""
+        self.prompt.layout().set_visible(false)
+
+    pub func brush(self) -> unit!:
+        self.cancel_prompt()
+        self.document.erasing = false
+        self.refresh()
+
+    pub func erase(self) -> unit!:
+        self.cancel_prompt()
+        self.document.erasing = true
+        self.refresh()
+
+    pub func undo(self) -> unit!:
+        self.cancel_prompt()
+        self.document.undo()
+        self.refresh()
+
+    pub func redo(self) -> unit!:
+        self.cancel_prompt()
+        self.document.redo()
+        self.refresh()
+
+    pub func select_layer(self, index: int) -> unit!:
+        if index < 0 or index >= self.document.layers.length:
+            return
+        self.cancel_prompt()
+        self.document.choose(self.document.layers.length - 1 - index)
+        self.refresh()
+
+    pub func add_layer(self) -> unit!:
+        self.cancel_prompt()
+        self.document.add()
+        self.refresh()
+
+    pub func delete_layer(self) -> unit!:
+        self.cancel_prompt()
+        self.document.remove()
+        self.refresh()
+
+    pub func move_layer(self, direction: int) -> unit!:
+        self.cancel_prompt()
+        if direction == 1 or direction == -1:
+            self.document.move(direction)
+        self.refresh()
+
+    pub func toggle_visibility(self) -> unit!:
+        self.cancel_prompt()
+        let layer = self.document.active()
+        layer.visible = not layer.visible
+        self.document.touch()
+        self.refresh()
+
+    pub func clear_layer(self) -> unit!:
+        self.cancel_prompt()
+        self.document.checkpoint()
+        self.document.active().pixels.clear()
+        self.document.touch()
+        self.refresh()
+
+    pub func edit_property(self, mode: str) -> unit!:
+        self.cancel_prompt()
+        var title = ""
+        var value = ""
+        if mode == "width":
+            title = "Width: 1..2048 px; maximum area 1048576"
+            value = f"{self.document.width}"
+        elif mode == "height":
+            title = "Height: 1..2048 px; maximum area 1048576"
+            value = f"{self.document.height}"
+        elif mode == "dpi":
+            title = "DPI: 1..2400"
+            value = f"{self.document.dpi}"
+        elif mode == "diameter":
+            title = "Tool diameter: 1..512 px"
+            value = f"{self.document.diameter()}"
+        elif mode == "hardness":
+            title = "Tool hardness: 0..100 percent"
+            value = f"{self.document.hardness()}"
+        elif mode == "opacity":
+            title = "Layer opacity: 0..100 percent"
+            value = f"{self.document.active().opacity}"
+        elif mode == "rename":
+            title = "Layer name: 1..80 characters"
+            value = self.document.active().name
+        else:
+            return
+        self.prompt.open(title, value, accept = "Apply")
+        self.prompt_mode = mode
+
+    func reject(self, text: str, message: str) -> unit!:
+        self.prompt.open(message, text, accept = "Apply")
+
+    pub func apply(self, text: str) -> unit!:
+        let mode = self.prompt_mode
+        if mode == "":
+            return
+        let trimmed = text.trim()
+        if mode == "rename":
+            if trimmed == "" or trimmed.length > 80:
+                self.reject(text, "Use a layer name of 1..80 characters")
+                return
+            for character in trimmed:
+                if character < " ":
+                    self.reject(text, "Use a single-line layer name without control characters")
+                    return
+            self.document.active().name = trimmed
+        else:
+            var minimum = 1
+            var maximum = 2048
+            if mode == "dpi":
+                maximum = 2400
+            elif mode == "diameter":
+                maximum = 512
+            elif mode == "hardness" or mode == "opacity":
+                minimum = 0
+                maximum = 100
+            if trimmed == "":
+                self.reject(text, f"Enter a whole number: {minimum}..{maximum}")
+                return
+            for character in trimmed:
+                if character < "0" or character > "9":
+                    self.reject(text, f"Enter a whole number: {minimum}..{maximum}")
+                    return
+            let value = int(trimmed) catch failure:
+                self.reject(text, f"Enter a whole number: {minimum}..{maximum}")
+                return
+            if value < minimum or value > maximum:
+                self.reject(text, f"Enter a whole number: {minimum}..{maximum}")
+                return
+            if mode == "width" or mode == "height":
+                let width = value if mode == "width" else self.document.width
+                let height = value if mode == "height" else self.document.height
+                if width * height > 1048576:
+                    self.reject(text, "Maximum area is 1048576 pixels; reduce the other dimension first")
+                    return
+                if width != self.document.width or height != self.document.height:
+                    self.document.resize(width, height)
+            elif mode == "dpi":
+                self.document.dpi = value
+            elif mode == "diameter":
+                if self.document.erasing:
+                    self.document.eraser_diameter = value
+                else:
+                    self.document.brush_diameter = value
+            elif mode == "hardness":
+                if self.document.erasing:
+                    self.document.eraser_hardness = value
+                else:
+                    self.document.brush_hardness = value
+            elif mode == "opacity":
+                self.document.active().opacity = value
+        self.document.touch()
+        self.cancel_prompt()
+        self.refresh()
+
+    pub func refresh(self) -> unit!:
+        self.geometry.set_text(f"{self.document.width} x {self.document.height} px")
+        self.dpi.set_text(f"{self.document.dpi} dpi")
+        self.tool.set_text("Tool: Eraser" if self.document.erasing else "Tool: Brush")
+        self.diameter.set_text(f"{self.document.diameter()} px")
+        self.hardness.set_text(f"{self.document.hardness()} %")
+        self.opacity.set_text(f"{self.document.active().opacity} %")
+        self.status.set_text("Session only | B brush / E eraser | Undo: current layer")
+        let items: list[ListItem] = []
+        var index = self.document.layers.length - 1
+        while index >= 0:
+            let layer = self.document.layers[index]
+            let mark = "[x]" if layer.visible else "[ ]"
+            items.append(ListItem(f"{mark} {layer.name}  {layer.opacity}%"))
+            index -= 1
+        self.layers.set_items(items)
+        self.layers.select(self.document.layers.length - 1 - self.document.selected)
+        self.canvas.layout().invalidate()
+
+    pub func close(self):
+        self.cancel_prompt()
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()

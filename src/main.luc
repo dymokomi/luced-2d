@@ -1,0 +1,7 @@
+from app import Luce2D
+
+pub func main(arguments: list[str]) -> int!:
+    let editor = Luce2D()
+    editor.run(arguments)
+    editor.close()
+    return 0

@@ -1,0 +1,6 @@
+[package]
+name = "luced_2d"
+source = "src"
+
+[dependencies]
+luce_ui = "../luce-ui"
