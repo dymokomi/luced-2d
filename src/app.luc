@@ -1,4 +1,4 @@
-from ui import Application, Font, Action, Shortcut
+from ui import Application, Font, Command, Shortcut
 from input import Key
 from interop import Connection
 from document import Document
@@ -15,16 +15,16 @@ pub class Luce2D:
         let document = Document()
         let panels = Panels(document, font)
         let app = Application(panels.body, title = "luced-2d", width = 1200, height = 800)
-        let brush = Action("Brush", Shortcut(Key.b))
-        let eraser = Action("Eraser", Shortcut(Key.e))
-        let undo = Action("Undo", Shortcut(Key.z, primary = true))
-        let redo = Action("Redo", Shortcut(Key.z, primary = true, shift = true))
+        let brush = Command("Brush", Shortcut(Key.b), id = "brush")
+        let eraser = Command("Eraser", Shortcut(Key.e), id = "eraser")
+        let undo = Command("Undo", Shortcut(Key.z, primary = true), id = "undo")
+        let redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
         let connections: list[Connection] = []
         connections.append(brush.on_trigger(panels.brush))
         connections.append(eraser.on_trigger(panels.erase))
         connections.append(undo.on_trigger(panels.undo))
         connections.append(redo.on_trigger(panels.redo))
-        app.set_actions([brush, eraser, undo, redo])
+        app.set_commands([brush, eraser, undo, redo])
         self.app = app
         self.document = document
         self.panels = panels
