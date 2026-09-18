@@ -70,7 +70,7 @@ pub class Panels:
     func swatch(self, text: str, color: Color, foreground: Color) -> Button!:
         let button = self.button(text, func () -> unit!:
             self.choose_color(color))
-        button.layout().set_theme(Theme(button = color, hover = color, pressed = color, foreground = foreground))
+        button.layout().set_theme(Theme(button = color, panel = color, pressed = color, foreground = foreground))
         return button
 
     func choose_color(self, color: Color) -> unit!:
