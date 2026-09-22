@@ -14,15 +14,19 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - Layers with names, visibility, opacity and all 26 Photoshop blend modes,
   composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
-- Move tool (`V`): drag or nudge the layer's pixels; Filter › Gaussian Blur.
+- Move tool (`V`): drag with a live preview, or nudge, the layer's pixels;
+  Filter › Gaussian Blur.
 - Image › Crop to Selection, Canvas Size, Image Size; Layer › Duplicate, Move
   Up/Down, Merge Down (cmd-J, cmd-], cmd-[, cmd-E).
-- Rectangular marquee (`M`, cmd-A, cmd-D) with marching ants; painting and
-  fills stay inside it; Fill (alt-Delete) and Clear (Delete).
+- Per-pixel selections: rectangular marquee (`M`), elliptical marquee and
+  lasso (`L`), shift adds and alt subtracts, Select › All, Deselect, Inverse,
+  Expand, Contract and Feather (cmd-A, cmd-D, cmd-shift-I); marching ants;
+  painting and fills stay inside; Fill (alt-Delete) and Clear (Delete).
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
   edges and no dab artefacts; undo and redo of strokes.
-- Pan with scroll or space-drag, zoom about the pointer with cmd/ctrl-scroll,
-  `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
+- Pan with two-finger scroll, hand tool (`H`) or space-drag; zoom about the
+  pointer with a touchpad pinch, the mouse wheel, cmd/ctrl-scroll, the zoom
+  tool (`Z`), `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
 - An Adjust menu with destructive adjustments: brightness/contrast, hue/
   saturation/lightness, invert, levels, desaturate, threshold, posterize —
   all undoable.

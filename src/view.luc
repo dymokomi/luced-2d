@@ -1,7 +1,6 @@
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point
 from gpu import RenderTarget, Rect, Region, Filter
 from input import EventKind, Cursor, Key, ScrollUnit
-from gpu import Color
 from workspace import Workspace
 import theme
 import math
