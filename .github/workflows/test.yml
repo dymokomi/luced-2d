@@ -96,4 +96,5 @@ jobs:
         working-directory: luced-2d
         env:
           LUC_HOME: ${{ runner.temp }}/luc-home
+          LUCE_STD: ${{ github.workspace }}/luce-base/src/std
         run: python3 tests/run.py --base build/toolchain/luce-base --luce build/toolchain/luce
