@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer, Theme, Application
+from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -13,6 +13,7 @@ pub class Panels:
     pub let status: Text
     pub let prompt: TextPrompt
     pub let layers: ListView
+    pub let adjustments: list[Command]
     let font: Font
     let connections: list[Connection]
     var prompt_mode: str = ""
@@ -26,8 +27,17 @@ pub class Panels:
         self.prompt = TextPrompt(font = font)
         self.layers = ListView([], font = font)
         self.status = Text("", font = font)
+        self.adjustments = [Command("Brightness / Contrast", id = "adjust_0"), Command("Hue / Saturation / Lightness", id = "adjust_1"),
+                            Command("Invert", id = "adjust_2"), Command("Levels", id = "adjust_3"), Command("Desaturate", id = "adjust_4"),
+                            Command("Threshold", id = "adjust_5"), Command("Posterize", id = "adjust_6")]
+        var kind = 0
+        for command in self.adjustments:
+            let selected = kind
+            self.connections.append(command.on_trigger(func () -> unit!:
+                self.adjust(selected)))
+            kind += 1
         let toolbar = Toolbar([self.button("New", self.new_document), self.button("Open", self.open_document), self.button("Save", self.save_document),
-                               self.button("Save As", self.save_document_as), Spacer(),
+                               self.button("Save As", self.save_document_as), Menu("Adjust", self.adjustments, font = font), Spacer(),
                                self.button("Brush", self.brush), self.button("Eraser", self.eraser), self.button("Size", self.edit_diameter),
                                self.swatch("Black", 0.0, 0.0, 0.0), self.swatch("White", 1.0, 1.0, 1.0), self.swatch("Orange", 0.8069, 0.3515, 0.0497),
                                self.swatch("Blue", 0.02, 0.18, 0.65), self.swatch("Red", 0.75, 0.03, 0.02), Spacer(),
@@ -84,6 +94,64 @@ pub class Panels:
     pub func smaller(self) -> unit!:
         self.workspace.scale_brush(0.8)
         self.refresh()
+
+    ## Ask for an adjustment's parameters, or apply the ones that need none.
+    pub func adjust(self, kind: int) -> unit!:
+        if kind == 2 or kind == 4:
+            self.workspace.adjust(kind, [])
+            self.refresh()
+            return
+        var title = ""
+        var value = ""
+        if kind == 0:
+            title = "Brightness and contrast, each -100..100"
+            value = "0 0"
+        elif kind == 1:
+            title = "Hue shift in degrees, saturation and lightness -100..100"
+            value = "0 0 0"
+        elif kind == 3:
+            title = "Levels: input black, input white (0..255), gamma, output black, output white (0..255)"
+            value = "0 255 1.0 0 255"
+        elif kind == 5:
+            title = "Threshold level, 0..255"
+            value = "128"
+        elif kind == 6:
+            title = "Posterize levels, 2..255"
+            value = "4"
+        self.ask(f"adjust {kind}", title, value, "Apply")
+
+    func apply_adjustment(self, kind: int, text: str) -> bool!:
+        var numbers: list[float] = []
+        for part in text.split(" "):
+            let piece = part.trim()
+            if piece == "":
+                continue
+            let number = float(piece) catch failure:
+                return false
+            numbers.append(number)
+        var values: list[float] = []
+        if kind == 0:
+            if numbers.length != 2:
+                return false
+            values = [numbers[0] / 100.0, numbers[1] / 100.0]
+        elif kind == 1:
+            if numbers.length != 3:
+                return false
+            values = [numbers[0] / 360.0, numbers[1] / 100.0, numbers[2] / 100.0]
+        elif kind == 3:
+            if numbers.length != 5:
+                return false
+            values = [numbers[0] / 255.0, numbers[1] / 255.0, numbers[2], numbers[3] / 255.0, numbers[4] / 255.0]
+        elif kind == 5:
+            if numbers.length != 1:
+                return false
+            values = [numbers[0] / 255.0]
+        elif kind == 6:
+            if numbers.length != 1:
+                return false
+            values = [numbers[0]]
+        self.workspace.adjust(kind, values)
+        return true
 
     pub func edit_diameter(self) -> unit!:
         self.ask("diameter", "Brush diameter, 1..4096 pixels", f"{int(self.workspace.diameter)}", "Apply")
@@ -215,6 +283,15 @@ pub class Panels:
                 self.reject(text, "Each side must be 1..16384 pixels")
                 return
             self.workspace.create(width, height)
+        elif mode.length > 7 and mode[..<7] == "adjust ":
+            let kind = int(mode[7..]) catch failure:
+                return
+            let applied = self.apply_adjustment(kind, trimmed) catch failure:
+                self.reject(text, f"Could not adjust: {failure.message}")
+                return
+            if not applied:
+                self.reject(text, "Enter the numbers the title asks for, separated by spaces")
+                return
         elif mode == "diameter":
             let pixels = int(trimmed) catch failure:
                 self.reject(text, "Enter a whole number: 1..4096")

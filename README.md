@@ -18,7 +18,11 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   edges and no dab artefacts; undo and redo of strokes.
 - Pan with scroll or space-drag, zoom about the pointer with cmd/ctrl-scroll,
   `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
-- Saves the flattened document to PNG, JPEG or TIFF.
+- An Adjust menu with destructive adjustments: brightness/contrast, hue/
+  saturation/lightness, invert, levels, desaturate, threshold, posterize —
+  all undoable.
+- Opens and saves through the desktop's file dialogs; saves the flattened
+  document to PNG, JPEG or TIFF.
 
 ## Build and run
 

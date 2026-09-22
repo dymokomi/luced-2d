@@ -127,6 +127,16 @@ pub class Workspace:
             self.canvas.redo()
             self.touch()
 
+    ## Apply a destructive adjustment to the selected layer.
+    pub func adjust(self, kind: int, values: list[float]) -> unit!:
+        var params: list[float] = []
+        for value in values:
+            params.append(value)
+        while params.length < 5:
+            params.append(0.0)
+        self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
+        self.touch()
+
     pub func set_color(self, red: float, green: float, blue: float):
         self.red = red
         self.green = green
