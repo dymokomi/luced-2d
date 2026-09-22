@@ -15,6 +15,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
 - Move tool (`V`): drag or nudge the layer's pixels; Filter › Gaussian Blur.
+- Image › Crop to Selection, Canvas Size, Image Size; Layer › Duplicate, Move
+  Up/Down, Merge Down (cmd-J, cmd-], cmd-[, cmd-E).
 - Rectangular marquee (`M`, cmd-A, cmd-D) with marching ants; painting and
   fills stay inside it; Fill (alt-Delete) and Clear (Delete).
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft

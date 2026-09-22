@@ -82,7 +82,9 @@ pub class Panels:
                              Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo),
                                            self.command("Fill Selection with Colour", self.fill_selection), self.command("Clear Selection", self.clear_selection)], font = font),
                              Menu("Select", [self.command("All", self.select_all), self.command("Deselect", self.deselect)], font = font),
-                             Menu("Image", self.adjustments, font = font),
+                             Menu("Image", [self.command("Crop to Selection", self.crop), self.command("Canvas Size…", self.canvas_size),
+                                            self.command("Image Size…", self.image_size)], font = font),
+                             Menu("Adjust", self.adjustments, font = font),
                              Menu("Layer", [self.command("New Layer", self.add_layer), self.command("Duplicate Layer", self.duplicate_layer),
                                             self.command("Move Layer Up", self.layer_up), self.command("Move Layer Down", self.layer_down),
                                             self.command("Merge Down", self.merge_down), self.command("Delete Layer", self.delete_layer),
@@ -293,6 +295,29 @@ pub class Panels:
         self.workspace.adjust(kind, values)
         return true
 
+    pub func crop(self) -> unit!:
+        self.workspace.crop() catch failure:
+            self.ask("", f"Cannot crop: {failure.message}", "", "OK")
+            return
+        self.refresh()
+
+    pub func canvas_size(self) -> unit!:
+        self.ask("canvas", "Canvas size: width x height, then the old canvas's offset x y (e.g. 1920 x 1080 0 0)", f"{self.workspace.width()} x {self.workspace.height()} 0 0", "Resize")
+
+    pub func image_size(self) -> unit!:
+        self.ask("image", "Image size: width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Resize")
+
+    func parse_size(self, text: str) -> list[int]!:
+        var numbers: list[int] = []
+        for part in text.replace("x", " ").split(" "):
+            let piece = part.trim()
+            if piece == "":
+                continue
+            let number = int(piece) catch failure:
+                return []
+            numbers.append(number)
+        return numbers
+
     pub func fit(self) -> unit!:
         self.workspace.fitted = false
         self.refresh()
@@ -417,6 +442,24 @@ pub class Panels:
                 self.reject(text, "Each side must be 1..16384 pixels")
                 return
             self.workspace.create(width, height)
+        elif mode == "canvas":
+            let numbers = self.parse_size(trimmed)
+            if numbers.length != 4 and numbers.length != 2:
+                self.reject(text, "Enter: width x height offset_x offset_y")
+                return
+            let ox = numbers[2] if numbers.length == 4 else 0
+            let oy = numbers[3] if numbers.length == 4 else 0
+            self.workspace.resize_canvas(numbers[0], numbers[1], ox, oy) catch failure:
+                self.reject(text, f"Could not resize: {failure.message}")
+                return
+        elif mode == "image":
+            let numbers = self.parse_size(trimmed)
+            if numbers.length != 2:
+                self.reject(text, "Enter: width x height")
+                return
+            self.workspace.resize_image(numbers[0], numbers[1]) catch failure:
+                self.reject(text, f"Could not resize: {failure.message}")
+                return
         elif mode == "blur":
             let radius = float(trimmed) catch failure:
                 self.reject(text, "Enter a radius: 0.5..250")

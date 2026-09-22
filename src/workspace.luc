@@ -101,6 +101,21 @@ pub class Workspace:
         self.selected -= 1
         self.touch()
 
+    pub func crop(self) -> unit!:
+        self.canvas.crop()
+        self.fitted = false
+        self.touch()
+
+    pub func resize_canvas(self, width: int, height: int, offset_x: int, offset_y: int) -> unit!:
+        self.canvas.resize_canvas(width, height, offset_x, offset_y)
+        self.fitted = false
+        self.touch()
+
+    pub func resize_image(self, width: int, height: int) -> unit!:
+        self.canvas.resize_image(width, height)
+        self.fitted = false
+        self.touch()
+
     pub func toggle_visibility(self) -> unit!:
         let id = self.selected_id()
         self.canvas.set_layer(id, not self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), self.canvas.layer_blend(self.selected))
