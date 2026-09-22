@@ -763,7 +763,7 @@ pub class Panels:
         if workspace.canvas.editing_mask() and (workspace.tool == "brush" or workspace.tool == "eraser"):
             tool = tool + " on mask"
         self.header_title.set_text(tool)
-        self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser")
+        self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser" or workspace.tool == "gradient")
         self.wand_controls.layout().set_visible(workspace.tool == "wand")
         self.text_controls.layout().set_visible(workspace.tool == "text")
         self.size_slider.set_value(workspace.diameter)
@@ -780,6 +780,8 @@ pub class Panels:
             hint = "Click where the text starts, then type it"
         elif workspace.tool == "eyedropper":
             hint = "Click a colour to make it the foreground colour"
+        elif workspace.tool == "gradient":
+            hint = "Drag from the foreground colour to where it fades out · fills the selection"
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":

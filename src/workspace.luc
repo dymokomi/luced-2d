@@ -269,6 +269,12 @@ pub class Workspace:
 
     ## A rectangle or ellipse between two corners, combined by `mode`
     ## (0 replace, 1 add, 2 subtract, 3 intersect).
+    ## A linear gradient on the selected layer from the foreground colour at one
+    ## document point to transparent at another, within the selection.
+    pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, self.opacity, self.red, self.green, self.blue, 0.0)
+        self.touch()
+
     ## The eyedropper: the flattened colour under a document point becomes the foreground colour.
     pub func pick(self, x: float, y: float) -> unit!:
         let px = int(math.floor(x))
@@ -334,6 +340,8 @@ pub class Workspace:
             return "Text"
         if self.tool == "eyedropper":
             return "Eyedropper"
+        if self.tool == "gradient":
+            return "Gradient"
         if self.tool == "eraser":
             return "Eraser"
         if self.tool == "hand":

@@ -16,6 +16,10 @@ pub class CanvasView: Widget:
     pub var on_text: func() -> unit!? = none
     var dragging: bool = false
     var painting: bool = false
+    ## A gradient drag in progress, from a document point.
+    var gradient_dragging: bool = false
+    var gradient_x: float = 0.0
+    var gradient_y: float = 0.0
     var last_x: float = 0.0
     var last_y: float = 0.0
     var pointer_x: float = 0.0
@@ -182,6 +186,16 @@ pub class CanvasView: Widget:
             self.move_y = event.y
             self.move_now_x = event.x
             self.move_now_y = event.y
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "gradient":
+            self.gradient_dragging = true
+            self.gradient_x = self.document_x(event.x)
+            self.gradient_y = self.document_y(event.y)
+        elif event.kind == EventKind.pointer_up and event.button == 0 and self.gradient_dragging:
+            self.gradient_dragging = false
+            let x1 = self.document_x(event.x)
+            let y1 = self.document_y(event.y)
+            if math.abs(x1 - self.gradient_x) + math.abs(y1 - self.gradient_y) >= 1.0:
+                self.workspace.fill_gradient(self.gradient_x, self.gradient_y, x1, y1)
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "eyedropper":
             self.workspace.pick(self.document_x(event.x), self.document_y(event.y))
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "text":

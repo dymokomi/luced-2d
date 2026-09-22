@@ -107,9 +107,10 @@ pub class Actions:
                       Command("Elliptical Marquee", Shortcut(Key.m, shift = true), id = "ellipse"), Command("Lasso", Shortcut(Key.l), id = "lasso"),
                       Command("Magic Wand", Shortcut(Key.w), id = "wand"),
                       Command("Text", Shortcut(Key.t), id = "text"), Command("Eyedropper", Shortcut(Key.i), id = "eyedropper"),
+                      Command("Gradient", Shortcut(Key.g), id = "gradient"),
                       Command("Brush", Shortcut(Key.b), id = "brush"), Command("Eraser", Shortcut(Key.e), id = "eraser"),
                       Command("Hand", Shortcut(Key.h), id = "hand"), Command("Zoom", Shortcut(Key.z), id = "zoom")]
-        self.tool_icons = ["move-tool", "selection-tool", "ellipse-select-tool", "lasso-tool", "magic-wand-tool", "text-tool", "eyedropper-tool", "brush-tool", "eraser-tool", "pan-tool", "zoom-in"]
+        self.tool_icons = ["move-tool", "selection-tool", "ellipse-select-tool", "lasso-tool", "magic-wand-tool", "text-tool", "eyedropper-tool", "gradient-tool", "brush-tool", "eraser-tool", "pan-tool", "zoom-in"]
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.all = [self.new_document, self.open_document, self.save, self.save_as, self.undo, self.redo, self.fill, self.clear, self.free_transform,

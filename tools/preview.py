@@ -114,6 +114,14 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.text_y = 560.0
             editor.workspace.draw_text("luced 2d")
             editor.workspace.set_color(0.75, 0.03, 0.02)
+            editor.workspace.select(0)
+            editor.workspace.canvas.select_rectangle(0, 700, 1400, 180, 0)
+            editor.workspace.set_color(0.02, 0.02, 0.03)
+            editor.workspace.opacity = 0.9
+            editor.workspace.fill_gradient(700.0, 880.0, 700.0, 700.0)
+            editor.workspace.deselect()
+            editor.workspace.select(1)
+            editor.workspace.set_color(0.75, 0.03, 0.02)
             editor.panels.layer_style()
             editor.panels.toggle_style(0)
             editor.panels.adjust_sliders[10][0].set_value(14.0)
