@@ -205,7 +205,7 @@ pub class Panels:
 
     pub func open_document(self) -> unit!:
         if let app = self.app:
-            let chosen = app.open_file("Open a PNG, JPEG, TIFF or EXR picture") catch failure:
+            let chosen = app.open_file("Open an .l2d document or a PNG, JPEG, TIFF or EXR picture") catch failure:
                 self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
                 return
             if chosen != "":
@@ -225,8 +225,8 @@ pub class Panels:
 
     pub func save_document_as(self) -> unit!:
         if let app = self.app:
-            let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.png"
-            let chosen = app.save_file("Save the flattened document; the extension picks the format", suggested) catch failure:
+            let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.l2d"
+            let chosen = app.save_file("Save as .l2d to keep the layers, or as PNG, JPEG or TIFF for a flattened picture", suggested) catch failure:
                 self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
                 return
             if chosen != "":

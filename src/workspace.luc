@@ -55,8 +55,13 @@ pub class Workspace:
         self.fitted = false
         self.touch()
 
+    ## Save to `path`: an `.l2d` package keeps every layer; any other extension
+    ## writes the flattened picture in that format.
     pub func save(self, path: str) -> unit!:
-        self.canvas.save(path)
+        if path.length > 4 and path[path.length - 4..] == ".l2d":
+            self.canvas.save_package(path)
+        else:
+            self.canvas.save(path)
         self.path = path
         self.touch()
 

@@ -100,6 +100,9 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.deselect()
             editor.workspace.blur(6.0)
             editor.workspace.move_layer(60, -40)
+            editor.workspace.canvas.select(200, 60, 700, 440)
+            editor.workspace.crop()
+            editor.workspace.resize_image(1400, 880)
             editor.workspace.choose_tool("move")
             editor.panels.refresh()
         if captured:
