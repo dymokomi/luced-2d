@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory(prefix='luced-2d-tests-') as temp:
     project = Path(temp) / 'application'
     shutil.copytree(ROOT / 'src', project / 'src')
     shutil.copy2(ROOT / 'tests/main.luc', project / 'src/main.luc')
-    (project / 'luce.toml').write_text('[package]\nname = "luced_2d_tests"\nsource = "src"\n[dependencies]\nluce_ui = ' + json.dumps(str(ROOT.parent / 'luce-ui')) + '\n')
+    (project / 'package.prisma').write_text('#prisma 4.0\ndef package "luced-2d-tests" {\n    str owner = "dymokomi"\n    str version = "0.0.0"\n    str kind = "tool"\n    str language = "luce"\n    str entry = "src/main.luc"\n    def dependency "luce-ui" {\n        str owner = "dymokomi"\n        str version = "^0.1.0"\n        str path = ' + json.dumps(str(ROOT.parent / 'luce-ui')) + '\n    }\n}\n')
     binary = Path(temp) / ('tests.exe' if os.name == 'nt' else 'tests')
     subprocess.run([str(arguments.luce.resolve()), 'build', str(project / 'src/main.luc'), '--native', '--opt', '0', '-o', str(binary)], env=environment, check=True, timeout=180)
     subprocess.run([str(binary)], env=environment, check=True, timeout=90)

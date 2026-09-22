@@ -1,0 +1,21 @@
+#prisma 4.0
+def package "luced-2d" {
+    str owner = "dymokomi"
+    str version = "0.1.0"
+    str kind = "application"
+    str language = "luce"
+    str description = "A native paint program written in Luce on luce-ui: canvas, brush and eraser, layers with opacity, undo and redo."
+    str readme = "README.md"
+    str entry = "src/main.luc"
+
+    def application "bundle" {
+        str name = "Luced 2D"
+        str identifier = "com.luciaos.luced-2d"
+    }
+
+    def dependency "luce-ui" {
+        str owner = "dymokomi"
+        str version = "^0.1.0"
+        str path = "../luce-ui"
+    }
+}

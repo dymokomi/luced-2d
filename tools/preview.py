@@ -21,7 +21,7 @@ arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
-    (work / 'luce.toml').write_text('[package]\nname = "luced_2d_preview"\nsource = "src"\n[dependencies]\nluce_ui = ' + json.dumps(str(ROOT.parent / 'luce-ui')) + '\n')
+    (work / 'package.prisma').write_text('#prisma 4.0\ndef package "luced-2d-preview" {\n    str owner = "dymokomi"\n    str version = "0.0.0"\n    str kind = "tool"\n    str language = "luce"\n    str entry = "src/main.luc"\n    def dependency "luce-ui" {\n        str owner = "dymokomi"\n        str version = "^0.1.0"\n        str path = ' + json.dumps(str(ROOT.parent / 'luce-ui')) + '\n    }\n}\n')
     native = (ROOT.parent / 'luce-base/tests/programs/gpu/native.lucb').read_text()
     native += '''
 import files

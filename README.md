@@ -24,18 +24,12 @@ properties panel for the document, the active tool and the active layer.
 
 ## Build and run
 
-Keep `luced-2d`, `luce-ui`, `luce`, and `luce-base` as sibling checkouts. Build
-the native compilers first, as described by `luced`:
-
 ```sh
-(cd ../luce-base && ./build.sh)
-(cd ../luce && LUCE_BASE_COMPILER=../luce-base/build/luce-base ./build.sh)
-python3 tools/build.py
-./build/luced-2d
+luc run
 ```
 
-`tools/build.py` accepts `--luce` and `--base` for explicit compiler paths.
-`--smoke` runs three native frames and exits.
+`luc build` produces `build/Luced 2D.app` on macOS; `luc run -- --smoke` runs
+three native frames and exits. `luce-ui` is expected as a sibling checkout.
 
 ## Tests and preview
 
