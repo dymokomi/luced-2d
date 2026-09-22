@@ -29,6 +29,10 @@ pub func surface_raised() -> Color:
     return grey(46.0)
 pub func border() -> Color:
     return grey(58.0)
+## Text on the accent: black on the orange.
+pub func on_accent() -> Color:
+    return grey(0.0)
+
 pub func text() -> Color:
     return grey(217.0)
 pub func text_muted() -> Color:

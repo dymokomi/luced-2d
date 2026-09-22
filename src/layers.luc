@@ -43,6 +43,8 @@ pub class LayerList: Widget:
         let workspace = self.workspace
         let canvas = workspace.canvas
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
+        # As eleusis's tables: the accent while this list has focus, its muted form otherwise.
+        let focused = self.box.contains_focus()
         let thumb = 36.0
         let mask_thumb = 30.0
         var row = 0
@@ -54,9 +56,11 @@ pub class LayerList: Widget:
             let masked = canvas.layer_masked(index)
             let visible = canvas.layer_visible(index)
             if selected:
-                painter.rectangle(Rect(0.0, top, size.width, self.row_height), theme.selection_inactive())
+                painter.rectangle(Rect(0.0, top, size.width, self.row_height), theme.accent() if focused else theme.selection_inactive())
+            let ink = theme.on_accent() if selected and focused else (theme.text() if visible else theme.text_muted())
+            let soft = theme.on_accent() if selected and focused else theme.text_muted()
             # The eye.
-            draw_icon(target, "visible" if visible else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), theme.text() if visible else theme.text_muted())
+            draw_icon(target, "visible" if visible else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), ink)
             var x = 32.0 + (24.0 if clipped else 0.0)
             # The layer thumbnail: a checker-grey slot with the layer's own pixels in
             # the document's shape, bordered in the accent when it is the target.
@@ -87,10 +91,10 @@ pub class LayerList: Widget:
                     self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), theme.accent())
                 x += mask_thumb + 8.0
             let name = ("↳ " if clipped else "") + canvas.layer_name(index)
-            painter.text(name, x, top + 10.0, theme.text() if visible else theme.text_muted(), self.font)
+            painter.text(name, x, top + 10.0, ink, self.font)
             let opacity = int(canvas.layer_opacity(index) * 100.0 + 0.5)
             let subtitle = f"{workspace.blend_name(index)} · {opacity}%" if not clipped else f"Clipped · {workspace.blend_name(index)} · {opacity}%"
-            painter.text(subtitle, x, top + 30.0, theme.text_muted(), self.font)
+            painter.text(subtitle, x, top + 30.0, soft, self.font)
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
             row += 1
             index -= 1
@@ -104,6 +108,7 @@ pub class LayerList: Widget:
 
     pub func event(self, event: Event) -> unit!:
         if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            self.box.request_focus()
             let index = self.row_of(event.y)
             if index < 0:
                 return
