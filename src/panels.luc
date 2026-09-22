@@ -191,7 +191,7 @@ pub class Panels:
                              Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
                              Spacer()], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
-        # The tool rail, as eleusis's viewport rail: 28-point buttons, the active tool selected.
+        # The tool rail, as eleusis's viewport rail: 32-point buttons, the active tool selected.
         var rail_items: list[Widget] = []
         self.tool_buttons = []
         var index = 0
@@ -204,7 +204,7 @@ pub class Panels:
         rail_items.append(Rule())
         rail_items.append(self.palette)
         let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
-        rail.layout().set_limits(Size(40.0, 100.0), Size(40.0, 16384.0))
+        rail.layout().set_limits(Size(44.0, 100.0), Size(44.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
         # The layers panel: appearance, the list, and the footer.
         self.layer_count = Text("", font = font)
@@ -569,12 +569,12 @@ pub class Panels:
     func bind(self, command: Command, callback: func() -> unit!) -> unit!:
         self.connections.append(command.on_trigger(callback))
 
-    ## A square icon button that triggers a tool command.
+    ## A square icon button that triggers a tool command: 32 points, the rail's content width.
     func tool_button(self, icon: str, command: Command) -> Button!:
         let button = Button(icon = icon, font = self.font)
         self.connections.append(button.on_click(func () -> unit!:
             command.trigger()))
-        button.layout().set_size(28.0, 28.0)
+        button.layout().set_size(32.0, 32.0)
         return button
 
     ## A shelf button: 25 points square, plain, so only the icon shows at rest.
