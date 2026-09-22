@@ -1,0 +1,99 @@
+name: Correctness
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: luced-2d
+      - name: Read the sibling pins
+        id: pins
+        shell: bash
+        run: |
+          echo "base=$(tr -d '\n' < luced-2d/bootstrap/BASE)" >> "$GITHUB_OUTPUT"
+          echo "luce=$(tr -d '\n' < luced-2d/bootstrap/LUCE)" >> "$GITHUB_OUTPUT"
+          echo "ui=$(tr -d '\n' < luced-2d/bootstrap/UI)" >> "$GITHUB_OUTPUT"
+          echo "image=$(tr -d '\n' < luced-2d/bootstrap/IMAGE)" >> "$GITHUB_OUTPUT"
+          echo "svg=$(tr -d '\n' < luced-2d/bootstrap/SVG)" >> "$GITHUB_OUTPUT"
+          echo "color=$(tr -d '\n' < luced-2d/bootstrap/COLOR)" >> "$GITHUB_OUTPUT"
+          echo "prism=$(tr -d '\n' < luced-2d/bootstrap/PRISM)" >> "$GITHUB_OUTPUT"
+          echo "crypto=$(tr -d '\n' < luced-2d/bootstrap/CRYPTO)" >> "$GITHUB_OUTPUT"
+          echo "tls=$(tr -d '\n' < luced-2d/bootstrap/TLS)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-base
+          ref: ${{ steps.pins.outputs.base }}
+          path: luce-base
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce
+          ref: ${{ steps.pins.outputs.luce }}
+          path: luce
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-ui
+          ref: ${{ steps.pins.outputs.ui }}
+          path: luce-ui
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-image
+          ref: ${{ steps.pins.outputs.image }}
+          path: luce-image
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-svg
+          ref: ${{ steps.pins.outputs.svg }}
+          path: luce-svg
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-color
+          ref: ${{ steps.pins.outputs.color }}
+          path: luce-color
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-prism
+          ref: ${{ steps.pins.outputs.prism }}
+          path: luce-prism
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-crypto
+          ref: ${{ steps.pins.outputs.crypto }}
+          path: luce-crypto
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-tls
+          ref: ${{ steps.pins.outputs.tls }}
+          path: luce-tls
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Build the compilers from the pinned sources
+        working-directory: luced-2d
+        run: python3 tools/bootstrap.py
+      - name: Headless tests of the workspace, view and panels
+        working-directory: luced-2d
+        env:
+          LUC_HOME: ${{ runner.temp }}/luc-home
+        run: python3 tests/run.py --base build/toolchain/luce-base --luce build/toolchain/luce
