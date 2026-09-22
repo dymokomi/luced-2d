@@ -46,7 +46,11 @@ luced-2d      (Luce)       the application: tools, panels, commands, theme
 Two packages, not three: the owner's call is that 2D image manipulation belongs
 in `luce-image`, beside the file reading already there, so it becomes one
 versatile image library like Python's PIL — usable from a script that resizes a
-JPEG as much as from the editor. The canvas is not a widget; it is a second
+JPEG as much as from the editor. Later, the file formats move out into
+sibling packages — `luce-png`, `luce-jpeg`, `luce-tiff`, `luce-exr`, `luce-psd`
+— that depend on `luce-image` for the pixel model, the way `luce-svg` already
+stands apart; so inside `luce-image` the codecs stay behind one decode/encode
+boundary and never reach into the document. The canvas is not a widget; it is a second
 renderer (eleusis' load-bearing finding). `luce-image` owns pixels and never
 imports `luce-ui`; the `Canvas` widget in luced-2d only turns input into
 requests and draws the result plus chrome (grid, guides, marquee, cursor) at
