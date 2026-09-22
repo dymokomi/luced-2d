@@ -108,6 +108,12 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.adjust_selection(0, 12)
             editor.workspace.choose_tool("wand")
             editor.workspace.select_wand(1100.0, 700.0, 0)
+            editor.workspace.set_color(1.0, 1.0, 1.0)
+            editor.workspace.text_size = 96.0
+            editor.workspace.text_x = 640.0
+            editor.workspace.text_y = 560.0
+            editor.workspace.draw_text("luced 2d")
+            editor.workspace.set_color(0.75, 0.03, 0.02)
             editor.panels.layer_style()
             editor.panels.toggle_style(0)
             editor.panels.adjust_sliders[10][0].set_value(14.0)

@@ -26,6 +26,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   shift adds and alt subtracts, Select › All, Deselect, Inverse,
   Expand, Contract and Feather (cmd-A, cmd-D, cmd-shift-I); marching ants;
   painting and fills stay inside; Fill (alt-Delete) and Clear (Delete).
+- Text tool (`T`): click, type, and the text is set into the layer's pixels
+  in the foreground colour at the chosen size.
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
   edges and no dab artefacts; undo and redo of strokes.
 - Pan with two-finger scroll, hand tool (`H`) or space-drag; zoom about the
