@@ -5,6 +5,14 @@ luced-2d is a free Photoshop replacement written in Luce: the feature set of
 the look and the engineering discipline of eleusis-layout, a GPU backend, and one
 codebase for macOS, Windows and Linux.
 
+**It is destructive by design, like Photoshop.** A layer is pixels. A filter,
+a transform, a fill or a brush stroke changes those pixels and the change is
+committed; history is how you go back. eleusis-layout is a non-destructive
+layout tool and its modifier-stack ideas are *not* carried over; only its
+compositing cache, its undo model and its look are. The non-destructive things
+that exist here are exactly the ones Photoshop has: adjustment layers, layer
+masks and layer styles.
+
 This document records what was studied, what is missing, what gets built and in
 which order. The three studies it distils are summarised in section 6.
 
@@ -99,16 +107,19 @@ Pixels are **tiles**: 256×256, `rgba16_float`, premultiplied, in the document's
 colour space, resident on the GPU with a CPU shadow only for save. A layer's
 `Tiles` is immutable and structurally shared: an edit produces a new `Tiles`
 that reuses every untouched tile (Compositor's `RasterSnapshot`, tiled down to
-the base). Layers keep native resolution and a non-destructive transform.
+the base). That sharing is what makes destructive editing cheap: a stroke or a
+filter over a selection replaces only the tiles it touched, and history keeps
+the old ones. Layer pixels are in document space at document resolution; a
+transform resamples and commits, as in Photoshop.
 
-**Render graph** — the eleusis model in three passes: *validate* (bounds +
-identity hash, also used for hit tests), *request* (region, scale, level, detail
-exact|interactive), *evaluate* (tiles for exactly that region, cache first).
-Node kinds: `tiles, place, mask, clip, adjust, filter, effect, over, group,
-paper, display`. `over` is a node. Cache key = identity hash · region · level;
-identity hash = kind + parameters + inputs' hashes, so changing a top layer's
-opacity invalidates nothing below it. Regions come from a fixed lattice in
-document space so keys survive panning.
+**Compositing** — the layer stack is flattened by a cached `over` chain:
+`tiles → mask → clip → (adjustment | style) → over`. Every node has an identity
+hash (kind + parameters + inputs' hashes) and the cache key is identity hash ·
+region · pyramid level, so changing a top layer's opacity invalidates nothing
+below it, and a stroke invalidates only the tiles it touched, upward. Regions
+come from a fixed lattice in document space so keys survive panning. This is
+eleusis' cache discipline applied to a plain layer stack; there is no modifier
+graph, because there is nothing non-destructive to graph.
 
 **One renderer for screen and export**, differing only in the request: the canvas
 asks for the viewport at the zoom's pyramid level with `interactive` detail;
@@ -145,15 +156,17 @@ one step). Pixel edits capture the replaced tiles as their inverse, which is
 cheap because tiles are shared. Drags preview off-model at 60 fps and commit
 once on release. Open/save/close are not on the bus.
 
-**Adjustments** (as layers and destructive): Levels (+auto), Curves,
+**Adjustments** (destructive from the Image menu, and as adjustment layers): Levels (+auto), Curves,
 Hue/Saturation, Color Balance, Exposure, Brightness/Contrast, Black & White,
 Gradient Map, Invert, Threshold, Posterize, Vibrance.
-**Filters**: Gaussian, Motion and Box blur, Sharpen/Unsharp Mask, Add Noise,
-Grain, Median, High Pass, Lens Correction.
-**Layer effects**: Stroke, Drop Shadow, Inner Shadow, Outer/Inner Glow, Color
-Overlay, Gradient Overlay, Bevel.
-**Transform**: move, scale, rotate, flip, skew, distort, perspective, warp —
-non-destructive, sampling nearest/bilinear/bicubic.
+**Filters** (destructive, live preview clipped to the selection until OK):
+Gaussian, Motion and Box blur, Sharpen/Unsharp Mask, Add Noise, Grain, Median,
+High Pass, Lens Correction.
+**Layer styles** (live, per layer): Stroke, Drop Shadow, Inner Shadow,
+Outer/Inner Glow, Color Overlay, Gradient Overlay, Bevel.
+**Transform** (Free Transform: move, scale, rotate, flip, skew, distort,
+perspective, warp): previews on the GPU, resamples and commits on Enter,
+sampling nearest/bilinear/bicubic.
 
 **Files**: native document is a directory package `Name.l2d` holding
 `document.prisma` (the tree, validated with explicit limits) and
@@ -192,14 +205,14 @@ pixel where that applies.
 1. **std.gpu v2** — textures, targets, readback, client pipelines, shader tool,
    alpha colour, boundary test; Metal first, Vulkan parity. `Painter.image`;
    `luce_ui.Raster` deleted; luced-2d and wolf3d moved to textures.
-2. **luce-pixel core** — tiles, document tree, over/place/mask/clip nodes,
-   identity-hash cache, canvas request with pyramid levels, zoom/pan camera,
+2. **luce-pixel core** — tiles, document tree, cached over chain with masks
+   and clipping, canvas request with pyramid levels, zoom/pan camera,
    export; checkerboard fixtures with measured edges.
 3. **luced-2d skeleton** — theme roles, eleusis look, docking layout, tabs,
    commands table, open/save PNG/JPEG/TIFF, layers panel with tree_view, undo.
 4. **Brush engine** and painting tools with pressure; selections with quick mask.
-5. **Blend modes, masks, clipping, adjustment layers, filters, layer effects,
-   transform tool, text and shape layers.**
+5. **Blend modes, masks, clipping, adjustment layers, filters, layer styles,
+   Free Transform, text and shape layers.**
 6. **Native format, PSD import, image clipboard, file drop.**
 7. **Linux** — window + Vulkan surface, packaging; then Windows and Linux
    installs through `luc`.
@@ -212,9 +225,10 @@ implementations that must agree; whole-document snapshot undo; flat layer array
 with parent ids; 8-bit only; effects previews capped at 1536 px; a 917-line
 session god object with modality as nil-guards.
 
-From eleusis: OCIO/ACES and scene-linear working space (a layout tool for film
-plates needs it; a Photoshop replacement needs to match Photoshop); the
-immediate-mode UI (luce-ui is retained and stays so).
+From eleusis: the non-destructive modifier stack and request-driven node
+graph (it is a layout tool; Photoshop commits edits, and that is the product);
+OCIO/ACES and scene-linear working space; the immediate-mode UI (luce-ui is
+retained and stays so).
 
 ## 5. Rules carried over
 
