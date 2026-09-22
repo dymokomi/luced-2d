@@ -83,7 +83,9 @@ pub class Panels:
                                            self.command("Fill Selection with Colour", self.fill_selection), self.command("Clear Selection", self.clear_selection)], font = font),
                              Menu("Select", [self.command("All", self.select_all), self.command("Deselect", self.deselect)], font = font),
                              Menu("Image", self.adjustments, font = font),
-                             Menu("Layer", [self.command("New Layer", self.add_layer), self.command("Delete Layer", self.delete_layer),
+                             Menu("Layer", [self.command("New Layer", self.add_layer), self.command("Duplicate Layer", self.duplicate_layer),
+                                            self.command("Move Layer Up", self.layer_up), self.command("Move Layer Down", self.layer_down),
+                                            self.command("Merge Down", self.merge_down), self.command("Delete Layer", self.delete_layer),
                                             self.command("Add / Remove Mask", self.toggle_mask), self.command("Edit Mask / Pixels", self.toggle_mask_editing),
                                             self.command("Clip to Below / Release", self.toggle_clipped), self.command("Hide / Show", self.toggle_visibility)], font = font),
                              Menu("Filter", [self.command("Gaussian Blur…", self.blur)], font = font),
@@ -329,6 +331,22 @@ pub class Panels:
 
     pub func add_layer(self) -> unit!:
         self.workspace.add_layer()
+        self.refresh()
+
+    pub func duplicate_layer(self) -> unit!:
+        self.workspace.duplicate()
+        self.refresh()
+
+    pub func layer_up(self) -> unit!:
+        self.workspace.reorder(1)
+        self.refresh()
+
+    pub func layer_down(self) -> unit!:
+        self.workspace.reorder(-1)
+        self.refresh()
+
+    pub func merge_down(self) -> unit!:
+        self.workspace.merge_down()
         self.refresh()
 
     pub func delete_layer(self) -> unit!:

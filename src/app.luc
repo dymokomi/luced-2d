@@ -41,7 +41,11 @@ pub class Luce2D:
                         Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect"),
                         Command("Clear", Shortcut(Key.backspace), id = "clear"),
                         Command("Fill", Shortcut(Key.backspace, alt = true), id = "fill"),
-                        Command("Move", Shortcut(Key.v), id = "move")]
+                        Command("Move", Shortcut(Key.v), id = "move"),
+                        Command("Duplicate Layer", Shortcut(Key.j, primary = true), id = "duplicate"),
+                        Command("Move Layer Up", Shortcut(Key.right_bracket, primary = true), id = "layer_up"),
+                        Command("Move Layer Down", Shortcut(Key.left_bracket, primary = true), id = "layer_down"),
+                        Command("Merge Down", Shortcut(Key.e, primary = true), id = "merge_down")]
         let connections: list[Connection] = []
         connections.append(commands[0].on_trigger(panels.new_document))
         connections.append(commands[1].on_trigger(panels.open_document))
@@ -68,6 +72,10 @@ pub class Luce2D:
         connections.append(commands[22].on_trigger(panels.clear_selection))
         connections.append(commands[23].on_trigger(panels.fill_selection))
         connections.append(commands[24].on_trigger(panels.move))
+        connections.append(commands[25].on_trigger(panels.duplicate_layer))
+        connections.append(commands[26].on_trigger(panels.layer_up))
+        connections.append(commands[27].on_trigger(panels.layer_down))
+        connections.append(commands[28].on_trigger(panels.merge_down))
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()))

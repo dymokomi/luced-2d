@@ -80,6 +80,27 @@ pub class Workspace:
             self.selected = self.layer_count() - 1
         self.touch()
 
+    pub func reorder(self, step: int) -> unit!:
+        let target = self.selected + step
+        if target < 0 or target >= self.layer_count():
+            return
+        self.canvas.reorder_layer(self.selected_id(), step)
+        self.selected = target
+        self.touch()
+
+    pub func duplicate(self) -> unit!:
+        let name = self.canvas.layer_name(self.selected) + " copy"
+        discard(self.canvas.duplicate_layer(self.selected_id(), name))
+        self.selected += 1
+        self.touch()
+
+    pub func merge_down(self) -> unit!:
+        if self.selected == 0:
+            return
+        self.canvas.merge_down(self.selected_id())
+        self.selected -= 1
+        self.touch()
+
     pub func toggle_visibility(self) -> unit!:
         let id = self.selected_id()
         self.canvas.set_layer(id, not self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), self.canvas.layer_blend(self.selected))
