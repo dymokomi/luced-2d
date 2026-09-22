@@ -34,7 +34,10 @@ pub class Panels:
                                self.button("Undo", self.undo), self.button("Redo", self.redo), Spacer(),
                                self.button("Fit", self.fit), self.button("100%", self.actual_size), self.button("+", self.zoom_in), self.button("-", self.zoom_out)], font = font)
         let layer_content = VStack([self.layers, HStack([self.button("Add", self.add_layer), self.button("Delete", self.delete_layer),
-                                    self.button("Show/Hide", self.toggle_visibility), self.button("Opacity", self.edit_opacity)], spacing = 4.0)], spacing = 4.0, padding = 8.0)
+                                    self.button("Show/Hide", self.toggle_visibility), self.button("Opacity", self.edit_opacity)], spacing = 4.0),
+                                    HStack([self.button("< Blend", func () -> unit!:
+            self.cycle_blend(-1)), self.button("Blend >", func () -> unit!:
+            self.cycle_blend(1))], spacing = 4.0)], spacing = 4.0, padding = 8.0)
         layer_content.layout().set_flex()
         let layer_panel = Panel("LAYERS", layer_content, minimum = Size(260.0, 180.0), closable = false)
         let canvas_panel = Panel("CANVAS", self.view, minimum = Size(200.0, 160.0), closable = false)
@@ -145,6 +148,10 @@ pub class Panels:
         self.workspace.toggle_visibility()
         self.refresh()
 
+    pub func cycle_blend(self, step: int) -> unit!:
+        self.workspace.cycle_blend(step)
+        self.refresh()
+
     pub func select_layer(self, row: int) -> unit!:
         self.workspace.select(self.workspace.layer_count() - 1 - row)
         self.refresh()
@@ -213,7 +220,8 @@ pub class Panels:
         while index >= 0:
             let mark = "[x]" if workspace.canvas.layer_visible(index) else "[ ]"
             let opacity = int(workspace.canvas.layer_opacity(index) * 100.0 + 0.5)
-            items.append(ListItem(f"{mark} {workspace.canvas.layer_name(index)}  {opacity}%"))
+            let blend = workspace.blend_name(index)
+            items.append(ListItem(f"{mark} {workspace.canvas.layer_name(index)}  {opacity}%  {blend}"))
             index -= 1
         self.layers.set_items(items)
         self.layers.select(workspace.layer_count() - 1 - workspace.selected)

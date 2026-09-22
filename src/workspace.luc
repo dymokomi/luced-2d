@@ -80,12 +80,23 @@ pub class Workspace:
 
     pub func toggle_visibility(self) -> unit!:
         let id = self.selected_id()
-        self.canvas.set_layer(id, not self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected))
+        self.canvas.set_layer(id, not self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), self.canvas.layer_blend(self.selected))
         self.touch()
+
+    ## Step the selected layer's blend mode through Photoshop's list.
+    pub func cycle_blend(self, step: int) -> unit!:
+        let id = self.selected_id()
+        let count = Canvas.blend_mode_count()
+        let next = (self.canvas.layer_blend(self.selected) + step + count) % count
+        self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), next)
+        self.touch()
+
+    pub func blend_name(self, index: int) -> str!:
+        return Canvas.blend_mode_name(self.canvas.layer_blend(index))
 
     pub func set_opacity(self, opacity: float) -> unit!:
         let id = self.selected_id()
-        self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), math.max(0.0, math.min(1.0, opacity)))
+        self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), math.max(0.0, math.min(1.0, opacity)), self.canvas.layer_blend(self.selected))
         self.touch()
 
     ## Push the brush settings to the canvas and start a stroke on the selected layer.
