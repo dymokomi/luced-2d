@@ -15,6 +15,10 @@ pub class LayerList: Widget:
     pub let workspace: Workspace
     let font: Font
     let row_height: float = 52.0
+    ## A row being dragged to a new place: its layer index and the pointer's y, or -1.
+    var drag_index: int = -1
+    var drag_y: float = 0.0
+    var drag_started: bool = false
 
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
@@ -98,13 +102,33 @@ pub class LayerList: Widget:
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
             row += 1
             index -= 1
+        self.draw_drop_indicator(painter, size.width)
         painter.close()
+
+    ## The drop indicator while a row is dragged: an accent line at the nearest row edge.
+    func draw_drop_indicator(self, painter: Painter, width: float):
+        if self.drag_index < 0 or not self.drag_started:
+            return
+        let count = self.workspace.layer_count()
+        let slot = math.max(0, math.min(count, int(math.floor(self.drag_y / self.row_height + 0.5))))
+        painter.rectangle(Rect(0.0, float(slot) * self.row_height - 1.0, width, 2.0), theme.accent())
 
     func frame(self, painter: Painter, rect: Rect, color: Color) -> unit!:
         painter.rectangle(Rect(rect.x, rect.y, rect.width, 2.0), color)
         painter.rectangle(Rect(rect.x, rect.y + rect.height - 2.0, rect.width, 2.0), color)
         painter.rectangle(Rect(rect.x, rect.y, 2.0, rect.height), color)
         painter.rectangle(Rect(rect.x + rect.width - 2.0, rect.y, 2.0, rect.height), color)
+
+    ## The layer index a drop at `y` lands on: rows run top-most layer first.
+    func drop_target(self, y: float) -> int:
+        let count = self.workspace.layer_count()
+        let slot = math.max(0, math.min(count, int(math.floor(y / self.row_height + 0.5))))
+        # Slot k is the edge above row k; a row dragged down past its own place lands one higher.
+        let from_row = count - 1 - self.drag_index
+        var to_row = slot
+        if slot > from_row:
+            to_row = slot - 1
+        return count - 1 - math.max(0, math.min(count - 1, to_row))
 
     pub func event(self, event: Event) -> unit!:
         if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
@@ -118,6 +142,9 @@ pub class LayerList: Widget:
                 workspace.toggle_visibility()
             else:
                 workspace.select(index)
+                self.drag_index = index
+                self.drag_y = event.y
+                self.drag_started = false
                 let masked = workspace.canvas.layer_masked(index)
                 let clipped = workspace.canvas.layer_clipped(index)
                 let mask_left = 32.0 + (24.0 if clipped else 0.0) + 36.0 + 8.0
@@ -126,4 +153,25 @@ pub class LayerList: Widget:
                 elif event.x < mask_left:
                     workspace.canvas.edit_mask(false)
                 workspace.touch()
+            self.box.invalidate()
+        elif event.kind == EventKind.pointer_moved and self.drag_index >= 0:
+            if math.abs(event.y - self.drag_y) > 4.0:
+                self.drag_started = true
+            if self.drag_started:
+                self.drag_y = event.y
+                self.box.invalidate()
+        elif event.kind == EventKind.pointer_up and event.button == 0 and self.drag_index >= 0:
+            if self.drag_started:
+                # The row edge nearest the pointer is where the layer goes.
+                let target = self.drop_target(event.y)
+                let workspace = self.workspace
+                workspace.select(self.drag_index)
+                while workspace.selected != target:
+                    workspace.reorder(1 if target > workspace.selected else -1)
+            self.drag_index = -1
+            self.drag_started = false
+            self.box.invalidate()
+        elif event.cancelled:
+            self.drag_index = -1
+            self.drag_started = false
             self.box.invalidate()
