@@ -16,6 +16,7 @@ pub class Luce2D:
         let workspace = Workspace(1280, 800)
         let panels = Panels(workspace, font)
         let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme())
+        panels.app = app
         let commands = [Command("New", Shortcut(Key.n, primary = true), id = "new"),
                         Command("Open", Shortcut(Key.o, primary = true), id = "open"),
                         Command("Save", Shortcut(Key.s, primary = true), id = "save"),

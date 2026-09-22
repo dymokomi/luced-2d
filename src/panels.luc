@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer, Theme
+from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer, Theme, Application
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -99,7 +99,21 @@ pub class Panels:
     pub func new_document(self) -> unit!:
         self.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
 
+    ## The application, once it exists, for native dialogs; the text prompt
+    ## stands in until then and where the desktop has no dialogs.
+    pub var app: Application? = none
+
     pub func open_document(self) -> unit!:
+        if let app = self.app:
+            let chosen = app.open_file("Open a PNG, JPEG, TIFF or EXR picture") catch failure:
+                self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+                return
+            if chosen != "":
+                self.workspace.open(chosen) catch failure:
+                    self.ask("open", f"Could not open: {failure.message}", chosen, "Open")
+                    return
+                self.refresh()
+            return
         self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
 
     pub func save_document(self) -> unit!:
@@ -110,6 +124,17 @@ pub class Panels:
         self.refresh()
 
     pub func save_document_as(self) -> unit!:
+        if let app = self.app:
+            let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.png"
+            let chosen = app.save_file("Save the flattened document; the extension picks the format", suggested) catch failure:
+                self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
+                return
+            if chosen != "":
+                self.workspace.save(chosen) catch failure:
+                    self.ask("save", f"Could not save: {failure.message}", chosen, "Save")
+                    return
+                self.refresh()
+            return
         self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
 
     pub func edit_opacity(self) -> unit!:
