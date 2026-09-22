@@ -26,8 +26,9 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - An Adjust menu with destructive adjustments: brightness/contrast, hue/
   saturation/lightness, invert, levels, desaturate, threshold, posterize —
   all undoable.
-- Opens and saves through the desktop's file dialogs; saves the flattened
-  document to PNG, JPEG or TIFF.
+- Opens and saves through the desktop's file dialogs. Saving as `.l2d` keeps
+  every layer, mask and blend setting (a directory with a `document.prisma`
+  manifest and one PNG per layer); PNG, JPEG or TIFF save the flattened picture.
 
 ## Build and run
 
