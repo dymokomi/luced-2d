@@ -211,19 +211,34 @@ pub class Workspace:
         self.touch()
 
     pub func select_all(self) -> unit!:
-        self.canvas.select(0, 0, self.width(), self.height())
+        self.canvas.select_all()
         self.touch()
 
     pub func deselect(self) -> unit!:
         self.canvas.deselect()
         self.touch()
 
-    pub func select_rect(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+    pub func invert_selection(self) -> unit!:
+        self.canvas.invert_selection()
+        self.touch()
+
+    pub func adjust_selection(self, pixels: int, feather: int) -> unit!:
+        self.canvas.adjust_selection(pixels, feather)
+        self.touch()
+
+    ## A rectangle or ellipse between two corners, combined by `mode`
+    ## (0 replace, 1 add, 2 subtract, 3 intersect).
+    pub func select_shape(self, x0: float, y0: float, x1: float, y1: float, ellipse: bool, mode: int) -> unit!:
         let left = int(math.floor(math.min(x0, x1)))
         let top = int(math.floor(math.min(y0, y1)))
         let right = int(math.ceil(math.max(x0, x1)))
         let bottom = int(math.ceil(math.max(y0, y1)))
-        self.canvas.select(left, top, right - left, bottom - top)
+        if right <= left or bottom <= top:
+            return
+        if ellipse:
+            self.canvas.select_ellipse(left, top, right - left, bottom - top, mode)
+        else:
+            self.canvas.select_rectangle(left, top, right - left, bottom - top, mode)
         self.touch()
 
     pub func fill_selection(self, erase: bool) -> unit!:
@@ -244,6 +259,10 @@ pub class Workspace:
             return "Move"
         if self.tool == "marquee":
             return "Marquee"
+        if self.tool == "ellipse":
+            return "Ellipse"
+        if self.tool == "lasso":
+            return "Lasso"
         if self.tool == "eraser":
             return "Eraser"
         if self.tool == "hand":

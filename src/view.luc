@@ -1,6 +1,7 @@
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point
 from gpu import RenderTarget, Rect, Region, Filter
 from input import EventKind, Cursor, Key, ScrollUnit
+from gpu import Color
 from workspace import Workspace
 import theme
 import math
@@ -21,11 +22,20 @@ pub class CanvasView: Widget:
     var pointer_inside: bool = false
     var space_held: bool = false
     var selecting: bool = false
+    var select_mode: int = 0
+    var lasso: bool = false
+    var lasso_points: int = 0
+    var lasso_last_x: float = 0.0
+    var lasso_last_y: float = 0.0
     var moving: bool = false
     var move_x: float = 0.0
     var move_y: float = 0.0
+    var move_now_x: float = 0.0
+    var move_now_y: float = 0.0
     var select_x: float = 0.0
     var select_y: float = 0.0
+    var select_now_x: float = 0.0
+    var select_now_y: float = 0.0
     var ants: float = 0.0
     let checker: Image
 
@@ -77,22 +87,29 @@ pub class CanvasView: Widget:
                     painter.image(self.checker, Rect(cx, cy, cw, ch), Region(int(cx - x), int(cy - y), int(cw), int(ch)), 1.0, Filter.nearest)
                     x += block
                 y += block
-            workspace.canvas.draw(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top)
+            if self.moving:
+                let dx = (self.move_now_x - self.move_x) / workspace.zoom
+                let dy = (self.move_now_y - self.move_y) / workspace.zoom
+                workspace.canvas.draw_moving(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top, workspace.selected_id(), dx, dy)
+            else:
+                workspace.canvas.draw(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top)
             painter.rectangle(Rect(x0, y0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y1 - 1.0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y0, 1.0, y1 - y0), theme.border())
             painter.rectangle(Rect(x1 - 1.0, y0, 1.0, y1 - y0), theme.border())
-        # Marching ants around the selection, at screen resolution.
+        # Marching ants along the selection's edge, at screen resolution; while a
+        # shape is being dragged its outline is drawn plainly.
         if workspace.canvas.has_selection():
-            let sx = left + float(workspace.canvas.selection_left()) * workspace.zoom
-            let sy = top + float(workspace.canvas.selection_top()) * workspace.zoom
-            let sw = float(workspace.canvas.selection_width()) * workspace.zoom
-            let sh = float(workspace.canvas.selection_height()) * workspace.zoom
-            painter.rectangle(Rect(sx, sy, sw, 1.0), theme.text())
-            painter.rectangle(Rect(sx, sy + sh - 1.0, sw, 1.0), theme.text())
-            painter.rectangle(Rect(sx, sy, 1.0, sh), theme.text())
-            painter.rectangle(Rect(sx + sw - 1.0, sy, 1.0, sh), theme.text())
-            self.dashes(painter, sx, sy, sw, sh)
+            workspace.canvas.draw_selection(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top, self.ants)
+        if self.selecting and not self.lasso:
+            let sx0 = math.min(self.select_x, self.select_now_x) * workspace.zoom + left
+            let sy0 = math.min(self.select_y, self.select_now_y) * workspace.zoom + top
+            let sx1 = math.max(self.select_x, self.select_now_x) * workspace.zoom + left
+            let sy1 = math.max(self.select_y, self.select_now_y) * workspace.zoom + top
+            painter.rectangle(Rect(sx0, sy0, sx1 - sx0, 1.0), theme.text())
+            painter.rectangle(Rect(sx0, sy1 - 1.0, sx1 - sx0, 1.0), theme.text())
+            painter.rectangle(Rect(sx0, sy0, 1.0, sy1 - sy0), theme.text())
+            painter.rectangle(Rect(sx1 - 1.0, sy0, 1.0, sy1 - sy0), theme.text())
         if self.pointer_inside and not self.dragging and (workspace.tool == "brush" or workspace.tool == "eraser"):
             # The brush outline, at screen resolution, one dark and one light ring.
             let radius = workspace.diameter * workspace.zoom * 0.5
@@ -107,28 +124,6 @@ pub class CanvasView: Widget:
                 painter.line(a, b, 1.0, theme.text())
                 index += 1
         painter.close()
-
-    ## Black dashes over the white outline, stepping with `ants`.
-    func dashes(self, painter: Painter, x: float, y: float, w: float, h: float) -> unit!:
-        let dash = 4.0
-        let period = dash * 2.0
-        let phase = math.mod(self.ants, period)
-        var t = -phase
-        while t < w:
-            let start = math.max(0.0, t)
-            let stop = math.min(w, t + dash)
-            if stop > start:
-                painter.rectangle(Rect(x + start, y, stop - start, 1.0), theme.backdrop())
-                painter.rectangle(Rect(x + w - stop, y + h - 1.0, stop - start, 1.0), theme.backdrop())
-            t += period
-        t = -phase
-        while t < h:
-            let start = math.max(0.0, t)
-            let stop = math.min(h, t + dash)
-            if stop > start:
-                painter.rectangle(Rect(x + w - 1.0, y + start, 1.0, stop - start), theme.backdrop())
-                painter.rectangle(Rect(x, y + h - stop, 1.0, stop - start), theme.backdrop())
-            t += period
 
     ## Advance the marching ants; called from the frame timer.
     pub func march(self):
@@ -162,13 +157,18 @@ pub class CanvasView: Widget:
         elif event.kind == EventKind.key_up and event.key == Key.space:
             self.space_held = false
             self.dragging = false
+        elif event.kind == EventKind.magnify:
+            # A touchpad pinch: the magnification change, about the pointer.
+            self.workspace.zoom_about(1.0 + event.scroll_y, event.x, event.y)
         elif event.kind == EventKind.scroll:
-            let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
-            if event.meta or event.control:
+            if event.scroll_unit == ScrollUnit.lines or event.meta or event.control:
+                # A notched mouse wheel zooms about the pointer; so does any scroll with cmd/ctrl held.
+                let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
                 let factor = math.pow(1.0025, event.scroll_y * step)
                 self.workspace.zoom_about(factor, event.x, event.y)
             else:
-                self.workspace.pan(event.scroll_x * step, event.scroll_y * step)
+                # Precise touchpad scrolling pans.
+                self.workspace.pan(event.scroll_x, event.scroll_y)
         elif event.kind == EventKind.pointer_down and event.inside and (event.button == 2 or (event.button == 0 and (self.space_held or self.workspace.tool == "hand"))):
             self.dragging = true
             self.last_x = event.x
@@ -179,11 +179,24 @@ pub class CanvasView: Widget:
             self.moving = true
             self.move_x = event.x
             self.move_y = event.y
-        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "marquee":
+            self.move_now_x = event.x
+            self.move_now_y = event.y
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and (self.workspace.tool == "marquee" or self.workspace.tool == "ellipse" or self.workspace.tool == "lasso"):
             self.selecting = true
+            self.lasso = self.workspace.tool == "lasso"
+            self.select_mode = 1 if event.shift else (2 if event.alt else 0)
             self.select_x = self.document_x(event.x)
             self.select_y = self.document_y(event.y)
-            self.workspace.deselect()
+            self.select_now_x = self.select_x
+            self.select_now_y = self.select_y
+            if self.lasso:
+                self.workspace.canvas.clear_points()
+                self.workspace.canvas.add_point(self.select_x, self.select_y)
+                self.lasso_points = 1
+                self.lasso_last_x = self.select_x
+                self.lasso_last_y = self.select_y
+            elif self.select_mode == 0:
+                self.workspace.deselect()
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0:
             self.workspace.begin_stroke(self.document_x(event.x), self.document_y(event.y))
             self.painting = self.workspace.canvas.painting()
@@ -198,18 +211,37 @@ pub class CanvasView: Widget:
             elif self.painting:
                 self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))
             elif self.selecting:
-                self.workspace.select_rect(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y))
+                self.select_now_x = self.document_x(event.x)
+                self.select_now_y = self.document_y(event.y)
+                if self.lasso:
+                    let dx = self.select_now_x - self.lasso_last_x
+                    let dy = self.select_now_y - self.lasso_last_y
+                    if dx * dx + dy * dy >= 4.0:
+                        self.workspace.canvas.add_point(self.select_now_x, self.select_now_y)
+                        self.lasso_points += 1
+                        self.lasso_last_x = self.select_now_x
+                        self.lasso_last_y = self.select_now_y
+            elif self.moving:
+                self.move_now_x = event.x
+                self.move_now_y = event.y
         elif event.kind == EventKind.pointer_up:
             self.dragging = false
             if self.moving:
-                # The move commits once, on release, as whole document pixels.
+                # The move previews while dragging and commits once, on release.
                 self.moving = false
                 let dx = int(math.floor((event.x - self.move_x) / self.workspace.zoom + 0.5))
                 let dy = int(math.floor((event.y - self.move_y) / self.workspace.zoom + 0.5))
                 self.workspace.move_layer(dx, dy)
             if self.selecting:
                 self.selecting = false
-                self.workspace.select_rect(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y))
+                if self.lasso:
+                    if self.lasso_points >= 3:
+                        self.workspace.canvas.select_polygon(self.select_mode)
+                        self.workspace.touch()
+                    else:
+                        self.workspace.canvas.clear_points()
+                else:
+                    self.workspace.select_shape(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y), self.workspace.tool == "ellipse", self.select_mode)
             if self.painting:
                 self.painting = false
                 self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))

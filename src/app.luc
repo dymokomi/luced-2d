@@ -45,7 +45,9 @@ pub class Luce2D:
                         Command("Duplicate Layer", Shortcut(Key.j, primary = true), id = "duplicate"),
                         Command("Move Layer Up", Shortcut(Key.right_bracket, primary = true), id = "layer_up"),
                         Command("Move Layer Down", Shortcut(Key.left_bracket, primary = true), id = "layer_down"),
-                        Command("Merge Down", Shortcut(Key.e, primary = true), id = "merge_down")]
+                        Command("Merge Down", Shortcut(Key.e, primary = true), id = "merge_down"),
+                        Command("Lasso", Shortcut(Key.l), id = "lasso"),
+                        Command("Inverse", Shortcut(Key.i, primary = true, shift = true), id = "inverse")]
         let connections: list[Connection] = []
         connections.append(commands[0].on_trigger(panels.new_document))
         connections.append(commands[1].on_trigger(panels.open_document))
@@ -76,6 +78,8 @@ pub class Luce2D:
         connections.append(commands[26].on_trigger(panels.layer_up))
         connections.append(commands[27].on_trigger(panels.layer_down))
         connections.append(commands[28].on_trigger(panels.merge_down))
+        connections.append(commands[29].on_trigger(panels.lasso))
+        connections.append(commands[30].on_trigger(panels.invert_selection))
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()))

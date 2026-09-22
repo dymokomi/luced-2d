@@ -81,7 +81,8 @@ pub class Panels:
                                            self.command("Save", self.save_document), self.command("Save As…", self.save_document_as)], font = font),
                              Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo),
                                            self.command("Fill Selection with Colour", self.fill_selection), self.command("Clear Selection", self.clear_selection)], font = font),
-                             Menu("Select", [self.command("All", self.select_all), self.command("Deselect", self.deselect)], font = font),
+                             Menu("Select", [self.command("All", self.select_all), self.command("Deselect", self.deselect), self.command("Inverse", self.invert_selection),
+                                             self.command("Expand…", self.expand_selection), self.command("Contract…", self.contract_selection), self.command("Feather…", self.feather_selection)], font = font),
                              Menu("Image", [self.command("Crop to Selection", self.crop), self.command("Canvas Size…", self.canvas_size),
                                             self.command("Image Size…", self.image_size)], font = font),
                              Menu("Adjust", self.adjustments, font = font),
@@ -96,7 +97,8 @@ pub class Panels:
                              Spacer(), self.header_hint], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, Spacer()], font = font)
         # The tool rail: one button per tool.
-        let rail = VStack([self.tool_button("move-tool", "move"), self.tool_button("selection-tool", "marquee"), self.tool_button("brush-tool", "brush"),
+        let rail = VStack([self.tool_button("move-tool", "move"), self.tool_button("selection-tool", "marquee"), self.tool_button("ellipse-select-tool", "ellipse"),
+                           self.tool_button("lasso-tool", "lasso"), self.tool_button("brush-tool", "brush"),
                            self.tool_button("eraser-tool", "eraser"), self.tool_button("pan-tool", "hand"), self.tool_button("zoom-in", "zoom"),
                            Spacer(), self.icon_button("undo", self.undo), self.icon_button("redo", self.redo)], spacing = 6.0, padding = 10.0)
         rail.layout().set_limits(Size(56.0, 100.0), Size(56.0, 16384.0))
@@ -176,6 +178,25 @@ pub class Panels:
     pub func select_all(self) -> unit!:
         self.workspace.select_all()
         self.refresh()
+
+    pub func invert_selection(self) -> unit!:
+        self.workspace.invert_selection()
+        self.refresh()
+
+    pub func expand_selection(self) -> unit!:
+        self.ask("expand", "Expand the selection by, in pixels (1..512)", "4", "Expand")
+
+    pub func contract_selection(self) -> unit!:
+        self.ask("contract", "Contract the selection by, in pixels (1..512)", "4", "Contract")
+
+    pub func feather_selection(self) -> unit!:
+        self.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather")
+
+    pub func ellipse(self) -> unit!:
+        self.choose_tool("ellipse")
+
+    pub func lasso(self) -> unit!:
+        self.choose_tool("lasso")
 
     pub func deselect(self) -> unit!:
         self.workspace.deselect()
@@ -460,6 +481,17 @@ pub class Panels:
             self.workspace.resize_image(numbers[0], numbers[1]) catch failure:
                 self.reject(text, f"Could not resize: {failure.message}")
                 return
+        elif mode == "expand" or mode == "contract" or mode == "feather":
+            let amount = int(trimmed) catch failure:
+                self.reject(text, "Enter a whole number: 1..512")
+                return
+            if amount < 1 or amount > 512:
+                self.reject(text, "Enter a whole number: 1..512")
+                return
+            let pixels = amount if mode == "expand" else (-amount if mode == "contract" else 0)
+            self.workspace.adjust_selection(pixels, amount if mode == "feather" else 0) catch failure:
+                self.reject(text, f"Could not adjust: {failure.message}")
+                return
         elif mode == "blur":
             let radius = float(trimmed) catch failure:
                 self.reject(text, "Enter a radius: 0.5..250")
@@ -494,8 +526,8 @@ pub class Panels:
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
         if workspace.tool == "move":
             hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
-        elif workspace.tool == "marquee":
-            hint = "Drag to select · cmd-A all · cmd-D deselect · Delete clears"
+        elif workspace.tool == "marquee" or workspace.tool == "ellipse" or workspace.tool == "lasso":
+            hint = "Drag to select · shift adds · alt subtracts · cmd-A all · cmd-D deselect · Delete clears"
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":
