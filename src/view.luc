@@ -180,6 +180,8 @@ pub class CanvasView: Widget:
             self.move_y = event.y
             self.move_now_x = event.x
             self.move_now_y = event.y
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "wand":
+            self.workspace.select_wand(self.document_x(event.x), self.document_y(event.y), 1 if event.shift else (2 if event.alt else 0))
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and (self.workspace.tool == "marquee" or self.workspace.tool == "ellipse" or self.workspace.tool == "lasso"):
             self.selecting = true
             self.lasso = self.workspace.tool == "lasso"

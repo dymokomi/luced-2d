@@ -24,6 +24,9 @@ pub class Panels:
     pub let opacity_slider: Slider
     pub let layer_opacity: Slider
     pub let brush_controls: HStack
+    pub let wand_controls: HStack
+    pub let tolerance_slider: Slider
+    pub let contiguous_button: Button
     pub let layer_count: Text
     ## The adjust bar: one row of sliders per adjustment (and one for blur),
     ## shown one at a time under the header while a preview is live.
@@ -69,6 +72,11 @@ pub class Panels:
         self.brush_controls = HStack([self.size_slider, self.hardness_slider, self.opacity_slider,
                                       self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497),
                                       self.swatch("  ", 0.02, 0.18, 0.65), self.swatch("  ", 0.75, 0.03, 0.02)], spacing = 12.0)
+        self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
+        self.connections.append(self.tolerance_slider.on_change(func (value: float) -> unit!:
+            self.workspace.tolerance = value))
+        self.contiguous_button = self.button("Contiguous ✓", self.toggle_contiguous)
+        self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
         self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
         # The adjust bar's rows: sliders in the units Photoshop shows.
         self.adjust_title = Text("", font = font)
@@ -123,7 +131,7 @@ pub class Panels:
                              Menu("Filter", [actions.blur], font = font),
                              Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
                              Spacer(), self.header_hint], font = font)
-        let header = Toolbar([self.header_title, self.brush_controls, Spacer()], font = font)
+        let header = Toolbar([self.header_title, self.brush_controls, self.wand_controls, Spacer()], font = font)
         # The tool rail: one icon button per tool command.
         var rail_items: list[Widget] = []
         var index = 0
@@ -320,6 +328,10 @@ pub class Panels:
             let tool = command.id()
             self.bind(command, func () -> unit!:
                 self.choose_tool(tool))
+
+    func toggle_contiguous(self) -> unit!:
+        self.workspace.contiguous = not self.workspace.contiguous
+        self.contiguous_button.set_text("Contiguous ✓" if self.workspace.contiguous else "Contiguous")
 
     func bind(self, command: Command, callback: func() -> unit!) -> unit!:
         self.connections.append(command.on_trigger(callback))
@@ -634,6 +646,7 @@ pub class Panels:
             tool = tool + " on mask"
         self.header_title.set_text(tool)
         self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser")
+        self.wand_controls.layout().set_visible(workspace.tool == "wand")
         self.size_slider.set_value(workspace.diameter)
         self.hardness_slider.set_value(workspace.hardness * 100.0)
         self.opacity_slider.set_value(workspace.opacity * 100.0)
@@ -642,6 +655,8 @@ pub class Panels:
             hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
         elif workspace.tool == "marquee" or workspace.tool == "ellipse" or workspace.tool == "lasso":
             hint = "Drag to select · shift adds · alt subtracts · cmd-A all · cmd-D deselect · Delete clears"
+        elif workspace.tool == "wand":
+            hint = "Click a colour to select it · shift adds · alt subtracts"
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":

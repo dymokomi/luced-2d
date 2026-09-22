@@ -18,8 +18,9 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   Filter › Gaussian Blur.
 - Image › Crop to Selection, Canvas Size, Image Size; Layer › Duplicate, Move
   Up/Down, Merge Down (cmd-J, cmd-], cmd-[, cmd-E).
-- Per-pixel selections: rectangular marquee (`M`), elliptical marquee and
-  lasso (`L`), shift adds and alt subtracts, Select › All, Deselect, Inverse,
+- Per-pixel selections: rectangular marquee (`M`), elliptical marquee,
+  lasso (`L`) and magic wand (`W`, with tolerance and contiguous options),
+  shift adds and alt subtracts, Select › All, Deselect, Inverse,
   Expand, Contract and Feather (cmd-A, cmd-D, cmd-shift-I); marching ants;
   painting and fills stay inside; Fill (alt-Delete) and Clear (Delete).
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
