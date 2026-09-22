@@ -75,6 +75,12 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 - `src/view.luc`: the canvas widget: checkerboard, the document, pan and zoom.
 - `src/actions.luc`: one `Command` per action, as in luced; menus, the tool
   rail and shortcuts present the same instances, enabled by document state.
+- `src/settings.luc`, `src/settings_panel.luc`: `~/.luced-2d/settings.toml`
+  (new-canvas size, display, theme accent and radius, shortcut overrides by
+  command id) and the Settings dialog after eleusis-layout's: a section list
+  (General, Colour Management, Shortcuts, Theme), a draft edited at the right,
+  Save/Cancel. Shortcuts are the application's own `Command`s: pick a row,
+  record a chord in the field beneath; a conflict names the other holder.
 - `src/colors.luc`: the palette below the tool rail (foreground over
   background, swap X, reset D) and the colour picker dialog after Photoshop's
   and Compositor's: saturation/brightness field, hue strip, preview, R/G/B and

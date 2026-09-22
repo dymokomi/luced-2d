@@ -4,6 +4,7 @@ from workspace import Workspace
 from panels import Panels
 from actions import Actions
 from view import CanvasView
+from settings import Settings
 import window
 
 ## Headless checks of the workspace and the window contents, without a device:
@@ -13,6 +14,7 @@ pub func main(arguments: list[str]) -> int!:
     layers()
     viewing()
     contents()
+    settings_round_trip()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -70,3 +72,26 @@ func contents() -> unit!:
     actions.tools[4].trigger()
     assert(workspace.tool == "wand")
     panels.close()
+
+## Settings parse their defaults, survive a round trip through the file text,
+## and reject a display they do not know.
+func settings_round_trip() -> unit!:
+    let fresh = Settings()
+    assert(fresh.canvas_width == 1280 and fresh.canvas_height == 800 and fresh.display == "srgb" and fresh.accent == "#e7a03f" and fresh.control_radius == 5.0)
+    let edited = fresh.copy()
+    edited.canvas_width = 640
+    edited.display = "display-p3"
+    edited.accent = "#3f8ae7"
+    edited.control_radius = 0.0
+    edited.shortcuts["save"] = "cmd+shift+s"
+    edited.shortcuts["swap_colors"] = "none"
+    let reread = Settings(edited.serialize())
+    assert(reread.canvas_width == 640 and reread.canvas_height == 800 and reread.display == "display-p3" and reread.accent == "#3f8ae7" and reread.control_radius == 0.0)
+    assert(reread.shortcuts["save"] == "cmd+shift+s" and reread.shortcuts["swap_colors"] == "none" and reread.shortcuts.length == 2)
+    assert(fresh.shortcuts.length == 0)
+    var rejected = false
+    discard(Settings("[color]\ndisplay = \"cmyk\"\n") catch failure:
+        discard(failure)
+        rejected = true
+        return)
+    assert(rejected)

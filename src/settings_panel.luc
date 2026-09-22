@@ -77,7 +77,7 @@ pub class SettingsDialog:
                             Text("Documents are sRGB and blend in linear light; the display setting picks the output transform.", font = font, muted = true), Spacer()], spacing = 8.0)
         # Shortcuts: every command in a table; the field beneath records for the picked row.
         self.table = TableView([TableColumn(title = "Action", weight = 1.0), TableColumn(title = "Shortcut", width = 150.0)], self.cells(), font = font)
-        self.table.layout().set_limits(Size(200.0, 230.0), Size(16384.0, 230.0))
+        self.table.layout().set_limits(Size(200.0, 190.0), Size(16384.0, 190.0))
         self.connections.append(self.table.on_activate(func (index: int) -> unit!:
             self.show_selected()))
         self.recorder = ShortcutField(font = font)
@@ -122,7 +122,7 @@ pub class SettingsDialog:
         self.connections.append(button.on_click(callback))
         return button
 
-    func show_page(self, index: int) -> unit!:
+    pub func show_page(self, index: int) -> unit!:
         var page = 0
         while page < self.pages.length:
             self.pages[page].layout().set_visible(page == index)
@@ -155,8 +155,8 @@ pub class SettingsDialog:
     func set_accent(self, value: str) -> unit!:
         let text = value.trim()
         let hex = text if text[..<1] == "#" else "#" + text
-        if let bytes = theme.hex_bytes(hex):
-            discard(bytes)
+        if let components = theme.hex_bytes(hex):
+            discard(components)
             self.draft.accent = hex.lower()
         self.accent_field.set_text(self.draft.accent)
         self.show_accent()
@@ -206,7 +206,7 @@ pub class SettingsDialog:
     func set_chord(self, id: str, chord: str) -> unit!:
         if let fallback = self.defaults[id]:
             if fallback == chord:
-                self.draft.shortcuts.remove(id)
+                discard(self.draft.shortcuts.remove(id))
             else:
                 self.draft.shortcuts[id] = chord
         self.table.set_rows(self.cells())

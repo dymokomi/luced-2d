@@ -82,7 +82,8 @@ pub class Panels:
 
     pub func init(self, workspace: Workspace, actions: Actions, font: Font, store: Store? = none) -> unit!:
         self.workspace = workspace
-        self.settings_dialog = SettingsDialog(workspace, actions, font, store if let store = store else Store())
+        let settings_store = store else Store()
+        self.settings_dialog = SettingsDialog(workspace, actions, font, settings_store)
         self.settings_dialog.applied = self.refresh
         self.actions = actions
         self.font = font

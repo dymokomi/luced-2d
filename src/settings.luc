@@ -69,9 +69,10 @@ pub class Store:
 
     pub func load(self) -> Settings!:
         self.warning = ""
-        if not files.exists(self.path):
+        # No file yet is the common case: defaults, and nothing written.
+        let source = files.read_text(self.path, limit = 65536) catch failure:
+            discard(failure)
             return Settings()
-        let source = files.read_text(self.path, limit = 65536)
         let loaded = Settings(source) catch failure:
             self.warning = f"Settings not read ({self.path}): {failure.message}"
             return Settings()
