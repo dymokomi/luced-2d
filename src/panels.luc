@@ -47,7 +47,8 @@ pub class Panels:
                                     self.button("Show/Hide", self.toggle_visibility), self.button("Opacity", self.edit_opacity)], spacing = 4.0),
                                     HStack([self.button("< Blend", func () -> unit!:
             self.cycle_blend(-1)), self.button("Blend >", func () -> unit!:
-            self.cycle_blend(1))], spacing = 4.0)], spacing = 4.0, padding = 8.0)
+            self.cycle_blend(1)), self.button("Mask", self.toggle_mask), self.button("Edit Mask", self.toggle_mask_editing),
+                                    self.button("Clip", self.toggle_clipped)], spacing = 4.0)], spacing = 4.0, padding = 8.0)
         layer_content.layout().set_flex()
         let layer_panel = Panel("LAYERS", layer_content, minimum = Size(260.0, 180.0), closable = false)
         let canvas_panel = Panel("CANVAS", self.view, minimum = Size(200.0, 160.0), closable = false)
@@ -245,6 +246,18 @@ pub class Panels:
         self.workspace.cycle_blend(step)
         self.refresh()
 
+    pub func toggle_mask(self) -> unit!:
+        self.workspace.toggle_mask()
+        self.refresh()
+
+    pub func toggle_mask_editing(self) -> unit!:
+        self.workspace.toggle_mask_editing()
+        self.refresh()
+
+    pub func toggle_clipped(self) -> unit!:
+        self.workspace.toggle_clipped()
+        self.refresh()
+
     pub func select_layer(self, row: int) -> unit!:
         self.workspace.select(self.workspace.layer_count() - 1 - row)
         self.refresh()
@@ -315,7 +328,9 @@ pub class Panels:
         let workspace = self.workspace
         let name = workspace.path if workspace.path != "" else "Untitled"
         let percent = int(workspace.zoom * 100.0 + 0.5)
-        let tool = "Eraser" if workspace.erasing else "Brush"
+        var tool = "Eraser" if workspace.erasing else "Brush"
+        if workspace.canvas.editing_mask():
+            tool = tool + " on mask"
         self.status.set_text(f"{name}  |  {workspace.width()} x {workspace.height()} px  |  {percent}%  |  {tool} {int(workspace.diameter)} px ([ ] to resize)  |  B brush, E eraser, scroll pans, cmd+scroll zooms")
         let items: list[ListItem] = []
         var index = workspace.layer_count() - 1
@@ -323,7 +338,11 @@ pub class Panels:
             let mark = "[x]" if workspace.canvas.layer_visible(index) else "[ ]"
             let opacity = int(workspace.canvas.layer_opacity(index) * 100.0 + 0.5)
             let blend = workspace.blend_name(index)
-            items.append(ListItem(f"{mark} {workspace.canvas.layer_name(index)}  {opacity}%  {blend}"))
+            let clip = "  > " if workspace.canvas.layer_clipped(index) else " "
+            var mask = ""
+            if workspace.canvas.layer_masked(index):
+                mask = "  [mask*]" if workspace.canvas.editing_mask() and index == workspace.selected else "  [mask]"
+            items.append(ListItem(f"{mark}{clip}{workspace.canvas.layer_name(index)}  {opacity}%  {blend}{mask}"))
             index -= 1
         self.layers.set_items(items)
         self.layers.select(workspace.layer_count() - 1 - workspace.selected)

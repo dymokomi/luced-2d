@@ -91,6 +91,23 @@ pub class Workspace:
         self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), next)
         self.touch()
 
+    pub func toggle_mask(self) -> unit!:
+        let id = self.selected_id()
+        self.canvas.set_mask(id, not self.canvas.layer_masked(self.selected))
+        self.touch()
+
+    pub func toggle_mask_editing(self) -> unit!:
+        if self.canvas.layer_masked(self.selected):
+            self.canvas.edit_mask(not self.canvas.editing_mask())
+        else:
+            self.canvas.edit_mask(false)
+        self.touch()
+
+    pub func toggle_clipped(self) -> unit!:
+        let id = self.selected_id()
+        self.canvas.set_clipped(id, not self.canvas.layer_clipped(self.selected))
+        self.touch()
+
     pub func blend_name(self, index: int) -> str!:
         return Canvas.blend_mode_name(self.canvas.layer_blend(index))
 
@@ -148,9 +165,11 @@ pub class Workspace:
         self.diameter = math.max(1.0, math.min(4096.0, math.floor(self.diameter * factor + 0.5)))
         self.touch()
 
-    pub func select(self, index: int):
+    pub func select(self, index: int) -> unit!:
         if index >= 0 and index < self.layer_count():
             self.selected = index
+            if not self.canvas.layer_masked(index):
+                self.canvas.edit_mask(false)
             self.touch()
 
     ## Zoom about a point of the view, keeping the document pixel under it still.
