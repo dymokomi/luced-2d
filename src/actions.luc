@@ -77,7 +77,8 @@ pub class Actions:
         self.adjustments = [Command("Brightness / Contrast…", id = "adjust_0"), Command("Hue / Saturation / Lightness…", id = "adjust_1"),
                             Command("Invert", Shortcut(Key.i, primary = true), id = "adjust_2"), Command("Levels…", Shortcut(Key.l, primary = true), id = "adjust_3"),
                             Command("Desaturate", Shortcut(Key.u, primary = true, shift = true), id = "adjust_4"),
-                            Command("Threshold…", id = "adjust_5"), Command("Posterize…", id = "adjust_6")]
+                            Command("Threshold…", id = "adjust_5"), Command("Posterize…", id = "adjust_6"),
+                            Command("Curves…", Shortcut(Key.m, primary = true), id = "adjust_7")]
         self.blur = Command("Gaussian Blur…", id = "blur")
         self.add_layer = Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer")
         self.duplicate_layer = Command("Duplicate Layer", Shortcut(Key.j, primary = true), id = "duplicate_layer")

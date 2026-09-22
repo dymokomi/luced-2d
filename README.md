@@ -28,8 +28,9 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   pointer with a touchpad pinch, the mouse wheel, cmd/ctrl-scroll, the zoom
   tool (`Z`), `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
 - An Adjust menu with destructive adjustments: brightness/contrast, hue/
-  saturation/lightness, invert, levels (cmd-L), desaturate, threshold,
-  posterize, and Filter › Gaussian Blur. Each opens a bar of sliders under
+  saturation/lightness, invert, levels (cmd-L), curves (cmd-M: a Photoshop-
+  style curve editor per channel), desaturate, threshold, posterize, and
+  Filter › Gaussian Blur. Each opens a bar of sliders under
   the header that previews live on the layer; Apply keeps the result as one
   undo step, Cancel puts the pixels back.
 - Opens and saves through the desktop's file dialogs. Saving as `.l2d` keeps

@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget
+from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -31,6 +31,10 @@ pub class Panels:
     pub let adjust_title: Text
     let adjust_rows: list[HStack]
     pub let adjust_sliders: list[list[Slider]]
+    ## The Curves row: the editor for one channel at a time, chosen from a menu.
+    pub let curve_editor: CurveEditor
+    pub let curve_channel_label: Text
+    var curve_channel: int = 0
     var adjust_kind: int = -1
     pub var app: Application? = none
     let font: Font
@@ -81,13 +85,31 @@ pub class Panels:
         self.adjust_row([])
         self.adjust_row([self.adjust_slider("Threshold", 0.0, 255.0, 128.0)])
         self.adjust_row([self.adjust_slider("Levels", 2.0, 32.0, 4.0)])
+        self.adjust_row([])
         self.adjust_row([self.adjust_slider("Radius", 0.5, 250.0, 8.0, 1)])
+        # Curves (row 7) hold an editor rather than sliders; the bar grows to fit it.
+        self.curve_editor = CurveEditor()
+        self.connections.append(self.curve_editor.on_change(self.curve_changed))
+        var channels: list[Command] = []
+        var channel = 0
+        for name in ["RGB", "Red", "Green", "Blue"]:
+            let chosen = channel
+            let command = Command(name, id = f"curve_channel_{channel}")
+            self.connections.append(command.on_trigger(func () -> unit!:
+                self.show_curve_channel(chosen)))
+            channels.append(command)
+            channel += 1
+        self.curve_channel_label = Text("RGB", font = font)
+        let curve_row = HStack([self.curve_editor, VStack([HStack([Menu("Channel ▾", channels, font = font), self.curve_channel_label], spacing = 8.0),
+                                                           self.button("Reset", self.reset_curve), Spacer()], spacing = 6.0)], spacing = 12.0)
+        curve_row.layout().set_visible(false)
+        self.adjust_rows[7] = curve_row
         var bar_items: list[Widget] = [self.adjust_title]
         for row in self.adjust_rows:
             bar_items.append(row)
         bar_items.append(Spacer())
-        bar_items.append(self.button("Cancel", self.cancel_preview))
-        bar_items.append(self.button("Apply", self.apply_preview))
+        # The buttons keep their height at the top of the bar however tall a row is.
+        bar_items.append(VStack([HStack([self.button("Cancel", self.cancel_preview), self.button("Apply", self.apply_preview)], spacing = 8.0), Spacer()], spacing = 0.0))
         self.adjust_bar = HStack(bar_items, spacing = 12.0, padding = 8.0)
         self.adjust_bar.layout().set_visible(false)
         # The menus present the shared commands, shortcuts and all.
@@ -167,18 +189,44 @@ pub class Panels:
             return [values[0] / 255.0]
         return values
 
-    ## Show the open adjustment (or the blur, row 7) with the sliders as they are.
+    ## Show the open adjustment (or the blur, row 8) with the controls as they are.
     pub func preview(self) -> unit!:
         let kind = self.adjust_kind
         if kind < 0 or not self.workspace.previewing():
             return
-        if kind == 7:
-            self.workspace.preview_blur(self.adjust_sliders[7][0].value())
+        if kind == 8:
+            self.workspace.preview_blur(self.adjust_sliders[8][0].value())
         else:
             self.workspace.preview_adjust(kind, self.adjust_values())
         self.view.layout().invalidate()
 
-    ## Open the adjust bar for `kind` (7 for blur) with its sliders at their defaults.
+    ## The editor's points become the canvas's curve for the shown channel, then re-preview.
+    pub func curve_changed(self) -> unit!:
+        let canvas = self.workspace.canvas
+        canvas.reset_curve(self.curve_channel)
+        var index = 0
+        while index < self.curve_editor.point_count():
+            canvas.add_curve_point(self.curve_channel, self.curve_editor.point_x(index), self.curve_editor.point_y(index))
+            index += 1
+        self.preview()
+
+    ## Load the canvas's curve for `channel` into the editor.
+    func show_curve_channel(self, channel: int) -> unit!:
+        self.curve_channel = channel
+        let canvas = self.workspace.canvas
+        self.curve_editor.reset()
+        var index = 0
+        while index < canvas.curve_point_count(channel):
+            self.curve_editor.add_point(canvas.curve_point_x(channel, index), canvas.curve_point_y(channel, index))
+            index += 1
+        self.curve_channel_label.set_text(["RGB", "Red", "Green", "Blue"][channel])
+
+    func reset_curve(self) -> unit!:
+        self.workspace.canvas.reset_curve(self.curve_channel)
+        self.show_curve_channel(self.curve_channel)
+        self.preview()
+
+    ## Open the adjust bar for `kind` (8 for blur) with its controls at their defaults.
     func open_preview(self, kind: int, title: str) -> unit!:
         if self.workspace.previewing():
             self.workspace.end_preview(false)
@@ -186,6 +234,12 @@ pub class Panels:
             self.ask("", f"Cannot adjust: {failure.message}", "", "OK")
             return
         self.adjust_kind = kind
+        if kind == 7:
+            var channel = 0
+            while channel < 4:
+                self.workspace.canvas.reset_curve(channel)
+                channel += 1
+            self.show_curve_channel(0)
         var index = 0
         for row in self.adjust_rows:
             row.layout().set_visible(index == kind)
@@ -296,7 +350,7 @@ pub class Panels:
         self.refresh()
 
     pub func blur(self) -> unit!:
-        self.open_preview(7, "Gaussian Blur")
+        self.open_preview(8, "Gaussian Blur")
 
     pub func select_all(self) -> unit!:
         self.workspace.select_all()
@@ -388,6 +442,8 @@ pub class Panels:
             title = "Threshold"
         elif kind == 6:
             title = "Posterize"
+        elif kind == 7:
+            title = "Curves"
         self.open_preview(kind, title)
 
     pub func crop(self) -> unit!:
