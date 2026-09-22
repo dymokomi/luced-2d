@@ -1,0 +1,60 @@
+from ui import Theme
+from gpu import Color
+import math
+
+## The look: brutalist, grey, one orange, square. Values are eleusis-layout's,
+## authored in sRGB bytes and converted to the linear light the GPU blends in.
+func linear(byte: float) -> float:
+    let value = byte / 255.0
+    return value / 12.92 if value <= 0.04045 else math.pow((value + 0.055) / 1.055, 2.4)
+
+pub func grey(byte: float) -> Color:
+    return Color(linear(byte), linear(byte), linear(byte))
+
+pub func srgb(red: float, green: float, blue: float) -> Color:
+    return Color(linear(red), linear(green), linear(blue))
+
+## #E7A03F. Everything the eye is meant to go to. Text on it is black.
+pub func accent() -> Color:
+    return srgb(231.0, 160.0, 63.0)
+pub func selection_inactive() -> Color:
+    return srgb(120.0, 84.0, 40.0)
+pub func backdrop() -> Color:
+    return grey(26.0)
+pub func tab_strip() -> Color:
+    return grey(38.0)
+pub func surface() -> Color:
+    return grey(50.0)
+pub func surface_raised() -> Color:
+    return grey(46.0)
+pub func border() -> Color:
+    return grey(58.0)
+pub func text() -> Color:
+    return grey(217.0)
+pub func text_muted() -> Color:
+    return grey(140.0)
+pub func checker_light() -> Color:
+    return grey(70.0)
+pub func checker_dark() -> Color:
+    return grey(56.0)
+
+pub func editor_theme() -> Theme:
+    var theme = Theme()
+    theme.background = backdrop()
+    theme.panel = surface()
+    theme.gutter = tab_strip()
+    theme.foreground = text()
+    theme.muted = text_muted()
+    theme.selection = accent()
+    theme.accent = accent()
+    theme.button = surface_raised()
+    theme.button_hover = grey(64.0)
+    theme.pressed = grey(40.0)
+    theme.menu = tab_strip()
+    theme.menu_hover = grey(64.0)
+    theme.menu_selection = accent()
+    theme.border = border()
+    theme.active_border = grey(150.0)
+    theme.shadow_offset = 0.0
+    theme.shadow_opacity = 0.0
+    return theme

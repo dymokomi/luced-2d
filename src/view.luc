@@ -1,0 +1,102 @@
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Image
+from gpu import RenderTarget, Rect, Region, Filter
+from input import EventKind, Cursor, Key, ScrollUnit
+from workspace import Workspace
+import theme
+import math
+
+## The document on screen: backdrop, checkerboard under transparent pixels,
+## the flattened document at the workspace's zoom and offset, and a hairline
+## around it drawn at screen resolution. Scroll pans; scroll with the primary
+## modifier zooms about the pointer; space or the middle button drags.
+pub class CanvasView: Widget:
+    let box: Layout
+    pub let workspace: Workspace
+    var dragging: bool = false
+    var last_x: float = 0.0
+    var last_y: float = 0.0
+    var space_held: bool = false
+    let checker: Image
+
+    pub func init(self, workspace: Workspace) -> unit!:
+        self.workspace = workspace
+        self.checker = Image(256, 256)
+        for y in 0..<256:
+            for x in 0..<256:
+                self.checker.set_pixel(x, y, theme.checker_dark() if (x // 8 + y // 8) % 2 == 1 else theme.checker_light())
+        self.box = Layout()
+        self.box.set_focusable(true)
+        self.box.set_cursor(Cursor.arrow)
+        self.box.set_flex()
+        self.box.set_limits(Size(200.0, 160.0), Size(16384.0, 16384.0))
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(900.0, 700.0)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        if not self.workspace.fitted:
+            self.workspace.fit(size.width, size.height)
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.backdrop())
+        let workspace = self.workspace
+        let left = workspace.offset_x
+        let top = workspace.offset_y
+        let width = float(workspace.width()) * workspace.zoom
+        let height = float(workspace.height()) * workspace.zoom
+        # The checkerboard only where the document is, clipped to the view: one
+        # 256-point picture of 8-point cells per block, not one rectangle per cell.
+        let x0 = math.max(0.0, left)
+        let y0 = math.max(0.0, top)
+        let x1 = math.min(size.width, left + width)
+        let y1 = math.min(size.height, top + height)
+        if x1 > x0 and y1 > y0:
+            let block = 256.0
+            var y = y0 - math.mod(y0 - top, block)
+            while y < y1:
+                var x = x0 - math.mod(x0 - left, block)
+                while x < x1:
+                    let cx = math.max(x, x0)
+                    let cy = math.max(y, y0)
+                    let cw = math.min(x + block, x1) - cx
+                    let ch = math.min(y + block, y1) - cy
+                    painter.image(self.checker, Rect(cx, cy, cw, ch), Region(int(cx - x), int(cy - y), int(cw), int(ch)), 1.0, Filter.nearest)
+                    x += block
+                y += block
+            workspace.canvas.draw(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top)
+            painter.rectangle(Rect(x0, y0, x1 - x0, 1.0), theme.border())
+            painter.rectangle(Rect(x0, y1 - 1.0, x1 - x0, 1.0), theme.border())
+            painter.rectangle(Rect(x0, y0, 1.0, y1 - y0), theme.border())
+            painter.rectangle(Rect(x1 - 1.0, y0, 1.0, y1 - y0), theme.border())
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.cancelled:
+            self.dragging = false
+            return
+        if event.kind == EventKind.key_down and event.key == Key.space:
+            self.space_held = true
+        elif event.kind == EventKind.key_up and event.key == Key.space:
+            self.space_held = false
+            self.dragging = false
+        elif event.kind == EventKind.scroll:
+            let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
+            if event.meta or event.control:
+                let factor = math.pow(1.0025, event.scroll_y * step)
+                self.workspace.zoom_about(factor, event.x, event.y)
+            else:
+                self.workspace.pan(event.scroll_x * step, event.scroll_y * step)
+        elif event.kind == EventKind.pointer_down and event.inside and (event.button == 2 or (event.button == 0 and self.space_held)):
+            self.dragging = true
+            self.last_x = event.x
+            self.last_y = event.y
+        elif event.kind == EventKind.pointer_moved and self.dragging:
+            self.workspace.pan(event.x - self.last_x, event.y - self.last_y)
+            self.last_x = event.x
+            self.last_y = event.y
+        elif event.kind == EventKind.pointer_up:
+            self.dragging = false
+        self.box.invalidate()

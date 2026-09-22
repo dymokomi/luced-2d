@@ -1,0 +1,122 @@
+from canvas import Canvas
+import math
+
+## One open document and how it is shown: the luce-image canvas, its file,
+## the view's zoom and offset, and which layer is selected. Every change bumps
+## `revision` so views know to redraw.
+pub class Workspace:
+    pub var canvas: Canvas
+    pub var path: str = ""
+    pub var zoom: float = 1.0
+    pub var offset_x: float = 0.0
+    pub var offset_y: float = 0.0
+    pub var selected: int = 0
+    pub var revision: int = 0
+    pub var fitted: bool = false
+    var next_name: int = 1
+
+    pub func init(self, width: int, height: int) -> unit!:
+        self.canvas = Canvas(width, height)
+        discard(self.canvas.add_layer("Background"))
+        self.touch()
+
+    pub func touch(self):
+        self.revision += 1
+
+    pub func width(self) -> int:
+        return self.canvas.width()
+
+    pub func height(self) -> int:
+        return self.canvas.height()
+
+    ## Replace the document with a new empty one.
+    pub func create(self, width: int, height: int) -> unit!:
+        self.canvas = Canvas(width, height)
+        discard(self.canvas.add_layer("Background"))
+        self.path = ""
+        self.selected = 0
+        self.fitted = false
+        self.touch()
+
+    ## Replace the document with the picture at `path`.
+    pub func open(self, path: str) -> unit!:
+        self.canvas = Canvas.open(path)
+        self.path = path
+        self.selected = 0
+        self.fitted = false
+        self.touch()
+
+    pub func save(self, path: str) -> unit!:
+        self.canvas.save(path)
+        self.path = path
+        self.touch()
+
+    pub func layer_count(self) -> int:
+        return self.canvas.layer_count()
+
+    pub func selected_id(self) -> int!:
+        return self.canvas.layer_id(self.selected)
+
+    pub func add_layer(self) -> unit!:
+        self.next_name += 1
+        discard(self.canvas.add_layer(f"Layer {self.next_name}"))
+        self.selected = self.layer_count() - 1
+        self.touch()
+
+    pub func delete_layer(self) -> unit!:
+        if self.layer_count() <= 1:
+            return
+        self.canvas.remove_layer(self.selected_id())
+        if self.selected >= self.layer_count():
+            self.selected = self.layer_count() - 1
+        self.touch()
+
+    pub func toggle_visibility(self) -> unit!:
+        let id = self.selected_id()
+        self.canvas.set_layer(id, not self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected))
+        self.touch()
+
+    pub func set_opacity(self, opacity: float) -> unit!:
+        let id = self.selected_id()
+        self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), math.max(0.0, math.min(1.0, opacity)))
+        self.touch()
+
+    pub func select(self, index: int):
+        if index >= 0 and index < self.layer_count():
+            self.selected = index
+            self.touch()
+
+    ## Zoom about a point of the view, keeping the document pixel under it still.
+    pub func zoom_about(self, factor: float, x: float, y: float):
+        let next = math.max(1.0 / 64.0, math.min(64.0, self.zoom * factor))
+        let applied = next / self.zoom
+        self.offset_x = x - (x - self.offset_x) * applied
+        self.offset_y = y - (y - self.offset_y) * applied
+        self.zoom = next
+        self.fitted = false
+        self.touch()
+
+    pub func pan(self, dx: float, dy: float):
+        self.offset_x += dx
+        self.offset_y += dy
+        self.fitted = false
+        self.touch()
+
+    ## Fit the document into a `width` by `height` view with a margin.
+    pub func fit(self, width: float, height: float):
+        let margin = 40.0
+        let available_x = math.max(1.0, width - margin * 2.0)
+        let available_y = math.max(1.0, height - margin * 2.0)
+        self.zoom = math.max(1.0 / 64.0, math.min(64.0, math.min(available_x / float(self.width()), available_y / float(self.height()))))
+        self.center(width, height)
+        self.fitted = true
+        self.touch()
+
+    pub func actual_size(self, width: float, height: float):
+        self.zoom = 1.0
+        self.center(width, height)
+        self.touch()
+
+    func center(self, width: float, height: float):
+        self.offset_x = math.floor((width - float(self.width()) * self.zoom) * 0.5)
+        self.offset_y = math.floor((height - float(self.height()) * self.zoom) * 0.5)

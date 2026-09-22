@@ -21,7 +21,7 @@ arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
-    (work / 'package.prisma').write_text('#prisma 4.0\ndef package "luced-2d-preview" {\n    str owner = "dymokomi"\n    str version = "0.0.0"\n    str kind = "tool"\n    str language = "luce"\n    str entry = "src/main.luc"\n    def dependency "luce-ui" {\n        str owner = "dymokomi"\n        str version = "^0.1.0"\n        str path = ' + json.dumps(str(ROOT.parent / 'luce-ui')) + '\n    }\n}\n')
+    (work / 'package.prisma').write_text('#prisma 4.0\ndef package "luced-2d-preview" {\n    str owner = "dymokomi"\n    str version = "0.0.0"\n    str kind = "tool"\n    str language = "luce"\n    str entry = "src/main.luc"\n    def dependency "luce-ui" {\n        str owner = "dymokomi"\n        str version = "^0.2.0"\n        str path = ' + json.dumps(str(ROOT.parent / 'luce-ui')) + '\n    }\n    def dependency "luce-image" {\n        str owner = "dymokomi"\n        str version = "^0.2.0"\n        str path = ' + json.dumps(str(ROOT.parent / 'luce-image')) + '\n    }\n}\n')
     native = (ROOT.parent / 'luce-base/tests/programs/gpu/native.lucb').read_text()
     native += '''
 import files
@@ -64,20 +64,13 @@ pub func save(path: str) -> !:
     (work / 'src/probe.lucb').write_text(native)
     ppm = work / 'preview.ppm'
     (work / 'src/main.luc').write_text('''import probe
-from gpu import Color
 from app import Luce2D
 pub func main(arguments: list[str]) -> int!:
     discard(arguments)
     let editor = Luce2D()
-    editor.document.dab(160.0, 150.0)
-    editor.document.segment(160.0, 150.0, 420.0, 320.0)
-    editor.document.color = Color(0.75, 0.03, 0.02)
-    editor.document.brush_diameter = 64
-    editor.document.dab(560.0, 420.0)
-    editor.document.erasing = true
-    editor.document.eraser_diameter = 96
-    editor.document.dab(280.0, 230.0)
-    editor.document.erasing = false
+    editor.workspace.open("''' + str(ROOT / 'docs/sample.png') + '''")
+    editor.workspace.add_layer()
+    editor.panels.refresh()
     var frames = 0
     var captured = false
     let observed = editor.app.on_frame(func (elapsed: float) -> unit!:
@@ -87,6 +80,7 @@ pub func main(arguments: list[str]) -> int!:
             editor.app.stop()
         elif frames >= 12:
             probe.begin("luced-2d")
+            editor.panels.refresh()
             captured = true)
     editor.app.run()
     observed.disconnect()

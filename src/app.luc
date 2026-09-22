@@ -1,36 +1,55 @@
 from ui import Application, Font, Command, Shortcut
 from input import Key
 from interop import Connection
-from document import Document
+from workspace import Workspace
 from panels import Panels
+import theme
 
 pub class Luce2D:
     pub let app: Application
-    pub let document: Document
+    pub let workspace: Workspace
     pub let panels: Panels
     let connections: list[Connection]
 
     pub func init(self) -> unit!:
         let font = Font()
-        let document = Document()
-        let panels = Panels(document, font)
-        let app = Application(panels.body, title = "luced-2d", width = 1200, height = 800)
-        let brush = Command("Brush", Shortcut(Key.b), id = "brush")
-        let eraser = Command("Eraser", Shortcut(Key.e), id = "eraser")
-        let undo = Command("Undo", Shortcut(Key.z, primary = true), id = "undo")
-        let redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
+        let workspace = Workspace(1280, 800)
+        let panels = Panels(workspace, font)
+        let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme())
+        let commands = [Command("New", Shortcut(Key.n, primary = true), id = "new"),
+                        Command("Open", Shortcut(Key.o, primary = true), id = "open"),
+                        Command("Save", Shortcut(Key.s, primary = true), id = "save"),
+                        Command("Save As", Shortcut(Key.s, primary = true, shift = true), id = "save_as"),
+                        Command("Zoom In", Shortcut(Key.equal, primary = true), id = "zoom_in"),
+                        Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out"),
+                        Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit"),
+                        Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size"),
+                        Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer"),
+                        Command("Delete Layer", Shortcut(Key.delete, primary = true, shift = true), id = "delete_layer"),
+                        Command("Show/Hide Layer", Shortcut(Key.h, primary = true, shift = true), id = "toggle_layer")]
         let connections: list[Connection] = []
-        connections.append(brush.on_trigger(panels.brush))
-        connections.append(eraser.on_trigger(panels.erase))
-        connections.append(undo.on_trigger(panels.undo))
-        connections.append(redo.on_trigger(panels.redo))
-        app.set_commands([brush, eraser, undo, redo])
+        connections.append(commands[0].on_trigger(panels.new_document))
+        connections.append(commands[1].on_trigger(panels.open_document))
+        connections.append(commands[2].on_trigger(panels.save_document))
+        connections.append(commands[3].on_trigger(panels.save_document_as))
+        connections.append(commands[4].on_trigger(panels.zoom_in))
+        connections.append(commands[5].on_trigger(panels.zoom_out))
+        connections.append(commands[6].on_trigger(panels.fit))
+        connections.append(commands[7].on_trigger(panels.actual_size))
+        connections.append(commands[8].on_trigger(panels.add_layer))
+        connections.append(commands[9].on_trigger(panels.delete_layer))
+        connections.append(commands[10].on_trigger(panels.toggle_visibility))
+        app.set_commands(commands)
         self.app = app
-        self.document = document
+        self.workspace = workspace
         self.panels = panels
         self.connections = connections
 
     pub func run(self, arguments: list[str]) -> unit!:
+        for argument in arguments:
+            if argument.length > 0 and argument != "--smoke" and argument != arguments[0]:
+                self.workspace.open(argument)
+                self.panels.refresh()
         self.app.run(frame_limit = 3 if "--smoke" in arguments else 0)
 
     pub func close(self):
