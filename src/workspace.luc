@@ -14,7 +14,7 @@ pub class Workspace:
     pub var revision: int = 0
     pub var fitted: bool = false
     pub var erasing: bool = false
-    ## The active tool: "marquee", "brush", "eraser", "hand" or "zoom".
+    ## The active tool: "move", "marquee", "brush", "eraser", "hand" or "zoom".
     pub var tool: str = "brush"
     pub var diameter: float = 32.0
     pub var hardness: float = 0.75
@@ -190,7 +190,17 @@ pub class Workspace:
         self.canvas.fill(self.selected_id(), erase)
         self.touch()
 
+    pub func move_layer(self, dx: int, dy: int) -> unit!:
+        self.canvas.move_layer(self.selected_id(), dx, dy)
+        self.touch()
+
+    pub func blur(self, radius: float) -> unit!:
+        self.canvas.blur_layer(self.selected_id(), radius)
+        self.touch()
+
     pub func tool_name(self) -> str:
+        if self.tool == "move":
+            return "Move"
         if self.tool == "marquee":
             return "Marquee"
         if self.tool == "eraser":

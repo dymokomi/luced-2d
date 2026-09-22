@@ -14,6 +14,7 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - Layers with names, visibility, opacity and all 26 Photoshop blend modes,
   composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
+- Move tool (`V`): drag or nudge the layer's pixels; Filter › Gaussian Blur.
 - Rectangular marquee (`M`, cmd-A, cmd-D) with marching ants; painting and
   fills stay inside it; Fill (alt-Delete) and Clear (Delete).
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft

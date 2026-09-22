@@ -97,7 +97,10 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.set_color(0.75, 0.03, 0.02)
             editor.workspace.opacity = 0.6
             editor.workspace.fill_selection(false)
-            editor.workspace.choose_tool("marquee")
+            editor.workspace.deselect()
+            editor.workspace.blur(6.0)
+            editor.workspace.move_layer(60, -40)
+            editor.workspace.choose_tool("move")
             editor.panels.refresh()
         if captured:
             editor.app.stop()

@@ -21,6 +21,9 @@ pub class CanvasView: Widget:
     var pointer_inside: bool = false
     var space_held: bool = false
     var selecting: bool = false
+    var moving: bool = false
+    var move_x: float = 0.0
+    var move_y: float = 0.0
     var select_x: float = 0.0
     var select_y: float = 0.0
     var ants: float = 0.0
@@ -149,7 +152,12 @@ pub class CanvasView: Widget:
             self.pointer_inside = false
             self.box.invalidate()
             return
-        if event.kind == EventKind.key_down and event.key == Key.space:
+        if event.kind == EventKind.key_down and self.workspace.tool == "move" and (event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down):
+            let step = 10 if event.shift else 1
+            let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
+            let dy = -step if event.key == Key.up else (step if event.key == Key.down else 0)
+            self.workspace.move_layer(dx, dy)
+        elif event.kind == EventKind.key_down and event.key == Key.space:
             self.space_held = true
         elif event.kind == EventKind.key_up and event.key == Key.space:
             self.space_held = false
@@ -167,6 +175,10 @@ pub class CanvasView: Widget:
             self.last_y = event.y
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "zoom":
             self.workspace.zoom_about(0.5 if event.alt else 2.0, event.x, event.y)
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "move":
+            self.moving = true
+            self.move_x = event.x
+            self.move_y = event.y
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "marquee":
             self.selecting = true
             self.select_x = self.document_x(event.x)
@@ -189,6 +201,12 @@ pub class CanvasView: Widget:
                 self.workspace.select_rect(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y))
         elif event.kind == EventKind.pointer_up:
             self.dragging = false
+            if self.moving:
+                # The move commits once, on release, as whole document pixels.
+                self.moving = false
+                let dx = int(math.floor((event.x - self.move_x) / self.workspace.zoom + 0.5))
+                let dy = int(math.floor((event.y - self.move_y) / self.workspace.zoom + 0.5))
+                self.workspace.move_layer(dx, dy)
             if self.selecting:
                 self.selecting = false
                 self.workspace.select_rect(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y))

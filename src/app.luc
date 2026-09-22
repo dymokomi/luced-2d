@@ -40,7 +40,8 @@ pub class Luce2D:
                         Command("Select All", Shortcut(Key.a, primary = true), id = "select_all"),
                         Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect"),
                         Command("Clear", Shortcut(Key.backspace), id = "clear"),
-                        Command("Fill", Shortcut(Key.backspace, alt = true), id = "fill")]
+                        Command("Fill", Shortcut(Key.backspace, alt = true), id = "fill"),
+                        Command("Move", Shortcut(Key.v), id = "move")]
         let connections: list[Connection] = []
         connections.append(commands[0].on_trigger(panels.new_document))
         connections.append(commands[1].on_trigger(panels.open_document))
@@ -66,6 +67,7 @@ pub class Luce2D:
         connections.append(commands[21].on_trigger(panels.deselect))
         connections.append(commands[22].on_trigger(panels.clear_selection))
         connections.append(commands[23].on_trigger(panels.fill_selection))
+        connections.append(commands[24].on_trigger(panels.move))
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()))
