@@ -30,7 +30,7 @@ GPU and draw it.
 
 ## 2. Architecture
 
-Three packages, each with a real client:
+The packages, each with a real client:
 
 ```
 luced-2d      (Luce)       the application: tools, panels, commands, theme
