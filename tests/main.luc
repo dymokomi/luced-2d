@@ -56,7 +56,7 @@ func contents() -> unit!:
     let panels = Panels(workspace, font)
     panels.add_layer()
     assert(workspace.layer_count() == 2)
-    panels.select_layer(1)
+    panels.select_layer(0)
     assert(workspace.selected == 0)
     panels.zoom_in()
     assert(workspace.zoom == 2.0)

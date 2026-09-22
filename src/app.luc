@@ -30,6 +30,8 @@ pub class Luce2D:
                         Command("Show/Hide Layer", Shortcut(Key.h, primary = true, shift = true), id = "toggle_layer"),
                         Command("Brush", Shortcut(Key.b), id = "brush"),
                         Command("Eraser", Shortcut(Key.e), id = "eraser"),
+                        Command("Hand", Shortcut(Key.h), id = "hand"),
+                        Command("Zoom", Shortcut(Key.z), id = "zoom"),
                         Command("Undo", Shortcut(Key.z, primary = true), id = "undo"),
                         Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo"),
                         Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger"),
@@ -48,10 +50,12 @@ pub class Luce2D:
         connections.append(commands[10].on_trigger(panels.toggle_visibility))
         connections.append(commands[11].on_trigger(panels.brush))
         connections.append(commands[12].on_trigger(panels.eraser))
-        connections.append(commands[13].on_trigger(panels.undo))
-        connections.append(commands[14].on_trigger(panels.redo))
-        connections.append(commands[15].on_trigger(panels.bigger))
-        connections.append(commands[16].on_trigger(panels.smaller))
+        connections.append(commands[13].on_trigger(panels.hand))
+        connections.append(commands[14].on_trigger(panels.zoom_tool))
+        connections.append(commands[15].on_trigger(panels.undo))
+        connections.append(commands[16].on_trigger(panels.redo))
+        connections.append(commands[17].on_trigger(panels.bigger))
+        connections.append(commands[18].on_trigger(panels.smaller))
         app.set_commands(commands)
         self.app = app
         self.workspace = workspace

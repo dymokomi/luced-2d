@@ -75,7 +75,7 @@ pub class CanvasView: Widget:
             painter.rectangle(Rect(x0, y1 - 1.0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y0, 1.0, y1 - y0), theme.border())
             painter.rectangle(Rect(x1 - 1.0, y0, 1.0, y1 - y0), theme.border())
-        if self.pointer_inside and not self.dragging:
+        if self.pointer_inside and not self.dragging and (workspace.tool == "brush" or workspace.tool == "eraser"):
             # The brush outline, at screen resolution, one dark and one light ring.
             let radius = workspace.diameter * workspace.zoom * 0.5
             let segments = 48
@@ -118,10 +118,12 @@ pub class CanvasView: Widget:
                 self.workspace.zoom_about(factor, event.x, event.y)
             else:
                 self.workspace.pan(event.scroll_x * step, event.scroll_y * step)
-        elif event.kind == EventKind.pointer_down and event.inside and (event.button == 2 or (event.button == 0 and self.space_held)):
+        elif event.kind == EventKind.pointer_down and event.inside and (event.button == 2 or (event.button == 0 and (self.space_held or self.workspace.tool == "hand"))):
             self.dragging = true
             self.last_x = event.x
             self.last_y = event.y
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "zoom":
+            self.workspace.zoom_about(0.5 if event.alt else 2.0, event.x, event.y)
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0:
             self.workspace.begin_stroke(self.document_x(event.x), self.document_y(event.y))
             self.painting = self.workspace.canvas.painting()

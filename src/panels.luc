@@ -1,23 +1,35 @@
-from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command
+from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
+from canvas import Canvas
 from view import CanvasView
+from layers import LayerList
 
-## The window's contents: a toolbar, the canvas beside the layers panel, a
-## status line, and one text prompt that stands in for file dialogs for now.
+## The window's contents, after Compositor's: a contextual tool header, a tool
+## rail beside the canvas and the layers panel, and a status line. One text
+## prompt stands in for the dialogs the desktop lacks.
 pub class Panels:
     pub let body: VStack
     pub let view: CanvasView
     pub let workspace: Workspace
     pub let status: Text
     pub let prompt: TextPrompt
-    pub let layers: ListView
+    pub let layers: LayerList
     pub let adjustments: list[Command]
+    pub let blends: list[Command]
+    pub let header_title: Text
+    pub let header_hint: Text
+    pub let size_slider: Slider
+    pub let hardness_slider: Slider
+    pub let opacity_slider: Slider
+    pub let layer_opacity: Slider
+    pub let brush_controls: HStack
+    pub let layer_count: Text
+    pub var app: Application? = none
     let font: Font
     let connections: list[Connection]
     var prompt_mode: str = ""
-    var shown_revision: int = -1
 
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
@@ -25,8 +37,9 @@ pub class Panels:
         self.connections = []
         self.view = CanvasView(workspace)
         self.prompt = TextPrompt(font = font)
-        self.layers = ListView([], font = font)
+        self.layers = LayerList(workspace, font)
         self.status = Text("", font = font)
+        # Adjustments and blend modes are commands, so menus and shortcuts share them.
         self.adjustments = [Command("Brightness / Contrast", id = "adjust_0"), Command("Hue / Saturation / Lightness", id = "adjust_1"),
                             Command("Invert", id = "adjust_2"), Command("Levels", id = "adjust_3"), Command("Desaturate", id = "adjust_4"),
                             Command("Threshold", id = "adjust_5"), Command("Posterize", id = "adjust_6")]
@@ -36,26 +49,67 @@ pub class Panels:
             self.connections.append(command.on_trigger(func () -> unit!:
                 self.adjust(selected)))
             kind += 1
-        let toolbar = Toolbar([self.button("New", self.new_document), self.button("Open", self.open_document), self.button("Save", self.save_document),
-                               self.button("Save As", self.save_document_as), Menu("Adjust", self.adjustments, font = font), Spacer(),
-                               self.button("Brush", self.brush), self.button("Eraser", self.eraser), self.button("Size", self.edit_diameter),
-                               self.swatch("Black", 0.0, 0.0, 0.0), self.swatch("White", 1.0, 1.0, 1.0), self.swatch("Orange", 0.8069, 0.3515, 0.0497),
-                               self.swatch("Blue", 0.02, 0.18, 0.65), self.swatch("Red", 0.75, 0.03, 0.02), Spacer(),
-                               self.button("Undo", self.undo), self.button("Redo", self.redo), Spacer(),
-                               self.button("Fit", self.fit), self.button("100%", self.actual_size), self.button("+", self.zoom_in), self.button("-", self.zoom_out)], font = font)
-        let layer_content = VStack([self.layers, HStack([self.button("Add", self.add_layer), self.button("Delete", self.delete_layer),
-                                    self.button("Show/Hide", self.toggle_visibility), self.button("Opacity", self.edit_opacity)], spacing = 4.0),
-                                    HStack([self.button("< Blend", func () -> unit!:
-            self.cycle_blend(-1)), self.button("Blend >", func () -> unit!:
-            self.cycle_blend(1)), self.button("Mask", self.toggle_mask), self.button("Edit Mask", self.toggle_mask_editing),
-                                    self.button("Clip", self.toggle_clipped)], spacing = 4.0)], spacing = 4.0, padding = 8.0)
-        layer_content.layout().set_flex()
-        let layer_panel = Panel("LAYERS", layer_content, minimum = Size(260.0, 180.0), closable = false)
-        let canvas_panel = Panel("CANVAS", self.view, minimum = Size(200.0, 160.0), closable = false)
-        let split = SplitView(canvas_panel, layer_panel, fraction = 0.78)
-        self.body = VStack([toolbar, split, Toolbar([self.status], font = font), self.prompt], spacing = 0.0)
+        self.blends = []
+        var mode = 0
+        while mode < Canvas.blend_mode_count():
+            let chosen = mode
+            let command = Command(Canvas.blend_mode_name(mode), id = f"blend_{mode}")
+            self.connections.append(command.on_trigger(func () -> unit!:
+                self.set_blend(chosen)))
+            self.blends.append(command)
+            mode += 1
+        # The contextual header: what the active tool needs.
+        self.header_title = Text("Brush", font = font)
+        self.header_hint = Text("", font = font)
+        self.size_slider = Slider("Size", 1.0, 500.0, workspace.diameter, 1.0, font = font)
+        self.hardness_slider = Slider("Hardness", 0.0, 100.0, workspace.hardness * 100.0, 1.0, font = font)
+        self.opacity_slider = Slider("Opacity", 1.0, 100.0, workspace.opacity * 100.0, 1.0, font = font)
+        self.connections.append(self.size_slider.on_change(func (value: float) -> unit!:
+            self.workspace.diameter = value
+            self.workspace.touch()))
+        self.connections.append(self.hardness_slider.on_change(func (value: float) -> unit!:
+            self.workspace.hardness = value / 100.0
+            self.workspace.touch()))
+        self.connections.append(self.opacity_slider.on_change(func (value: float) -> unit!:
+            self.workspace.opacity = value / 100.0
+            self.workspace.touch()))
+        self.brush_controls = HStack([self.size_slider, self.hardness_slider, self.opacity_slider,
+                                      self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497),
+                                      self.swatch("  ", 0.02, 0.18, 0.65), self.swatch("  ", 0.75, 0.03, 0.02)], spacing = 12.0)
+        self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
+        let menus = Toolbar([Menu("File", [self.command("New…", self.new_document), self.command("Open…", self.open_document),
+                                           self.command("Save", self.save_document), self.command("Save As…", self.save_document_as)], font = font),
+                             Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo)], font = font),
+                             Menu("Image", self.adjustments, font = font),
+                             Menu("Layer", [self.command("New Layer", self.add_layer), self.command("Delete Layer", self.delete_layer),
+                                            self.command("Add / Remove Mask", self.toggle_mask), self.command("Edit Mask / Pixels", self.toggle_mask_editing),
+                                            self.command("Clip to Below / Release", self.toggle_clipped), self.command("Hide / Show", self.toggle_visibility)], font = font),
+                             Menu("View", [self.command("Fit", self.fit), self.command("Actual Size", self.actual_size),
+                                           self.command("Zoom In", self.zoom_in), self.command("Zoom Out", self.zoom_out)], font = font),
+                             Spacer(), self.header_hint], font = font)
+        let header = Toolbar([self.header_title, self.brush_controls, Spacer()], font = font)
+        # The tool rail: one button per tool.
+        let rail = VStack([self.tool_button("B", "brush"), self.tool_button("E", "eraser"), self.tool_button("H", "hand"), self.tool_button("Z", "zoom"),
+                           Spacer(), self.button("Undo", self.undo), self.button("Redo", self.redo)], spacing = 6.0, padding = 6.0)
+        rail.layout().set_limits(Size(56.0, 100.0), Size(56.0, 16384.0))
+        rail.layout().set_flex(horizontal = 0.0)
+        # The layers panel: appearance, the list, and the footer.
+        self.layer_count = Text("", font = font)
+        self.layer_opacity = Slider("Opacity", 0.0, 100.0, 100.0, 1.0, font = font)
+        self.connections.append(self.layer_opacity.on_change(func (value: float) -> unit!:
+            self.workspace.set_opacity(value / 100.0)
+            self.layers.layout().invalidate()))
+        let appearance = VStack([HStack([Text("Layers", font = font), Spacer(), self.layer_count], spacing = 8.0),
+                                 HStack([Text("Blend", font = font), Menu("Choose ▾", self.blends, font = font), Spacer()], spacing = 8.0),
+                                 self.layer_opacity], spacing = 6.0, padding = 10.0)
+        let footer = HStack([self.button("+", self.add_layer), self.button("Mask", self.toggle_mask), self.button("Clip", self.toggle_clipped),
+                             Spacer(), self.button("Delete", self.delete_layer)], spacing = 6.0, padding = 8.0)
+        let layer_panel = VStack([appearance, self.layers, footer], spacing = 0.0)
+        layer_panel.layout().set_limits(Size(252.0, 200.0), Size(352.0, 16384.0))
+        let middle = HStack([rail, SplitView(self.view, layer_panel, fraction = 0.8)], spacing = 0.0)
+        middle.layout().set_flex()
+        self.body = VStack([menus, header, middle, Toolbar([self.status], font = font), self.prompt], spacing = 0.0)
         self.body.layout().set_flex()
-        self.connections.append(self.layers.on_activate(self.select_layer))
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
 
@@ -63,6 +117,15 @@ pub class Panels:
         let button = Button(text, font = self.font)
         self.connections.append(button.on_click(callback))
         return button
+
+    func command(self, text: str, callback: func() -> unit!) -> Command!:
+        let command = Command(text)
+        self.connections.append(command.on_trigger(callback))
+        return command
+
+    func tool_button(self, text: str, tool: str) -> Button!:
+        return self.button(text, func () -> unit!:
+            self.choose_tool(tool))
 
     func swatch(self, text: str, red: float, green: float, blue: float) -> Button!:
         let button = self.button(text, func () -> unit!:
@@ -72,29 +135,66 @@ pub class Panels:
                                         foreground = Color(1.0, 1.0, 1.0) if red + green + blue < 1.2 else Color(0.0, 0.0, 0.0)))
         return button
 
-    pub func brush(self) -> unit!:
-        self.workspace.erasing = false
+    pub func choose_tool(self, tool: str) -> unit!:
+        self.workspace.choose_tool(tool)
         self.refresh()
+
+    pub func brush(self) -> unit!:
+        self.choose_tool("brush")
 
     pub func eraser(self) -> unit!:
-        self.workspace.erasing = true
+        self.choose_tool("eraser")
+
+    pub func hand(self) -> unit!:
+        self.choose_tool("hand")
+
+    pub func zoom_tool(self) -> unit!:
+        self.choose_tool("zoom")
+
+    func cancel_prompt(self):
+        self.prompt_mode = ""
+        self.prompt.layout().set_visible(false)
+
+    func ask(self, mode: str, title: str, value: str, accept: str) -> unit!:
+        self.prompt.open(title, value, accept = accept)
+        self.prompt_mode = mode
+
+    pub func new_document(self) -> unit!:
+        self.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
+
+    pub func open_document(self) -> unit!:
+        if let app = self.app:
+            let chosen = app.open_file("Open a PNG, JPEG, TIFF or EXR picture") catch failure:
+                self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+                return
+            if chosen != "":
+                self.workspace.open(chosen) catch failure:
+                    self.ask("open", f"Could not open: {failure.message}", chosen, "Open")
+                    return
+                self.refresh()
+            return
+        self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+
+    pub func save_document(self) -> unit!:
+        if self.workspace.path == "":
+            self.save_document_as()
+            return
+        self.workspace.save(self.workspace.path)
         self.refresh()
 
-    pub func undo(self) -> unit!:
-        self.workspace.undo()
-        self.refresh()
-
-    pub func redo(self) -> unit!:
-        self.workspace.redo()
-        self.refresh()
-
-    pub func bigger(self) -> unit!:
-        self.workspace.scale_brush(1.25)
-        self.refresh()
-
-    pub func smaller(self) -> unit!:
-        self.workspace.scale_brush(0.8)
-        self.refresh()
+    pub func save_document_as(self) -> unit!:
+        if let app = self.app:
+            let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.png"
+            let chosen = app.save_file("Save the flattened document; the extension picks the format", suggested) catch failure:
+                self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
+                return
+            if chosen != "":
+                self.workspace.save(chosen) catch failure:
+                    self.ask("save", f"Could not save: {failure.message}", chosen, "Save")
+                    return
+                self.refresh()
+            return
+        self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
 
     ## Ask for an adjustment's parameters, or apply the ones that need none.
     pub func adjust(self, kind: int) -> unit!:
@@ -154,62 +254,6 @@ pub class Panels:
         self.workspace.adjust(kind, values)
         return true
 
-    pub func edit_diameter(self) -> unit!:
-        self.ask("diameter", "Brush diameter, 1..4096 pixels", f"{int(self.workspace.diameter)}", "Apply")
-
-    func cancel_prompt(self):
-        self.prompt_mode = ""
-        self.prompt.layout().set_visible(false)
-
-    func ask(self, mode: str, title: str, value: str, accept: str) -> unit!:
-        self.prompt.open(title, value, accept = accept)
-        self.prompt_mode = mode
-
-    pub func new_document(self) -> unit!:
-        self.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
-
-    ## The application, once it exists, for native dialogs; the text prompt
-    ## stands in until then and where the desktop has no dialogs.
-    pub var app: Application? = none
-
-    pub func open_document(self) -> unit!:
-        if let app = self.app:
-            let chosen = app.open_file("Open a PNG, JPEG, TIFF or EXR picture") catch failure:
-                self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
-                return
-            if chosen != "":
-                self.workspace.open(chosen) catch failure:
-                    self.ask("open", f"Could not open: {failure.message}", chosen, "Open")
-                    return
-                self.refresh()
-            return
-        self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
-
-    pub func save_document(self) -> unit!:
-        if self.workspace.path == "":
-            self.save_document_as()
-            return
-        self.workspace.save(self.workspace.path)
-        self.refresh()
-
-    pub func save_document_as(self) -> unit!:
-        if let app = self.app:
-            let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.png"
-            let chosen = app.save_file("Save the flattened document; the extension picks the format", suggested) catch failure:
-                self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
-                return
-            if chosen != "":
-                self.workspace.save(chosen) catch failure:
-                    self.ask("save", f"Could not save: {failure.message}", chosen, "Save")
-                    return
-                self.refresh()
-            return
-        self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
-
-    pub func edit_opacity(self) -> unit!:
-        let percent = int(self.workspace.canvas.layer_opacity(self.workspace.selected) * 100.0 + 0.5)
-        self.ask("opacity", "Layer opacity, 0..100 percent", f"{percent}", "Apply")
-
     pub func fit(self) -> unit!:
         self.workspace.fitted = false
         self.refresh()
@@ -230,6 +274,22 @@ pub class Panels:
         self.workspace.zoom_about(factor, bounds.width * 0.5, bounds.height * 0.5)
         self.refresh()
 
+    pub func undo(self) -> unit!:
+        self.workspace.undo()
+        self.refresh()
+
+    pub func redo(self) -> unit!:
+        self.workspace.redo()
+        self.refresh()
+
+    pub func bigger(self) -> unit!:
+        self.workspace.scale_brush(1.25)
+        self.refresh()
+
+    pub func smaller(self) -> unit!:
+        self.workspace.scale_brush(0.8)
+        self.refresh()
+
     pub func add_layer(self) -> unit!:
         self.workspace.add_layer()
         self.refresh()
@@ -240,6 +300,12 @@ pub class Panels:
 
     pub func toggle_visibility(self) -> unit!:
         self.workspace.toggle_visibility()
+        self.refresh()
+
+    pub func set_blend(self, mode: int) -> unit!:
+        let workspace = self.workspace
+        workspace.canvas.set_layer(workspace.selected_id(), workspace.canvas.layer_visible(workspace.selected), workspace.canvas.layer_opacity(workspace.selected), mode)
+        workspace.touch()
         self.refresh()
 
     pub func cycle_blend(self, step: int) -> unit!:
@@ -258,8 +324,8 @@ pub class Panels:
         self.workspace.toggle_clipped()
         self.refresh()
 
-    pub func select_layer(self, row: int) -> unit!:
-        self.workspace.select(self.workspace.layer_count() - 1 - row)
+    pub func select_layer(self, index: int) -> unit!:
+        self.workspace.select(index)
         self.refresh()
 
     func reject(self, text: str, message: str) -> unit!:
@@ -305,22 +371,6 @@ pub class Panels:
             if not applied:
                 self.reject(text, "Enter the numbers the title asks for, separated by spaces")
                 return
-        elif mode == "diameter":
-            let pixels = int(trimmed) catch failure:
-                self.reject(text, "Enter a whole number: 1..4096")
-                return
-            if pixels < 1 or pixels > 4096:
-                self.reject(text, "Enter a whole number: 1..4096")
-                return
-            self.workspace.diameter = float(pixels)
-        elif mode == "opacity":
-            let percent = int(trimmed) catch failure:
-                self.reject(text, "Enter a whole number: 0..100")
-                return
-            if percent < 0 or percent > 100:
-                self.reject(text, "Enter a whole number: 0..100")
-                return
-            self.workspace.set_opacity(float(percent) / 100.0)
         self.cancel_prompt()
         self.refresh()
 
@@ -328,24 +378,24 @@ pub class Panels:
         let workspace = self.workspace
         let name = workspace.path if workspace.path != "" else "Untitled"
         let percent = int(workspace.zoom * 100.0 + 0.5)
-        var tool = "Eraser" if workspace.erasing else "Brush"
-        if workspace.canvas.editing_mask():
+        var tool = workspace.tool_name()
+        if workspace.canvas.editing_mask() and (workspace.tool == "brush" or workspace.tool == "eraser"):
             tool = tool + " on mask"
-        self.status.set_text(f"{name}  |  {workspace.width()} x {workspace.height()} px  |  {percent}%  |  {tool} {int(workspace.diameter)} px ([ ] to resize)  |  B brush, E eraser, scroll pans, cmd+scroll zooms")
-        let items: list[ListItem] = []
-        var index = workspace.layer_count() - 1
-        while index >= 0:
-            let mark = "[x]" if workspace.canvas.layer_visible(index) else "[ ]"
-            let opacity = int(workspace.canvas.layer_opacity(index) * 100.0 + 0.5)
-            let blend = workspace.blend_name(index)
-            let clip = "  > " if workspace.canvas.layer_clipped(index) else " "
-            var mask = ""
-            if workspace.canvas.layer_masked(index):
-                mask = "  [mask*]" if workspace.canvas.editing_mask() and index == workspace.selected else "  [mask]"
-            items.append(ListItem(f"{mark}{clip}{workspace.canvas.layer_name(index)}  {opacity}%  {blend}{mask}"))
-            index -= 1
-        self.layers.set_items(items)
-        self.layers.select(workspace.layer_count() - 1 - workspace.selected)
+        self.header_title.set_text(tool)
+        self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser")
+        self.size_slider.set_value(workspace.diameter)
+        self.hardness_slider.set_value(workspace.hardness * 100.0)
+        self.opacity_slider.set_value(workspace.opacity * 100.0)
+        var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
+        if workspace.tool == "hand":
+            hint = "Drag to pan"
+        elif workspace.tool == "zoom":
+            hint = "Click to zoom in · alt-click to zoom out"
+        self.header_hint.set_text(hint)
+        self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  sRGB · Transparent  |  {name}")
+        self.layer_count.set_text(f"{workspace.layer_count()}")
+        self.layer_opacity.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
+        self.layers.layout().invalidate()
         self.view.layout().invalidate()
 
     pub func close(self):

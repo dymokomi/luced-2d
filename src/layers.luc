@@ -1,0 +1,132 @@
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+from workspace import Workspace
+import theme
+import math
+
+## The layer list: one 52-point row per layer, top layer first, each with an
+## eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it has
+## one, the name and a subtitle, indented when clipped. Clicking a row selects
+## it; the eye toggles visibility; the mask thumbnail targets the mask for
+## painting, the layer thumbnail targets the pixels again.
+pub class LayerList: Widget:
+    let box: Layout
+    pub let workspace: Workspace
+    let font: Font
+    let row_height: float = 52.0
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.font = font
+        self.box = Layout()
+        self.box.set_focusable(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_flex()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        let rows = self.workspace.layer_count() if self.workspace.layer_count() > 1 else 1
+        return Size(252.0, self.row_height * float(rows))
+
+    func row_of(self, y: float) -> int:
+        let row = int(math.floor(y / self.row_height))
+        if row < 0 or row >= self.workspace.layer_count():
+            return -1
+        return self.workspace.layer_count() - 1 - row
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
+        let thumb = 36.0
+        let mask_thumb = 30.0
+        var row = 0
+        var index = workspace.layer_count() - 1
+        while index >= 0:
+            let top = float(row) * self.row_height
+            let selected = index == workspace.selected
+            let clipped = canvas.layer_clipped(index)
+            let masked = canvas.layer_masked(index)
+            let visible = canvas.layer_visible(index)
+            if selected:
+                painter.rectangle(Rect(0.0, top, size.width, self.row_height), theme.selection_inactive())
+            # The eye: a filled square when visible, an outline when hidden.
+            let eye_x = 10.0
+            let eye_y = top + (self.row_height - 12.0) * 0.5
+            if visible:
+                painter.rectangle(Rect(eye_x, eye_y, 12.0, 12.0), theme.text())
+            else:
+                painter.rectangle(Rect(eye_x, eye_y, 12.0, 1.0), theme.text_muted())
+                painter.rectangle(Rect(eye_x, eye_y + 11.0, 12.0, 1.0), theme.text_muted())
+                painter.rectangle(Rect(eye_x, eye_y, 1.0, 12.0), theme.text_muted())
+                painter.rectangle(Rect(eye_x + 11.0, eye_y, 1.0, 12.0), theme.text_muted())
+            var x = 32.0 + (24.0 if clipped else 0.0)
+            # The layer thumbnail: a checker-grey slot with the layer's own pixels in
+            # the document's shape, bordered in the accent when it is the target.
+            let aspect = float(workspace.width()) / float(workspace.height())
+            var tw = thumb
+            var th = thumb
+            if aspect > 1.0:
+                th = math.max(6.0, thumb / aspect)
+            else:
+                tw = math.max(6.0, thumb * aspect)
+            let ty = top + (self.row_height - th) * 0.5
+            painter.rectangle(Rect(x, ty, tw, th), theme.checker_light())
+            canvas.draw_layer(target, index, Rect(x, ty, tw, th), false)
+            if selected and not canvas.editing_mask():
+                self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), theme.accent())
+            x += thumb + 8.0
+            if masked:
+                var mw = mask_thumb
+                var mh = mask_thumb
+                if aspect > 1.0:
+                    mh = math.max(5.0, mask_thumb / aspect)
+                else:
+                    mw = math.max(5.0, mask_thumb * aspect)
+                let my = top + (self.row_height - mh) * 0.5
+                painter.rectangle(Rect(x, my, mw, mh), Color(1.0, 1.0, 1.0))
+                canvas.draw_layer(target, index, Rect(x, my, mw, mh), true)
+                if selected and canvas.editing_mask():
+                    self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), theme.accent())
+                x += mask_thumb + 8.0
+            let name = ("↳ " if clipped else "") + canvas.layer_name(index)
+            painter.text(name, x, top + 10.0, theme.text() if visible else theme.text_muted(), self.font)
+            let opacity = int(canvas.layer_opacity(index) * 100.0 + 0.5)
+            let subtitle = f"{workspace.blend_name(index)} · {opacity}%" if not clipped else f"Clipped · {workspace.blend_name(index)} · {opacity}%"
+            painter.text(subtitle, x, top + 30.0, theme.text_muted(), self.font)
+            painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
+            row += 1
+            index -= 1
+        painter.close()
+
+    func frame(self, painter: Painter, rect: Rect, color: Color) -> unit!:
+        painter.rectangle(Rect(rect.x, rect.y, rect.width, 2.0), color)
+        painter.rectangle(Rect(rect.x, rect.y + rect.height - 2.0, rect.width, 2.0), color)
+        painter.rectangle(Rect(rect.x, rect.y, 2.0, rect.height), color)
+        painter.rectangle(Rect(rect.x + rect.width - 2.0, rect.y, 2.0, rect.height), color)
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            let index = self.row_of(event.y)
+            if index < 0:
+                return
+            let workspace = self.workspace
+            if event.x < 28.0:
+                workspace.select(index)
+                workspace.toggle_visibility()
+            else:
+                workspace.select(index)
+                let masked = workspace.canvas.layer_masked(index)
+                let clipped = workspace.canvas.layer_clipped(index)
+                let mask_left = 32.0 + (24.0 if clipped else 0.0) + 36.0 + 8.0
+                if masked and event.x >= mask_left and event.x < mask_left + 30.0:
+                    workspace.canvas.edit_mask(true)
+                elif event.x < mask_left:
+                    workspace.canvas.edit_mask(false)
+                workspace.touch()
+            self.box.invalidate()

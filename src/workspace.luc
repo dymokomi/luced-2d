@@ -14,6 +14,8 @@ pub class Workspace:
     pub var revision: int = 0
     pub var fitted: bool = false
     pub var erasing: bool = false
+    ## The active tool: "brush", "eraser", "hand" or "zoom".
+    pub var tool: str = "brush"
     pub var diameter: float = 32.0
     pub var hardness: float = 0.75
     pub var opacity: float = 1.0
@@ -158,8 +160,23 @@ pub class Workspace:
         self.red = red
         self.green = green
         self.blue = blue
-        self.erasing = false
+        if self.tool == "eraser":
+            self.choose_tool("brush")
         self.touch()
+
+    pub func choose_tool(self, tool: str):
+        self.tool = tool
+        self.erasing = tool == "eraser"
+        self.touch()
+
+    pub func tool_name(self) -> str:
+        if self.tool == "eraser":
+            return "Eraser"
+        if self.tool == "hand":
+            return "Hand"
+        if self.tool == "zoom":
+            return "Zoom"
+        return "Brush"
 
     pub func scale_brush(self, factor: float):
         self.diameter = math.max(1.0, math.min(4096.0, math.floor(self.diameter * factor + 0.5)))

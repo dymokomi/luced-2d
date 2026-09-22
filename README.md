@@ -45,7 +45,9 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 
 - `src/workspace.luc`: the open document, its file, zoom, offset and selection.
 - `src/view.luc`: the canvas widget: checkerboard, the document, pan and zoom.
-- `src/panels.luc`: toolbar, layers panel, status line and the text prompt.
+- `src/panels.luc`: the window after Compositor's: menu bar, contextual tool
+  header, tool rail, layers panel, status line and the text prompt.
+- `src/layers.luc`: the layer list with thumbnails, masks and clipping.
 - `src/theme.luc`: the look, eleusis-layout's greys and orange.
 - `src/app.luc`: application composition and commands.
 - `src/main.luc`: entry point.
