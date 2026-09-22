@@ -106,11 +106,11 @@ pub class LayerList: Widget:
         painter.close()
 
     ## The drop indicator while a row is dragged: an accent line at the nearest row edge.
-    func draw_drop_indicator(self, painter: Painter, width: float):
+    func draw_drop_indicator(self, painter: Painter, width: float) -> unit!:
         if self.drag_index < 0 or not self.drag_started:
             return
         let count = self.workspace.layer_count()
-        let slot = math.max(0, math.min(count, int(math.floor(self.drag_y / self.row_height + 0.5))))
+        let slot = clamp_int(int(math.floor(self.drag_y / self.row_height + 0.5)), 0, count)
         painter.rectangle(Rect(0.0, float(slot) * self.row_height - 1.0, width, 2.0), theme.accent())
 
     func frame(self, painter: Painter, rect: Rect, color: Color) -> unit!:
@@ -120,15 +120,15 @@ pub class LayerList: Widget:
         painter.rectangle(Rect(rect.x + rect.width - 2.0, rect.y, 2.0, rect.height), color)
 
     ## The layer index a drop at `y` lands on: rows run top-most layer first.
-    func drop_target(self, y: float) -> int:
+    func drop_target(self, y: float) -> int!:
         let count = self.workspace.layer_count()
-        let slot = math.max(0, math.min(count, int(math.floor(y / self.row_height + 0.5))))
+        let slot = clamp_int(int(math.floor(y / self.row_height + 0.5)), 0, count)
         # Slot k is the edge above row k; a row dragged down past its own place lands one higher.
         let from_row = count - 1 - self.drag_index
         var to_row = slot
         if slot > from_row:
             to_row = slot - 1
-        return count - 1 - math.max(0, math.min(count - 1, to_row))
+        return count - 1 - clamp_int(to_row, 0, count - 1)
 
     pub func event(self, event: Event) -> unit!:
         if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
@@ -175,3 +175,6 @@ pub class LayerList: Widget:
             self.drag_index = -1
             self.drag_started = false
             self.box.invalidate()
+
+func clamp_int(value: int, low: int, high: int) -> int:
+    return low if value < low else (high if value > high else value)
