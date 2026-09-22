@@ -17,6 +17,7 @@ pub class Actions:
     pub let redo: Command
     pub let fill: Command
     pub let clear: Command
+    pub let free_transform: Command
     # Select
     pub let select_all: Command
     pub let deselect: Command
@@ -65,6 +66,7 @@ pub class Actions:
         self.redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
         self.fill = Command("Fill Selection with Colour", Shortcut(Key.backspace, alt = true), id = "fill")
         self.clear = Command("Clear Selection", Shortcut(Key.backspace), id = "clear")
+        self.free_transform = Command("Free Transform…", Shortcut(Key.t, primary = true), id = "free_transform")
         self.select_all = Command("All", Shortcut(Key.a, primary = true), id = "select_all")
         self.deselect = Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect")
         self.inverse = Command("Inverse", Shortcut(Key.i, primary = true, shift = true), id = "inverse")
@@ -107,7 +109,7 @@ pub class Actions:
         self.tool_icons = ["move-tool", "selection-tool", "ellipse-select-tool", "lasso-tool", "magic-wand-tool", "brush-tool", "eraser-tool", "pan-tool", "zoom-in"]
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
-        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.undo, self.redo, self.fill, self.clear,
+        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.undo, self.redo, self.fill, self.clear, self.free_transform,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.canvas_size, self.image_size, self.blur,
                     self.add_layer, self.duplicate_layer, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
@@ -137,3 +139,4 @@ pub class Actions:
         for command in self.adjustments:
             command.set_enabled(not previewing)
         self.blur.set_enabled(not previewing)
+        self.free_transform.set_enabled(not previewing)

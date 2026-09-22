@@ -95,6 +95,8 @@ pub class Panels:
         self.adjust_row([self.adjust_slider("Levels", 2.0, 32.0, 4.0)])
         self.adjust_row([])
         self.adjust_row([self.adjust_slider("Radius", 0.5, 250.0, 8.0, 1)])
+        self.adjust_row([self.adjust_slider("Width %", 1.0, 400.0, 100.0), self.adjust_slider("Height %", 1.0, 400.0, 100.0),
+                         self.adjust_slider("Angle", -180.0, 180.0, 0.0), self.adjust_slider("X", -2000.0, 2000.0, 0.0), self.adjust_slider("Y", -2000.0, 2000.0, 0.0)])
         # Curves (row 7) hold an editor rather than sliders; the bar grows to fit it.
         self.curve_editor = CurveEditor()
         self.connections.append(self.curve_editor.on_change(self.curve_changed))
@@ -122,7 +124,7 @@ pub class Panels:
         self.adjust_bar.layout().set_visible(false)
         # The menus present the shared commands, shortcuts and all.
         let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as], font = font),
-                             Menu("Edit", [actions.undo, actions.redo, actions.fill, actions.clear], font = font),
+                             Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.clear], font = font),
                              Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
                              Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
                              Menu("Adjust", actions.adjustments, font = font),
@@ -197,13 +199,16 @@ pub class Panels:
             return [values[0] / 255.0]
         return values
 
-    ## Show the open adjustment (or the blur, row 8) with the controls as they are.
+    ## Show the open adjustment (the blur, row 8; the free transform, row 9) with the controls as they are.
     pub func preview(self) -> unit!:
         let kind = self.adjust_kind
         if kind < 0 or not self.workspace.previewing():
             return
         if kind == 8:
             self.workspace.preview_blur(self.adjust_sliders[8][0].value())
+        elif kind == 9:
+            let sliders = self.adjust_sliders[9]
+            self.workspace.preview_transform(sliders[0].value() / 100.0, sliders[1].value() / 100.0, sliders[2].value(), sliders[3].value(), sliders[4].value())
         else:
             self.workspace.preview_adjust(kind, self.adjust_values())
         self.view.layout().invalidate()
@@ -296,6 +301,7 @@ pub class Panels:
         self.bind(actions.canvas_size, self.canvas_size)
         self.bind(actions.image_size, self.image_size)
         self.bind(actions.blur, self.blur)
+        self.bind(actions.free_transform, self.free_transform)
         self.bind(actions.add_layer, self.add_layer)
         self.bind(actions.duplicate_layer, self.duplicate_layer)
         self.bind(actions.layer_up, self.layer_up)
@@ -363,6 +369,13 @@ pub class Panels:
 
     pub func blur(self) -> unit!:
         self.open_preview(8, "Gaussian Blur")
+
+    pub func free_transform(self) -> unit!:
+        for slider in self.adjust_sliders[9]:
+            slider.set_value(0.0)
+        self.adjust_sliders[9][0].set_value(100.0)
+        self.adjust_sliders[9][1].set_value(100.0)
+        self.open_preview(9, "Free Transform")
 
     pub func select_all(self) -> unit!:
         self.workspace.select_all()

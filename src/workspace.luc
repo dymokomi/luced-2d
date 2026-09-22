@@ -206,6 +206,10 @@ pub class Workspace:
         self.canvas.preview_blur(radius)
         self.touch()
 
+    pub func preview_transform(self, scale_x: float, scale_y: float, angle: float, dx: float, dy: float) -> unit!:
+        self.canvas.preview_transform(scale_x, scale_y, angle, dx, dy)
+        self.touch()
+
     pub func end_preview(self, keep: bool) -> unit!:
         self.canvas.end_preview(keep)
         self.touch()

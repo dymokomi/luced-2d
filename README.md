@@ -15,7 +15,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
 - Move tool (`V`): drag with a live preview, or nudge, the layer's pixels;
-  Filter › Gaussian Blur.
+  Edit › Free Transform (cmd-T) scales, rotates and moves a layer with a live
+  preview; Filter › Gaussian Blur.
 - Image › Crop to Selection, Canvas Size, Image Size; Layer › Duplicate, Move
   Up/Down, Merge Down (cmd-J, cmd-], cmd-[, cmd-E).
 - Per-pixel selections: rectangular marquee (`M`), elliptical marquee,
