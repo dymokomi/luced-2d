@@ -20,6 +20,10 @@ pub class CanvasView: Widget:
     var pointer_y: float = 0.0
     var pointer_inside: bool = false
     var space_held: bool = false
+    var selecting: bool = false
+    var select_x: float = 0.0
+    var select_y: float = 0.0
+    var ants: float = 0.0
     let checker: Image
 
     pub func init(self, workspace: Workspace) -> unit!:
@@ -75,6 +79,17 @@ pub class CanvasView: Widget:
             painter.rectangle(Rect(x0, y1 - 1.0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y0, 1.0, y1 - y0), theme.border())
             painter.rectangle(Rect(x1 - 1.0, y0, 1.0, y1 - y0), theme.border())
+        # Marching ants around the selection, at screen resolution.
+        if workspace.canvas.has_selection():
+            let sx = left + float(workspace.canvas.selection_left()) * workspace.zoom
+            let sy = top + float(workspace.canvas.selection_top()) * workspace.zoom
+            let sw = float(workspace.canvas.selection_width()) * workspace.zoom
+            let sh = float(workspace.canvas.selection_height()) * workspace.zoom
+            painter.rectangle(Rect(sx, sy, sw, 1.0), theme.text())
+            painter.rectangle(Rect(sx, sy + sh - 1.0, sw, 1.0), theme.text())
+            painter.rectangle(Rect(sx, sy, 1.0, sh), theme.text())
+            painter.rectangle(Rect(sx + sw - 1.0, sy, 1.0, sh), theme.text())
+            self.dashes(painter, sx, sy, sw, sh)
         if self.pointer_inside and not self.dragging and (workspace.tool == "brush" or workspace.tool == "eraser"):
             # The brush outline, at screen resolution, one dark and one light ring.
             let radius = workspace.diameter * workspace.zoom * 0.5
@@ -89,6 +104,34 @@ pub class CanvasView: Widget:
                 painter.line(a, b, 1.0, theme.text())
                 index += 1
         painter.close()
+
+    ## Black dashes over the white outline, stepping with `ants`.
+    func dashes(self, painter: Painter, x: float, y: float, w: float, h: float) -> unit!:
+        let dash = 4.0
+        let period = dash * 2.0
+        let phase = math.mod(self.ants, period)
+        var t = -phase
+        while t < w:
+            let start = math.max(0.0, t)
+            let stop = math.min(w, t + dash)
+            if stop > start:
+                painter.rectangle(Rect(x + start, y, stop - start, 1.0), theme.backdrop())
+                painter.rectangle(Rect(x + w - stop, y + h - 1.0, stop - start, 1.0), theme.backdrop())
+            t += period
+        t = -phase
+        while t < h:
+            let start = math.max(0.0, t)
+            let stop = math.min(h, t + dash)
+            if stop > start:
+                painter.rectangle(Rect(x + w - 1.0, y + start, 1.0, stop - start), theme.backdrop())
+                painter.rectangle(Rect(x, y + h - stop, 1.0, stop - start), theme.backdrop())
+            t += period
+
+    ## Advance the marching ants; called from the frame timer.
+    pub func march(self):
+        if self.workspace.canvas.has_selection():
+            self.ants += 1.0
+            self.box.invalidate()
 
     ## Document coordinates of a view point.
     func document_x(self, x: float) -> float:
@@ -124,6 +167,11 @@ pub class CanvasView: Widget:
             self.last_y = event.y
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "zoom":
             self.workspace.zoom_about(0.5 if event.alt else 2.0, event.x, event.y)
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "marquee":
+            self.selecting = true
+            self.select_x = self.document_x(event.x)
+            self.select_y = self.document_y(event.y)
+            self.workspace.deselect()
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0:
             self.workspace.begin_stroke(self.document_x(event.x), self.document_y(event.y))
             self.painting = self.workspace.canvas.painting()
@@ -137,8 +185,13 @@ pub class CanvasView: Widget:
                 self.last_y = event.y
             elif self.painting:
                 self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))
+            elif self.selecting:
+                self.workspace.select_rect(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y))
         elif event.kind == EventKind.pointer_up:
             self.dragging = false
+            if self.selecting:
+                self.selecting = false
+                self.workspace.select_rect(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y))
             if self.painting:
                 self.painting = false
                 self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))

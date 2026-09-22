@@ -93,6 +93,11 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.select(0)
             editor.workspace.adjust(1, [0.5, 0.3, 0.0])
             editor.workspace.select(1)
+            editor.workspace.canvas.select(120, 80, 360, 240)
+            editor.workspace.set_color(0.75, 0.03, 0.02)
+            editor.workspace.opacity = 0.6
+            editor.workspace.fill_selection(false)
+            editor.workspace.choose_tool("marquee")
             editor.panels.refresh()
         if captured:
             editor.app.stop()

@@ -79,7 +79,9 @@ pub class Panels:
         self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
         let menus = Toolbar([Menu("File", [self.command("New…", self.new_document), self.command("Open…", self.open_document),
                                            self.command("Save", self.save_document), self.command("Save As…", self.save_document_as)], font = font),
-                             Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo)], font = font),
+                             Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo),
+                                           self.command("Fill Selection with Colour", self.fill_selection), self.command("Clear Selection", self.clear_selection)], font = font),
+                             Menu("Select", [self.command("All", self.select_all), self.command("Deselect", self.deselect)], font = font),
                              Menu("Image", self.adjustments, font = font),
                              Menu("Layer", [self.command("New Layer", self.add_layer), self.command("Delete Layer", self.delete_layer),
                                             self.command("Add / Remove Mask", self.toggle_mask), self.command("Edit Mask / Pixels", self.toggle_mask_editing),
@@ -89,7 +91,7 @@ pub class Panels:
                              Spacer(), self.header_hint], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, Spacer()], font = font)
         # The tool rail: one button per tool.
-        let rail = VStack([self.tool_button("B", "brush"), self.tool_button("E", "eraser"), self.tool_button("H", "hand"), self.tool_button("Z", "zoom"),
+        let rail = VStack([self.tool_button("M", "marquee"), self.tool_button("B", "brush"), self.tool_button("E", "eraser"), self.tool_button("H", "hand"), self.tool_button("Z", "zoom"),
                            Spacer(), self.button("Undo", self.undo), self.button("Redo", self.redo)], spacing = 6.0, padding = 6.0)
         rail.layout().set_limits(Size(56.0, 100.0), Size(56.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
@@ -147,6 +149,25 @@ pub class Panels:
 
     pub func hand(self) -> unit!:
         self.choose_tool("hand")
+
+    pub func marquee(self) -> unit!:
+        self.choose_tool("marquee")
+
+    pub func select_all(self) -> unit!:
+        self.workspace.select_all()
+        self.refresh()
+
+    pub func deselect(self) -> unit!:
+        self.workspace.deselect()
+        self.refresh()
+
+    pub func fill_selection(self) -> unit!:
+        self.workspace.fill_selection(false)
+        self.refresh()
+
+    pub func clear_selection(self) -> unit!:
+        self.workspace.fill_selection(true)
+        self.refresh()
 
     pub func zoom_tool(self) -> unit!:
         self.choose_tool("zoom")
@@ -387,7 +408,9 @@ pub class Panels:
         self.hardness_slider.set_value(workspace.hardness * 100.0)
         self.opacity_slider.set_value(workspace.opacity * 100.0)
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
-        if workspace.tool == "hand":
+        if workspace.tool == "marquee":
+            hint = "Drag to select · cmd-A all · cmd-D deselect · Delete clears"
+        elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":
             hint = "Click to zoom in · alt-click to zoom out"

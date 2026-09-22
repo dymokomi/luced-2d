@@ -14,7 +14,7 @@ pub class Workspace:
     pub var revision: int = 0
     pub var fitted: bool = false
     pub var erasing: bool = false
-    ## The active tool: "brush", "eraser", "hand" or "zoom".
+    ## The active tool: "marquee", "brush", "eraser", "hand" or "zoom".
     pub var tool: str = "brush"
     pub var diameter: float = 32.0
     pub var hardness: float = 0.75
@@ -169,7 +169,30 @@ pub class Workspace:
         self.erasing = tool == "eraser"
         self.touch()
 
+    pub func select_all(self) -> unit!:
+        self.canvas.select(0, 0, self.width(), self.height())
+        self.touch()
+
+    pub func deselect(self) -> unit!:
+        self.canvas.deselect()
+        self.touch()
+
+    pub func select_rect(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let left = int(math.floor(math.min(x0, x1)))
+        let top = int(math.floor(math.min(y0, y1)))
+        let right = int(math.ceil(math.max(x0, x1)))
+        let bottom = int(math.ceil(math.max(y0, y1)))
+        self.canvas.select(left, top, right - left, bottom - top)
+        self.touch()
+
+    pub func fill_selection(self, erase: bool) -> unit!:
+        self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.red, self.green, self.blue, false)
+        self.canvas.fill(self.selected_id(), erase)
+        self.touch()
+
     pub func tool_name(self) -> str:
+        if self.tool == "marquee":
+            return "Marquee"
         if self.tool == "eraser":
             return "Eraser"
         if self.tool == "hand":

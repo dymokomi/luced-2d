@@ -35,7 +35,12 @@ pub class Luce2D:
                         Command("Undo", Shortcut(Key.z, primary = true), id = "undo"),
                         Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo"),
                         Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger"),
-                        Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")]
+                        Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller"),
+                        Command("Marquee", Shortcut(Key.m), id = "marquee"),
+                        Command("Select All", Shortcut(Key.a, primary = true), id = "select_all"),
+                        Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect"),
+                        Command("Clear", Shortcut(Key.backspace), id = "clear"),
+                        Command("Fill", Shortcut(Key.backspace, alt = true), id = "fill")]
         let connections: list[Connection] = []
         connections.append(commands[0].on_trigger(panels.new_document))
         connections.append(commands[1].on_trigger(panels.open_document))
@@ -56,6 +61,14 @@ pub class Luce2D:
         connections.append(commands[16].on_trigger(panels.redo))
         connections.append(commands[17].on_trigger(panels.bigger))
         connections.append(commands[18].on_trigger(panels.smaller))
+        connections.append(commands[19].on_trigger(panels.marquee))
+        connections.append(commands[20].on_trigger(panels.select_all))
+        connections.append(commands[21].on_trigger(panels.deselect))
+        connections.append(commands[22].on_trigger(panels.clear_selection))
+        connections.append(commands[23].on_trigger(panels.fill_selection))
+        connections.append(app.on_frame(func (elapsed: float) -> unit!:
+            discard(elapsed)
+            panels.view.march()))
         app.set_commands(commands)
         self.app = app
         self.workspace = workspace
