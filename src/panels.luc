@@ -2,6 +2,7 @@ from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Sp
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
+from canvas import Canvas
 from actions import Actions
 from view import CanvasView
 from layers import LayerList
@@ -36,6 +37,7 @@ pub class Panels:
     pub let clipped_button: Button
     pub let mask_button: Button
     pub let styles_text: Text
+    pub let blend_menu: Menu
     pub let wand_controls: HStack
     pub let text_controls: HStack
     pub let text_size_slider: Slider
@@ -209,7 +211,8 @@ pub class Panels:
         self.clipped_button = self.button("Clip to Below", self.toggle_clipped)
         self.mask_button = self.button("Mask", self.toggle_mask)
         self.styles_text = Text("None", font = font)
-        let properties = VStack([self.property_row("Layer", self.layer_name), self.property_row("Blend", Menu("Choose ▾", actions.blends, font = font)),
+        self.blend_menu = Menu("Normal ▾", actions.blends, font = font)
+        let properties = VStack([self.property_row("Layer", self.layer_name), self.property_row("Blend", self.blend_menu),
                                  self.property_row("Opacity", self.layer_opacity),
                                  self.property_row("Flags", HStack([self.visible_button, self.clipped_button, self.mask_button], spacing = 6.0)),
                                  self.property_row("Styles", HStack([self.styles_text, self.button("Edit…", self.layer_style)], spacing = 8.0)),
@@ -843,6 +846,7 @@ pub class Panels:
         self.layer_count.set_text(f"{workspace.layer_count()}")
         self.layers_panel.set_text(f"Layers · {workspace.layer_count()}")
         self.layer_name.set_text(workspace.canvas.layer_name(workspace.selected))
+        self.blend_menu.set_text(Canvas.blend_mode_name(workspace.canvas.layer_blend(workspace.selected)) + " ▾")
         self.visible_button.set_style(ButtonStyle.selected if workspace.canvas.layer_visible(workspace.selected) else ButtonStyle.sunken)
         self.clipped_button.set_style(ButtonStyle.selected if workspace.canvas.layer_clipped(workspace.selected) else ButtonStyle.sunken)
         self.mask_button.set_style(ButtonStyle.selected if workspace.canvas.layer_masked(workspace.selected) else ButtonStyle.sunken)
