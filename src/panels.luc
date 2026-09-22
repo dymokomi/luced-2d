@@ -518,8 +518,8 @@ pub class Panels:
 
     pub func open_document(self) -> unit!:
         if let app = self.app:
-            let chosen = app.open_file("Open an .l2d document or a PNG, JPEG, TIFF or EXR picture") catch failure:
-                self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+            let chosen = app.open_file("Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF or EXR picture") catch failure:
+                self.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
                 return
             if chosen != "":
                 self.workspace.open(chosen) catch failure:
@@ -527,7 +527,7 @@ pub class Panels:
                     return
                 self.refresh()
             return
-        self.ask("open", "Open a PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+        self.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
 
     pub func save_document(self) -> unit!:
         if self.workspace.path == "":
