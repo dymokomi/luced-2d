@@ -176,7 +176,7 @@ pub class Panels:
                              Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
                              Menu("Adjust", actions.adjustments, font = font),
                              Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
-                                            actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.layer_style], font = font),
+                                            actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.rename_layer, actions.layer_style], font = font),
                              Menu("Filter", [actions.blur], font = font),
                              Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
                              Spacer()], font = font)
@@ -212,7 +212,7 @@ pub class Panels:
         self.mask_button = self.button("Mask", self.toggle_mask)
         self.styles_text = Text("None", font = font)
         self.blend_menu = Menu("Normal ▾", actions.blends, font = font)
-        let properties = VStack([self.property_row("Layer", self.layer_name), self.property_row("Blend", self.blend_menu),
+        let properties = VStack([self.property_row("Layer", HStack([self.layer_name, self.button("Rename…", self.rename_layer)], spacing = 8.0)), self.property_row("Blend", self.blend_menu),
                                  self.property_row("Opacity", self.layer_opacity),
                                  self.property_row("Flags", HStack([self.visible_button, self.clipped_button, self.mask_button], spacing = 6.0)),
                                  self.property_row("Styles", HStack([self.styles_text, self.button("Edit…", self.layer_style)], spacing = 8.0)),
@@ -435,6 +435,7 @@ pub class Panels:
         self.bind(actions.blur, self.blur)
         self.bind(actions.free_transform, self.free_transform)
         self.bind(actions.layer_style, self.layer_style)
+        self.bind(actions.rename_layer, self.rename_layer)
         self.bind(actions.add_layer, self.add_layer)
         self.bind(actions.duplicate_layer, self.duplicate_layer)
         self.bind(actions.layer_up, self.layer_up)
@@ -467,6 +468,10 @@ pub class Panels:
             let tool = command.id()
             self.bind(command, func () -> unit!:
                 self.choose_tool(tool))
+
+    ## Layer › Rename…: ask for the selected layer's new name.
+    pub func rename_layer(self) -> unit!:
+        self.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename")
 
     ## The text tool clicked: ask for the text to set there.
     func place_text(self) -> unit!:
@@ -749,6 +754,12 @@ pub class Panels:
         if mode == "open":
             self.workspace.open(trimmed) catch failure:
                 self.reject(text, f"Could not open: {failure.message}")
+                return
+        elif mode == "rename":
+            if trimmed == "":
+                return
+            self.workspace.rename(trimmed) catch failure:
+                self.reject(text, f"Could not rename: {failure.message}")
                 return
         elif mode == "text":
             if trimmed == "":

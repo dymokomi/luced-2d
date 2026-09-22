@@ -275,6 +275,11 @@ pub class Workspace:
         self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, self.opacity, self.red, self.green, self.blue, 0.0)
         self.touch()
 
+    ## Rename the selected layer.
+    pub func rename(self, name: str) -> unit!:
+        self.canvas.rename_layer(self.selected_id(), name)
+        self.touch()
+
     ## The eyedropper: the flattened colour under a document point becomes the foreground colour.
     pub func pick(self, x: float, y: float) -> unit!:
         let px = int(math.floor(x))
