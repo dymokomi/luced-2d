@@ -11,7 +11,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 ## What it does today
 
 - Opens PNG, JPEG, TIFF and EXR pictures as a document, or creates an empty one.
-- Layers with names, visibility and opacity, composed on the GPU with a cache
+- Layers with names, visibility, opacity and all 26 Photoshop blend modes,
+  composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
   edges and no dab artefacts; undo and redo of strokes.

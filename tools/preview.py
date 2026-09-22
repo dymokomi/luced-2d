@@ -89,6 +89,7 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.extend_stroke(900.0, 360.0)
             editor.workspace.end_stroke()
             editor.workspace.erasing = false
+            editor.workspace.cycle_blend(6)
             editor.panels.refresh()
         if captured:
             editor.app.stop()
