@@ -114,6 +114,7 @@ pub class Panels:
         self.palette.on_pick = self.pick_color
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
+        self.picker.committed = self.settings_dialog.remember
         # On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
         self.mask_prompt = Dialog([Text("Mask colour", font = font), HStack([self.button("Black · Hide", self.choose_mask_black), self.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
         self.brush_controls = HStack([self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field)], spacing = 12.0)

@@ -19,6 +19,12 @@ def package "luced-2d" {
         str path = "../luce-ui"
     }
 
+    def dependency "luce-color" {
+        str owner = "dymokomi"
+        str version = "^0.2.0"
+        str path = "../luce-color"
+    }
+
     def dependency "luce-config" {
         str owner = "dymokomi"
         str version = "^0.1.0"

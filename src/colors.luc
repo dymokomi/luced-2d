@@ -1,16 +1,20 @@
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, Dialog, HsbField, HueStrip, NumberField, TextField, Text, Button, HStack, VStack, Spacer, hsb_to_rgb, hue_of, saturation_of, brightness_of
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, Dialog, ShadedField, NumberField, TextField, Text, Button, ButtonStyle, HStack, VStack, Spacer, Rule
 from gpu import RenderTarget, Rect, Color
 from input import EventKind, Cursor
 from interop import Connection
 from workspace import Workspace
+import color as science
+import hsl
+import lab
+import space
+import transfer
 import theme
 import math
 
 ## The palette below the tool rail, after Compositor's: the foreground swatch
 ## over the background swatch offset half a swatch, a swap arrow (X) at the top
 ## right and a reset glyph (D) at the bottom left; 32 points square, the rail's
-## content width. Clicking a swatch asks the
-## host to open the picker for it.
+## content width.
 pub class Palette: Widget:
     let box: Layout
     let workspace: Workspace
@@ -72,7 +76,7 @@ pub class Palette: Widget:
                 pick(true)
         self.box.invalidate()
 
-## A colour shown in a rounded well: the picker's preview.
+## A colour shown in a rounded well.
 pub class Swatch: Widget:
     let box: Layout
     pub var color: Color = Color(0.0, 0.0, 0.0)
@@ -97,55 +101,148 @@ pub class Swatch: Widget:
     pub func event(self, event: Event) -> unit!:
         discard(event)
 
-## The colour picker after Photoshop's and Compositor's: a 256-point
-## saturation/brightness field, the hue strip, a preview, R/G/B fields and hex,
-## in a floating dialog; the canvas can be clicked to sample while it is open.
-## Changes apply to the palette at once; Cancel puts the colour back.
+## Photoshop's new-over-current preview: the colour being chosen above the one
+## the picker opened with. Clicking the lower half goes back to it.
+pub class PreviewPair: Widget:
+    let box: Layout
+    pub var current: Color = Color(0.0, 0.0, 0.0)
+    pub var original: Color = Color(0.0, 0.0, 0.0)
+    pub var on_revert: func() -> unit!? = none
+    let side: float
+
+    pub func init(self, side: float) -> unit!:
+        self.side = side
+        self.box = Layout()
+        self.box.set_cursor(Cursor.pointer)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(self.side, self.side)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        painter.rounded_rectangle(Rect(0.0, 0.0, self.side, self.side), theme.border(), 5.0)
+        let half = math.floor(self.side * 0.5)
+        painter.rounded_rectangle(Rect(1.0, 1.0, self.side - 2.0, half - 1.0), self.current, 4.0, 1.0, 3)
+        painter.rounded_rectangle(Rect(1.0, half, self.side - 2.0, self.side - half - 1.0), self.original, 4.0, 1.0, 12)
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside and event.y >= self.side * 0.5:
+            if let revert = self.on_revert:
+                revert()
+
+## The history: the colours committed most recently, newest first, one row of
+## small swatches. Clicking one picks it.
+pub class RecentColors: Widget:
+    let box: Layout
+    let workspace: Workspace
+    pub var on_pick: func(str) -> unit!? = none
+    let cell: float = 18.0
+    let gap: float = 4.0
+
+    pub func init(self, workspace: Workspace) -> unit!:
+        self.workspace = workspace
+        self.box = Layout()
+        self.box.set_cursor(Cursor.pointer)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size((self.cell + self.gap) * 16.0 - self.gap, self.cell)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        var index = 0
+        while index < 16:
+            let x = float(index) * (self.cell + self.gap)
+            painter.rounded_rectangle(Rect(x, 0.0, self.cell, self.cell), theme.border(), 4.0)
+            if index < self.workspace.recent.length:
+                painter.rounded_rectangle(Rect(x + 1.0, 1.0, self.cell - 2.0, self.cell - 2.0), linear_of(srgb_of(self.workspace.recent[index])), 3.0)
+            else:
+                painter.rounded_rectangle(Rect(x + 1.0, 1.0, self.cell - 2.0, self.cell - 2.0), theme.surface(), 3.0)
+            index += 1
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
+            return
+        let index = int(math.floor(event.x / (self.cell + self.gap)))
+        if index >= 0 and index < self.workspace.recent.length:
+            if let pick = self.on_pick:
+                pick(self.workspace.recent[index])
+
+## The colour picker after Photoshop's: a 256-point field and a strip, the
+## strip's channel chosen by the radio beside each field (H, S, B, R, G, B, L,
+## a, b — the field plots the other two of that model), a new-over-current
+## preview, HSB / RGB / Lab / hex fields, the history, OK and Cancel; a canvas
+## click samples while it is open. Colour maths is luce-color's: HSB through
+## `hsl`, Lab through `space`/`lab` against sRGB's white. Changes apply to the
+## palette at once; Cancel puts the colour back.
 pub class ColorPicker:
     pub let dialog: Dialog
     let workspace: Workspace
-    let field: HsbField
-    let strip: HueStrip
-    let preview: Swatch
+    let field: ShadedField
+    let strip: ShadedField
+    let preview: PreviewPair
+    let recent: RecentColors
     let title: Text
+    ## The nine channel fields in the order H, S, B, R, G, B, L, a, b, and their radios.
     let channels: list[NumberField]
+    let radios: list[Button]
     let hex: TextField
     let connections: list[Connection]
     var background: bool = false
     var before: str = ""
-    ## Set while the picker itself writes the fields, so their signals do not echo.
+    ## The colour being edited, sRGB encoded 0..1.
+    var red: float = 0.0
+    var green: float = 0.0
+    var blue: float = 0.0
+    ## Which channel the strip runs along, 0..8 as `channels`.
+    var mode: int = 0
     var syncing: bool = false
     pub var closed: func() -> unit!? = none
+    ## Called with the hex the user committed with OK.
+    pub var committed: func(str) -> unit!? = none
 
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
         self.connections = []
-        self.field = HsbField(256.0)
-        self.strip = HueStrip(256.0)
-        self.preview = Swatch(64.0)
+        self.field = ShadedField(256.0, 256.0)
+        self.strip = ShadedField(20.0, 256.0)
+        self.preview = PreviewPair(64.0)
+        self.preview.on_revert = self.revert
+        self.recent = RecentColors(workspace)
+        self.recent.on_pick = self.pick_recent
         self.title = Text("Foreground Colour", font = font)
         self.channels = []
-        var rows: list[Widget] = []
-        for name in ["R", "G", "B"]:
-            let channel = NumberField(0.0, 0.0, 255.0, 1.0, font = font, cells = 5.0)
-            self.channels.append(channel)
-            let label = Text(name, font = font, muted = true)
-            label.layout().set_limits(Size(14.0, 0.0), Size(14.0, 16384.0))
-            rows.append(HStack([label, channel], spacing = 8.0))
+        self.radios = []
+        let names = ["H", "S", "B", "R", "G", "B", "L", "a", "b"]
+        let lows = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -128.0, -128.0]
+        let highs = [360.0, 100.0, 100.0, 255.0, 255.0, 255.0, 100.0, 127.0, 127.0]
+        let suffixes = ["°", "%", "%", "", "", "", "", "", ""]
+        var index = 0
+        while index < 9:
+            let chosen = index
+            let radio = Button(names[index], font = font)
+            radio.layout().set_size(24.0, 22.0)
+            self.connections.append(radio.on_click(func () -> unit!:
+                self.choose_mode(chosen)))
+            self.radios.append(radio)
+            let channel = NumberField(0.0, lows[index], highs[index], 1.0, suffix = suffixes[index], font = font, cells = 6.0)
             self.connections.append(channel.on_change(func (value: float) -> unit!:
                 discard(value)
-                self.channels_changed()))
+                self.channel_changed(chosen)))
+            self.channels.append(channel)
+            index += 1
         self.hex = TextField("#000000", font = font, cells = 9.0)
-        let hash_label = Text("#", font = font, muted = true)
-        hash_label.layout().set_limits(Size(14.0, 0.0), Size(14.0, 16384.0))
-        rows.append(HStack([hash_label, self.hex], spacing = 8.0))
         self.connections.append(self.hex.on_commit(func (value: str) -> unit!:
             self.hex_committed(value)))
-        self.connections.append(self.field.on_change(func () -> unit!:
-            self.hsb_changed()))
-        self.connections.append(self.strip.on_change(func (hue: float) -> unit!:
-            self.field.set_hsb(hue, self.field.saturation_value(), self.field.brightness_value())
-            self.hsb_changed()))
+        self.connections.append(self.field.on_change(self.field_changed))
+        self.connections.append(self.strip.on_change(self.strip_changed))
         let ok = Button("OK", font = font)
         let cancel = Button("Cancel", font = font)
         self.connections.append(ok.on_click(func () -> unit!:
@@ -154,10 +251,19 @@ pub class ColorPicker:
             self.finish(false)))
         let buttons = VStack([ok, cancel], spacing = 8.0)
         buttons.layout().set_limits(Size(90.0, 0.0), Size(90.0, 16384.0))
-        let side = VStack([HStack([self.preview, buttons], spacing = 16.0), VStack(rows, spacing = 6.0),
+        # Two columns of channel rows, Photoshop's arrangement: HSB and RGB left, Lab and hex right.
+        let left = VStack([self.channel_row(0), self.channel_row(1), self.channel_row(2), Rule(), self.channel_row(3), self.channel_row(4), self.channel_row(5)], spacing = 4.0)
+        let hash_label = Text("#", font = font, muted = true)
+        hash_label.layout().set_limits(Size(24.0, 0.0), Size(24.0, 16384.0))
+        let right = VStack([self.channel_row(6), self.channel_row(7), self.channel_row(8), Rule(), HStack([hash_label, self.hex], spacing = 6.0)], spacing = 4.0)
+        let side = VStack([HStack([self.preview, buttons], spacing = 16.0), HStack([left, right], spacing = 14.0),
                            Text("Click canvas to sample", font = font, muted = true), Spacer()], spacing = 12.0)
-        side.layout().set_limits(Size(210.0, 256.0), Size(210.0, 16384.0))
-        self.dialog = Dialog([self.title, HStack([self.field, self.strip, side], spacing = 14.0)], width = 570.0)
+        side.layout().set_limits(Size(300.0, 256.0), Size(300.0, 16384.0))
+        self.dialog = Dialog([self.title, HStack([self.field, self.strip, side], spacing = 14.0),
+                              HStack([Text("Recent", font = font, muted = true), self.recent, Spacer()], spacing = 10.0)], width = 660.0)
+
+    func channel_row(self, index: int) -> HStack!:
+        return HStack([self.radios[index], self.channels[index]], spacing = 4.0)
 
     pub func is_open(self) -> bool:
         return self.dialog.is_open()
@@ -169,62 +275,207 @@ pub class ColorPicker:
         self.title.set_text("Background Colour" if background else "Foreground Colour")
         self.workspace.sampling = true
         self.workspace.sampling_background = background
-        self.show(self.before)
+        let original = srgb_of(self.before)
+        self.preview.original = linear_of(original)
+        self.show(original)
         self.dialog.open()
 
     ## The palette changed under the picker (a canvas click sampled): show it.
     pub func sync(self) -> unit!:
         if self.is_open():
-            self.show(self.workspace.color_hex(self.background))
+            self.show(srgb_of(self.workspace.color_hex(self.background)))
 
     func finish(self, keep: bool) -> unit!:
         if not keep:
             self.workspace.set_color_hex(self.before, self.background)
         self.workspace.sampling = false
         self.dialog.hide()
+        if keep:
+            if let remember = self.committed:
+                remember(hex_of(Color(self.red, self.green, self.blue)))
         if let done = self.closed:
             done()
 
-    ## Show sRGB `hex` in every control without echoing.
-    func show(self, hex: str) -> unit!:
-        let color = srgb_of(hex)
+    func revert(self) -> unit!:
+        self.take(srgb_of(self.before))
+
+    func pick_recent(self, hex: str) -> unit!:
+        self.take(srgb_of(hex))
+
+    # -- The model: an sRGB colour seen through three channel triples.
+
+    func hsv(self) -> hsl.HSV:
+        return hsl.to_hsv(science.Color(self.red, self.green, self.blue))
+
+    func lab_of(self) -> lab.Lab:
+        return space.to_lab(science.Color(self.red, self.green, self.blue), space.srgb)
+
+    ## Channel `index` of the colour, in the units the fields show.
+    func channel_value(self, index: int) -> float:
+        if index < 3:
+            let h = self.hsv()
+            return [h.h, h.s * 100.0, h.v * 100.0][index]
+        if index < 6:
+            return [self.red, self.green, self.blue][index - 3] * 255.0
+        let l = self.lab_of()
+        return [l.l, l.a, l.b][index - 6]
+
+    ## The colour with channel `index` set to `value` (field units), in gamut.
+    func with_channel(self, index: int, value: float) -> science.Color:
+        return self.with_both(index, value, index, value)
+
+    ## The channels a field's axes carry for the strip channel `mode`: (x, y),
+    ## y running downwards from the channel's high end.
+    func axes(self) -> list[int]:
+        return [[1, 2], [0, 2], [0, 1], [5, 4], [5, 3], [3, 4], [7, 8], [8, 6], [7, 6]][self.mode]
+
+    func low(self, index: int) -> float:
+        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -128.0, -128.0][index]
+
+    func high(self, index: int) -> float:
+        return [360.0, 100.0, 100.0, 255.0, 255.0, 255.0, 100.0, 127.0, 127.0][index]
+
+    ## The colour at field position (u, v) for the current strip channel.
+    func at(self, u: float, v: float) -> science.Color:
+        let pair = self.axes()
+        let x = self.low(pair[0]) + (self.high(pair[0]) - self.low(pair[0])) * u
+        let y = self.high(pair[1]) - (self.high(pair[1]) - self.low(pair[1])) * v
+        return self.with_both(pair[0], x, pair[1], y)
+
+    ## The colour with two channels of one model replaced at once (the same
+    ## channel twice replaces one), clamped into sRGB.
+    func with_both(self, first_index: int, first_value: float, second_index: int, second_value: float) -> science.Color:
+        if first_index < 3:
+            var h = self.hsv()
+            h = set_hsv(h, first_index, first_value)
+            h = set_hsv(h, second_index, second_value)
+            return hsl.from_hsv(h)
+        if first_index < 6:
+            var c = science.Color(self.red, self.green, self.blue)
+            c = set_rgb(c, first_index, first_value)
+            c = set_rgb(c, second_index, second_value)
+            return c
+        var l = self.lab_of()
+        l = set_lab(l, first_index, first_value)
+        l = set_lab(l, second_index, second_value)
+        return space.clamp(space.from_lab(l, space.srgb))
+
+    # -- Showing the model.
+
+    ## Show `color` (sRGB encoded) in every control without echoing.
+    func show(self, color: science.Color) -> unit!:
+        self.red = math.max(0.0, math.min(1.0, color.red))
+        self.green = math.max(0.0, math.min(1.0, color.green))
+        self.blue = math.max(0.0, math.min(1.0, color.blue))
         self.syncing = true
-        self.field.set_hsb(hue_of(color), saturation_of(color), brightness_of(color))
-        self.strip.set_hue(hue_of(color))
-        self.channels[0].set_value(math.floor(color.red * 255.0 + 0.5))
-        self.channels[1].set_value(math.floor(color.green * 255.0 + 0.5))
-        self.channels[2].set_value(math.floor(color.blue * 255.0 + 0.5))
-        self.hex.set_text(hex)
-        self.preview.color = theme.srgb(color.red * 255.0, color.green * 255.0, color.blue * 255.0)
+        var index = 0
+        while index < 9:
+            self.channels[index].set_value(self.channel_value(index))
+            self.radios[index].set_style(ButtonStyle.selected if index == self.mode else ButtonStyle.sunken)
+            index += 1
+        self.hex.set_text(hex_of(Color(self.red, self.green, self.blue)))
+        self.preview.current = linear_of(science.Color(self.red, self.green, self.blue))
         self.preview.layout().invalidate()
+        self.shade()
         self.syncing = false
 
+    ## Recompute the field's and strip's colours and markers for the strip channel.
+    func shade(self) -> unit!:
+        let pair = self.axes()
+        var grid: list[Color] = []
+        var row = 0
+        while row <= 16:
+            var column = 0
+            while column <= 16:
+                grid.append(linear_of(space.clamp(self.at(float(column) / 16.0, float(row) / 16.0))))
+                column += 1
+            row += 1
+        self.field.set_grid(grid, 17)
+        let ux = (self.channel_value(pair[0]) - self.low(pair[0])) / (self.high(pair[0]) - self.low(pair[0]))
+        let vy = (self.high(pair[1]) - self.channel_value(pair[1])) / (self.high(pair[1]) - self.low(pair[1]))
+        self.field.set_marker(ux, vy)
+        var ramp: list[Color] = []
+        var step = 0
+        while step <= 32:
+            let value = self.high(self.mode) - (self.high(self.mode) - self.low(self.mode)) * float(step) / 32.0
+            let shade = linear_of(space.clamp(self.with_channel(self.mode, value)))
+            ramp.append(shade)
+            ramp.append(shade)
+            step += 1
+        self.strip.set_grid(ramp, 2)
+        self.strip.set_marker(0.5, (self.high(self.mode) - self.channel_value(self.mode)) / (self.high(self.mode) - self.low(self.mode)))
+
+    # -- Edits.
+
     ## An edit in the picker: the palette takes it, and the other controls follow.
-    func take(self, color: Color) -> unit!:
+    func take(self, color: science.Color) -> unit!:
         if self.syncing:
             return
-        let hex = hex_of(color)
-        self.workspace.set_color_hex(hex, self.background)
-        self.show(hex)
+        let clamped = space.clamp(color)
+        self.workspace.set_color_hex(hex_of(Color(clamped.red, clamped.green, clamped.blue)), self.background)
+        self.show(clamped)
 
-    func hsb_changed(self) -> unit!:
-        self.take(hsb_to_rgb(self.field.hue_value(), self.field.saturation_value(), self.field.brightness_value()))
+    func choose_mode(self, mode: int) -> unit!:
+        self.mode = mode
+        self.show(science.Color(self.red, self.green, self.blue))
 
-    func channels_changed(self) -> unit!:
-        self.take(Color(self.channels[0].value() / 255.0, self.channels[1].value() / 255.0, self.channels[2].value() / 255.0))
+    func field_changed(self) -> unit!:
+        self.take(self.at(self.field.u(), self.field.v()))
+
+    func strip_changed(self) -> unit!:
+        let value = self.high(self.mode) - (self.high(self.mode) - self.low(self.mode)) * self.strip.v()
+        self.take(self.with_channel(self.mode, value))
+
+    func channel_changed(self, index: int) -> unit!:
+        if self.syncing:
+            return
+        self.take(self.with_channel(index, self.channels[index].value()))
 
     func hex_committed(self, value: str) -> unit!:
-        let text = value.trim()
-        let color = srgb_of(text if text[..<1] == "#" else "#" + text)
-        self.take(color)
+        let trimmed = value.trim()
+        self.take(srgb_of(trimmed if trimmed[..<1] == "#" else "#" + trimmed))
 
     pub func close(self):
         for connection in self.connections:
             connection.disconnect()
         self.connections.clear()
 
+func set_hsv(h: hsl.HSV, index: int, value: float) -> hsl.HSV:
+    var out = h
+    if index == 0:
+        out.h = value
+    elif index == 1:
+        out.s = value / 100.0
+    else:
+        out.v = value / 100.0
+    return out
+
+func set_rgb(c: science.Color, index: int, value: float) -> science.Color:
+    var out = c
+    if index == 3:
+        out.red = value / 255.0
+    elif index == 4:
+        out.green = value / 255.0
+    else:
+        out.blue = value / 255.0
+    return out
+
+func set_lab(l: lab.Lab, index: int, value: float) -> lab.Lab:
+    var out = l
+    if index == 6:
+        out.l = value
+    elif index == 7:
+        out.a = value
+    else:
+        out.b = value
+    return out
+
+## The linear colour the GPU draws for an sRGB-encoded one.
+pub func linear_of(color: science.Color) -> Color:
+    return Color(transfer.srgb_decode(color.red), transfer.srgb_decode(color.green), transfer.srgb_decode(color.blue))
+
 ## sRGB hex "#rrggbb" for sRGB components 0..1.
-func hex_of(color: Color) -> str:
+pub func hex_of(color: Color) -> str:
     return "#" + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.red)) * 255.0 + 0.5))) + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.green)) * 255.0 + 0.5))) + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.blue)) * 255.0 + 0.5)))
 
 func hex_byte(value: int) -> str:
@@ -232,16 +483,16 @@ func hex_byte(value: int) -> str:
     return digits[value // 16..<value // 16 + 1] + digits[value % 16..<value % 16 + 1]
 
 ## The sRGB components of "#rrggbb"; black for anything else.
-func srgb_of(hex: str) -> Color:
+pub func srgb_of(hex: str) -> science.Color:
     let digits = "0123456789abcdef"
     let lowered = hex.trim().lower()
     if lowered.length != 7 or lowered[..<1] != "#":
-        return Color(0.0, 0.0, 0.0)
+        return science.Color(0.0, 0.0, 0.0)
     var values: list[float] = []
     var index = 1
     while index < 7:
-        let high = digits.index_of(lowered[index..<index + 1]) else return Color(0.0, 0.0, 0.0)
-        let low = digits.index_of(lowered[index + 1..<index + 2]) else return Color(0.0, 0.0, 0.0)
+        let high = digits.index_of(lowered[index..<index + 1]) else return science.Color(0.0, 0.0, 0.0)
+        let low = digits.index_of(lowered[index + 1..<index + 2]) else return science.Color(0.0, 0.0, 0.0)
         values.append(float(high * 16 + low) / 255.0)
         index += 2
-    return Color(values[0], values[1], values[2])
+    return science.Color(values[0], values[1], values[2])

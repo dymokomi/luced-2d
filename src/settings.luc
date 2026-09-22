@@ -14,11 +14,13 @@ pub class Settings:
     pub var display: str = "srgb"
     pub var accent: str = "#e7a03f"
     pub var control_radius: float = 5.0
+    ## The colours the picker committed most recently, newest first, as sRGB hex separated by spaces.
+    pub var recent: str = ""
     pub var shortcuts: map[str, str]
 
     pub func init(self, source: str = "") -> unit!:
         let table = Table(source)
-        table.check_within(["canvas.width", "canvas.height", "color.display", "theme.accent", "theme.control_radius"], ["shortcuts"])
+        table.check_within(["canvas.width", "canvas.height", "color.display", "theme.accent", "theme.control_radius", "colors.recent"], ["shortcuts"])
         self.canvas_width = int(table.number("canvas.width", 1280.0, 1.0, 30000.0))
         self.canvas_height = int(table.number("canvas.height", 800.0, 1.0, 30000.0))
         self.display = table.string("color.display", "srgb")
@@ -26,6 +28,7 @@ pub class Settings:
             error(ui.invalid, "color.display must be \"srgb\" or \"display-p3\"")
         self.accent = table.string("theme.accent", "#e7a03f")
         self.control_radius = table.number("theme.control_radius", 5.0, 0.0, 16.0)
+        self.recent = table.string("colors.recent", "")
         var shortcuts: map[str, str] = {}
         for id in table.keys("shortcuts"):
             shortcuts[id] = table.string("shortcuts." + id, "")
@@ -39,6 +42,7 @@ pub class Settings:
         other.display = self.display
         other.accent = self.accent
         other.control_radius = self.control_radius
+        other.recent = self.recent
         var shortcuts: map[str, str] = {}
         for (id, chord) in self.shortcuts:
             shortcuts[id] = chord
@@ -51,6 +55,7 @@ pub class Settings:
         text = text + f"[canvas]\nwidth = {self.canvas_width}\nheight = {self.canvas_height}\n\n"
         text = text + f"[color]\n# The display the viewport targets: \"srgb\" or \"display-p3\".\ndisplay = \"{self.display}\"\n\n"
         text = text + f"[theme]\naccent = \"{self.accent}\"\ncontrol_radius = {self.control_radius}\n\n"
+        text = text + f"[colors]\n# The picker's recent colours, newest first.\nrecent = \"{self.recent}\"\n\n"
         text = text + "# Shortcuts by command id; a chord like \"cmd+shift+s\", \"f5\" or \"none\". Unlisted commands keep their defaults.\n[shortcuts]\n"
         for (id, chord) in self.shortcuts:
             text = text + f"{id} = \"{chord}\"\n"

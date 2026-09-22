@@ -41,11 +41,14 @@ pub class Workspace:
     ## While the picker is open a canvas click samples into the colour it edits.
     pub var sampling: bool = false
     pub var sampling_background: bool = false
+    ## The picker's history: sRGB hex strings, newest first, at most 16.
+    pub var recent: list[str]
     var next_name: int = 1
 
     pub func init(self, width: int, height: int) -> unit!:
         self.canvas = Canvas(width, height)
         self.look = Look()
+        self.recent = []
         discard(self.canvas.add_layer("Background"))
         self.touch()
 

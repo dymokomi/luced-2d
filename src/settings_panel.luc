@@ -247,10 +247,28 @@ pub class SettingsDialog:
         self.dialog.hide()
         self.apply()
 
-    ## Apply the live settings: the look, the window theme, every shortcut.
+    ## The picker committed `hex`: it heads the history, which is saved at once.
+    pub func remember(self, hex: str) -> unit!:
+        var recent: list[str] = [hex]
+        for other in self.workspace.recent:
+            if other != hex and recent.length < 16:
+                recent.append(other)
+        self.workspace.recent = recent
+        var joined = ""
+        for item in recent:
+            joined = joined + (" " if joined != "" else "") + item
+        self.settings.recent = joined
+        self.store.save(self.settings)
+
+    ## Apply the live settings: the look, the window theme, every shortcut, the picker's history.
     pub func apply(self) -> unit!:
         let look = Look(self.settings.accent, self.settings.control_radius)
         self.workspace.look = look
+        var recent: list[str] = []
+        for item in self.settings.recent.split(" "):
+            if item.length == 7 and recent.length < 16:
+                recent.append(item)
+        self.workspace.recent = recent
         if let app = self.app:
             app.set_theme(theme.editor_theme(look))
         for command in self.commands:
