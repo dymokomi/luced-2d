@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -493,11 +493,13 @@ pub class Panels:
         return button
 
     ## A properties row: a muted label in a fixed column, then the control.
-    func property_row(self, label: str, control: Widget) -> HStack!:
-        let caption = Text(label, font = self.font)
+    ## A properties row after eleusis: a muted label in a fixed column, the
+    ## control, and a one-point rule beneath.
+    func property_row(self, label: str, control: Widget) -> VStack!:
+        let caption = Text(label, font = self.font, muted = true)
         caption.layout().set_limits(Size(64.0, 0.0), Size(64.0, 16384.0))
         let row = HStack([caption, control], spacing = 6.0, padding = 4.0)
-        return row
+        return VStack([row, Rule()], spacing = 0.0)
 
     func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
         let button = Button(icon = icon, font = self.font)
