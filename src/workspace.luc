@@ -269,6 +269,16 @@ pub class Workspace:
 
     ## A rectangle or ellipse between two corners, combined by `mode`
     ## (0 replace, 1 add, 2 subtract, 3 intersect).
+    ## The eyedropper: the flattened colour under a document point becomes the foreground colour.
+    pub func pick(self, x: float, y: float) -> unit!:
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
+            return
+        self.canvas.pick(px, py)
+        if self.canvas.picked_alpha() > 0.0:
+            self.set_color(self.canvas.picked_red(), self.canvas.picked_green(), self.canvas.picked_blue())
+
     ## Set `text` on the selected layer at the remembered text position, in the foreground colour.
     pub func draw_text(self, text: str) -> unit!:
         self.canvas.draw_text(self.selected_id(), self.text_x, self.text_y, text, self.text_size, self.red, self.green, self.blue)
@@ -322,6 +332,8 @@ pub class Workspace:
             return "Magic Wand"
         if self.tool == "text":
             return "Text"
+        if self.tool == "eyedropper":
+            return "Eyedropper"
         if self.tool == "eraser":
             return "Eraser"
         if self.tool == "hand":

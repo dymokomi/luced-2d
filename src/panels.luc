@@ -778,6 +778,8 @@ pub class Panels:
             hint = "Click a colour to select it · shift adds · alt subtracts"
         elif workspace.tool == "text":
             hint = "Click where the text starts, then type it"
+        elif workspace.tool == "eyedropper":
+            hint = "Click a colour to make it the foreground colour"
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":

@@ -65,7 +65,7 @@ func contents() -> unit!:
     assert(not actions.undo.is_enabled() and not actions.crop.is_enabled())
     actions.select_all.trigger()
     assert(actions.crop.is_enabled())
-    actions.tools[6].trigger()
+    actions.tools[7].trigger()
     assert(workspace.tool == "brush")
     actions.tools[4].trigger()
     assert(workspace.tool == "wand")

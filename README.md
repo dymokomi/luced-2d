@@ -28,6 +28,7 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   shift adds and alt subtracts, Select › All, Deselect, Inverse,
   Expand, Contract and Feather (cmd-A, cmd-D, cmd-shift-I); marching ants;
   painting and fills stay inside; Fill (alt-Delete) and Clear (Delete).
+- Eyedropper (`I`): click to pick the flattened colour as the foreground.
 - Text tool (`T`): click, type, and the text is set into the layer's pixels
   in the foreground colour at the chosen size.
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft

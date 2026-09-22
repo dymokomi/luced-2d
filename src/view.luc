@@ -182,6 +182,8 @@ pub class CanvasView: Widget:
             self.move_y = event.y
             self.move_now_x = event.x
             self.move_now_y = event.y
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "eyedropper":
+            self.workspace.pick(self.document_x(event.x), self.document_y(event.y))
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "text":
             self.workspace.text_x = self.document_x(event.x)
             self.workspace.text_y = self.document_y(event.y)
