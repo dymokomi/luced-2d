@@ -32,6 +32,7 @@ jobs:
           echo "prism=$(tr -d '\n' < luced-2d/bootstrap/PRISM)" >> "$GITHUB_OUTPUT"
           echo "crypto=$(tr -d '\n' < luced-2d/bootstrap/CRYPTO)" >> "$GITHUB_OUTPUT"
           echo "tls=$(tr -d '\n' < luced-2d/bootstrap/TLS)" >> "$GITHUB_OUTPUT"
+          echo "psd=$(tr -d '\n' < luced-2d/bootstrap/PSD)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: dymokomi/luce-base
@@ -89,6 +90,12 @@ jobs:
       - name: Linux libraries the window and font backends link
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev fonts-dejavu-core
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-psd
+          ref: ${{ steps.pins.outputs.psd }}
+          path: luce-psd
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
