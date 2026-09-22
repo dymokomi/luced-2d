@@ -34,7 +34,7 @@ jobs:
           echo "tls=$(tr -d '\n' < luced-2d/bootstrap/TLS)" >> "$GITHUB_OUTPUT"
           echo "psd=$(tr -d '\n' < luced-2d/bootstrap/PSD)" >> "$GITHUB_OUTPUT"
           echo "raster=$(tr -d '\n' < luced-2d/bootstrap/RASTER)" >> "$GITHUB_OUTPUT"
-          echo "deflate=$(tr -d '\n' < luced-2d/bootstrap/DEFLATE)" >> "$GITHUB_OUTPUT"
+          echo "compress=$(tr -d '\n' < luced-2d/bootstrap/COMPRESS)" >> "$GITHUB_OUTPUT"
           echo "png=$(tr -d '\n' < luced-2d/bootstrap/PNG)" >> "$GITHUB_OUTPUT"
           echo "jpeg=$(tr -d '\n' < luced-2d/bootstrap/JPEG)" >> "$GITHUB_OUTPUT"
           echo "tiff=$(tr -d '\n' < luced-2d/bootstrap/TIFF)" >> "$GITHUB_OUTPUT"
@@ -110,9 +110,9 @@ jobs:
           token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
-          repository: dymokomi/luce-deflate
-          ref: ${{ steps.pins.outputs.deflate }}
-          path: luce-deflate
+          repository: dymokomi/luce-compress
+          ref: ${{ steps.pins.outputs.compress }}
+          path: luce-compress
           token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:
