@@ -13,6 +13,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - Opens PNG, JPEG, TIFF and EXR pictures as a document, or creates an empty one.
 - Layers with names, visibility and opacity, composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
+- Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
+  edges and no dab artefacts; undo and redo of strokes.
 - Pan with scroll or space-drag, zoom about the pointer with cmd/ctrl-scroll,
   `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
 - Saves the flattened document to PNG, JPEG or TIFF.

@@ -1,4 +1,5 @@
-from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer
+from ui import Font, Text, Button, ListView, ListItem, VStack, HStack, Toolbar, Panel, SplitView, Size, TextPrompt, Spacer, Theme
+from gpu import Color
 from interop import Connection
 from workspace import Workspace
 from view import CanvasView
@@ -27,6 +28,10 @@ pub class Panels:
         self.status = Text("", font = font)
         let toolbar = Toolbar([self.button("New", self.new_document), self.button("Open", self.open_document), self.button("Save", self.save_document),
                                self.button("Save As", self.save_document_as), Spacer(),
+                               self.button("Brush", self.brush), self.button("Eraser", self.eraser), self.button("Size", self.edit_diameter),
+                               self.swatch("Black", 0.0, 0.0, 0.0), self.swatch("White", 1.0, 1.0, 1.0), self.swatch("Orange", 0.8069, 0.3515, 0.0497),
+                               self.swatch("Blue", 0.02, 0.18, 0.65), self.swatch("Red", 0.75, 0.03, 0.02), Spacer(),
+                               self.button("Undo", self.undo), self.button("Redo", self.redo), Spacer(),
                                self.button("Fit", self.fit), self.button("100%", self.actual_size), self.button("+", self.zoom_in), self.button("-", self.zoom_out)], font = font)
         let layer_content = VStack([self.layers, HStack([self.button("Add", self.add_layer), self.button("Delete", self.delete_layer),
                                     self.button("Show/Hide", self.toggle_visibility), self.button("Opacity", self.edit_opacity)], spacing = 4.0)], spacing = 4.0, padding = 8.0)
@@ -44,6 +49,41 @@ pub class Panels:
         let button = Button(text, font = self.font)
         self.connections.append(button.on_click(callback))
         return button
+
+    func swatch(self, text: str, red: float, green: float, blue: float) -> Button!:
+        let button = self.button(text, func () -> unit!:
+            self.workspace.set_color(red, green, blue)
+            self.refresh())
+        button.layout().set_theme(Theme(button = Color(red, green, blue), panel = Color(red, green, blue), pressed = Color(red, green, blue),
+                                        foreground = Color(1.0, 1.0, 1.0) if red + green + blue < 1.2 else Color(0.0, 0.0, 0.0)))
+        return button
+
+    pub func brush(self) -> unit!:
+        self.workspace.erasing = false
+        self.refresh()
+
+    pub func eraser(self) -> unit!:
+        self.workspace.erasing = true
+        self.refresh()
+
+    pub func undo(self) -> unit!:
+        self.workspace.undo()
+        self.refresh()
+
+    pub func redo(self) -> unit!:
+        self.workspace.redo()
+        self.refresh()
+
+    pub func bigger(self) -> unit!:
+        self.workspace.scale_brush(1.25)
+        self.refresh()
+
+    pub func smaller(self) -> unit!:
+        self.workspace.scale_brush(0.8)
+        self.refresh()
+
+    pub func edit_diameter(self) -> unit!:
+        self.ask("diameter", "Brush diameter, 1..4096 pixels", f"{int(self.workspace.diameter)}", "Apply")
 
     func cancel_prompt(self):
         self.prompt_mode = ""
@@ -143,6 +183,14 @@ pub class Panels:
                 self.reject(text, "Each side must be 1..16384 pixels")
                 return
             self.workspace.create(width, height)
+        elif mode == "diameter":
+            let pixels = int(trimmed) catch failure:
+                self.reject(text, "Enter a whole number: 1..4096")
+                return
+            if pixels < 1 or pixels > 4096:
+                self.reject(text, "Enter a whole number: 1..4096")
+                return
+            self.workspace.diameter = float(pixels)
         elif mode == "opacity":
             let percent = int(trimmed) catch failure:
                 self.reject(text, "Enter a whole number: 0..100")
@@ -158,7 +206,8 @@ pub class Panels:
         let workspace = self.workspace
         let name = workspace.path if workspace.path != "" else "Untitled"
         let percent = int(workspace.zoom * 100.0 + 0.5)
-        self.status.set_text(f"{name}  |  {workspace.width()} x {workspace.height()} px  |  {percent}%  |  scroll to pan, cmd+scroll or +/- to zoom, space+drag")
+        let tool = "Eraser" if workspace.erasing else "Brush"
+        self.status.set_text(f"{name}  |  {workspace.width()} x {workspace.height()} px  |  {percent}%  |  {tool} {int(workspace.diameter)} px ([ ] to resize)  |  B brush, E eraser, scroll pans, cmd+scroll zooms")
         let items: list[ListItem] = []
         var index = workspace.layer_count() - 1
         while index >= 0:

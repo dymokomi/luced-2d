@@ -26,7 +26,13 @@ pub class Luce2D:
                         Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size"),
                         Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer"),
                         Command("Delete Layer", Shortcut(Key.delete, primary = true, shift = true), id = "delete_layer"),
-                        Command("Show/Hide Layer", Shortcut(Key.h, primary = true, shift = true), id = "toggle_layer")]
+                        Command("Show/Hide Layer", Shortcut(Key.h, primary = true, shift = true), id = "toggle_layer"),
+                        Command("Brush", Shortcut(Key.b), id = "brush"),
+                        Command("Eraser", Shortcut(Key.e), id = "eraser"),
+                        Command("Undo", Shortcut(Key.z, primary = true), id = "undo"),
+                        Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo"),
+                        Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger"),
+                        Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")]
         let connections: list[Connection] = []
         connections.append(commands[0].on_trigger(panels.new_document))
         connections.append(commands[1].on_trigger(panels.open_document))
@@ -39,6 +45,12 @@ pub class Luce2D:
         connections.append(commands[8].on_trigger(panels.add_layer))
         connections.append(commands[9].on_trigger(panels.delete_layer))
         connections.append(commands[10].on_trigger(panels.toggle_visibility))
+        connections.append(commands[11].on_trigger(panels.brush))
+        connections.append(commands[12].on_trigger(panels.eraser))
+        connections.append(commands[13].on_trigger(panels.undo))
+        connections.append(commands[14].on_trigger(panels.redo))
+        connections.append(commands[15].on_trigger(panels.bigger))
+        connections.append(commands[16].on_trigger(panels.smaller))
         app.set_commands(commands)
         self.app = app
         self.workspace = workspace

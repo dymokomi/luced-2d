@@ -76,6 +76,20 @@ pub func main(arguments: list[str]) -> int!:
     let observed = editor.app.on_frame(func (elapsed: float) -> unit!:
         discard(elapsed)
         frames += 1
+        if frames == 4:
+            editor.workspace.set_color(0.8069, 0.3515, 0.0497)
+            editor.workspace.diameter = 48.0
+            editor.workspace.begin_stroke(180.0, 480.0)
+            editor.workspace.extend_stroke(420.0, 140.0)
+            editor.workspace.extend_stroke(700.0, 520.0)
+            editor.workspace.end_stroke()
+            editor.workspace.erasing = true
+            editor.workspace.diameter = 90.0
+            editor.workspace.begin_stroke(760.0, 320.0)
+            editor.workspace.extend_stroke(900.0, 360.0)
+            editor.workspace.end_stroke()
+            editor.workspace.erasing = false
+            editor.panels.refresh()
         if captured:
             editor.app.stop()
         elif frames >= 12:

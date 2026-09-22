@@ -1,4 +1,4 @@
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Image
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point
 from gpu import RenderTarget, Rect, Region, Filter
 from input import EventKind, Cursor, Key, ScrollUnit
 from workspace import Workspace
@@ -13,8 +13,12 @@ pub class CanvasView: Widget:
     let box: Layout
     pub let workspace: Workspace
     var dragging: bool = false
+    var painting: bool = false
     var last_x: float = 0.0
     var last_y: float = 0.0
+    var pointer_x: float = 0.0
+    var pointer_y: float = 0.0
+    var pointer_inside: bool = false
     var space_held: bool = false
     let checker: Image
 
@@ -71,11 +75,36 @@ pub class CanvasView: Widget:
             painter.rectangle(Rect(x0, y1 - 1.0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y0, 1.0, y1 - y0), theme.border())
             painter.rectangle(Rect(x1 - 1.0, y0, 1.0, y1 - y0), theme.border())
+        if self.pointer_inside and not self.dragging:
+            # The brush outline, at screen resolution, one dark and one light ring.
+            let radius = workspace.diameter * workspace.zoom * 0.5
+            let segments = 48
+            var index = 0
+            while index < segments:
+                let angle = float(index) * 6.283185307 / float(segments)
+                let next = float(index + 1) * 6.283185307 / float(segments)
+                let a = Point(self.pointer_x + math.cos(angle) * radius, self.pointer_y + math.sin(angle) * radius)
+                let b = Point(self.pointer_x + math.cos(next) * radius, self.pointer_y + math.sin(next) * radius)
+                painter.line(a, b, 3.0, theme.backdrop())
+                painter.line(a, b, 1.0, theme.text())
+                index += 1
         painter.close()
+
+    ## Document coordinates of a view point.
+    func document_x(self, x: float) -> float:
+        return (x - self.workspace.offset_x) / self.workspace.zoom
+
+    func document_y(self, y: float) -> float:
+        return (y - self.workspace.offset_y) / self.workspace.zoom
 
     pub func event(self, event: Event) -> unit!:
         if event.cancelled:
             self.dragging = false
+            if self.painting:
+                self.painting = false
+                self.workspace.end_stroke()
+            self.pointer_inside = false
+            self.box.invalidate()
             return
         if event.kind == EventKind.key_down and event.key == Key.space:
             self.space_held = true
@@ -93,10 +122,25 @@ pub class CanvasView: Widget:
             self.dragging = true
             self.last_x = event.x
             self.last_y = event.y
-        elif event.kind == EventKind.pointer_moved and self.dragging:
-            self.workspace.pan(event.x - self.last_x, event.y - self.last_y)
-            self.last_x = event.x
-            self.last_y = event.y
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0:
+            self.workspace.begin_stroke(self.document_x(event.x), self.document_y(event.y))
+            self.painting = self.workspace.canvas.painting()
+        elif event.kind == EventKind.pointer_moved:
+            self.pointer_x = event.x
+            self.pointer_y = event.y
+            self.pointer_inside = event.inside
+            if self.dragging:
+                self.workspace.pan(event.x - self.last_x, event.y - self.last_y)
+                self.last_x = event.x
+                self.last_y = event.y
+            elif self.painting:
+                self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))
         elif event.kind == EventKind.pointer_up:
             self.dragging = false
+            if self.painting:
+                self.painting = false
+                self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))
+                self.workspace.end_stroke()
+        elif event.kind == EventKind.pointer_left:
+            self.pointer_inside = false
         self.box.invalidate()

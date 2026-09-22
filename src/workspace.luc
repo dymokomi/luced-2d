@@ -13,6 +13,13 @@ pub class Workspace:
     pub var selected: int = 0
     pub var revision: int = 0
     pub var fitted: bool = false
+    pub var erasing: bool = false
+    pub var diameter: float = 32.0
+    pub var hardness: float = 0.75
+    pub var opacity: float = 1.0
+    pub var red: float = 0.0
+    pub var green: float = 0.0
+    pub var blue: float = 0.0
     var next_name: int = 1
 
     pub func init(self, width: int, height: int) -> unit!:
@@ -79,6 +86,45 @@ pub class Workspace:
     pub func set_opacity(self, opacity: float) -> unit!:
         let id = self.selected_id()
         self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), math.max(0.0, math.min(1.0, opacity)))
+        self.touch()
+
+    ## Push the brush settings to the canvas and start a stroke on the selected layer.
+    pub func begin_stroke(self, x: float, y: float) -> unit!:
+        if not self.canvas.layer_visible(self.selected):
+            return
+        self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.red, self.green, self.blue, self.erasing)
+        self.canvas.begin_stroke(self.selected_id(), x, y)
+        self.touch()
+
+    pub func extend_stroke(self, x: float, y: float) -> unit!:
+        if self.canvas.painting():
+            self.canvas.extend_stroke(x, y)
+            self.touch()
+
+    pub func end_stroke(self) -> unit!:
+        if self.canvas.painting():
+            self.canvas.end_stroke()
+            self.touch()
+
+    pub func undo(self) -> unit!:
+        if self.canvas.can_undo():
+            self.canvas.undo()
+            self.touch()
+
+    pub func redo(self) -> unit!:
+        if self.canvas.can_redo():
+            self.canvas.redo()
+            self.touch()
+
+    pub func set_color(self, red: float, green: float, blue: float):
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.erasing = false
+        self.touch()
+
+    pub func scale_brush(self, factor: float):
+        self.diameter = math.max(1.0, math.min(4096.0, math.floor(self.diameter * factor + 0.5)))
         self.touch()
 
     pub func select(self, index: int):
