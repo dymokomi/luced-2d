@@ -1,0 +1,81 @@
+from toml import Table
+import files
+import paths
+import ui
+
+## What a machine keeps for luced-2d, in `~/.luced-2d/settings.toml`: the size a
+## new canvas takes, the display the viewport targets, the theme's accent and
+## control radius, and the shortcuts that differ from the defaults, by command
+## id (a chord like "cmd+shift+s", "f5" or "none"). Missing keys keep their
+## defaults; an unreadable file is reported and ignored, never rewritten.
+pub class Settings:
+    pub var canvas_width: int = 1280
+    pub var canvas_height: int = 800
+    pub var display: str = "srgb"
+    pub var accent: str = "#e7a03f"
+    pub var control_radius: float = 5.0
+    pub var shortcuts: map[str, str]
+
+    pub func init(self, source: str = "") -> unit!:
+        let table = Table(source)
+        table.check_within(["canvas.width", "canvas.height", "color.display", "theme.accent", "theme.control_radius"], ["shortcuts"])
+        self.canvas_width = int(table.number("canvas.width", 1280.0, 1.0, 30000.0))
+        self.canvas_height = int(table.number("canvas.height", 800.0, 1.0, 30000.0))
+        self.display = table.string("color.display", "srgb")
+        if self.display != "srgb" and self.display != "display-p3":
+            error(ui.invalid, "color.display must be \"srgb\" or \"display-p3\"")
+        self.accent = table.string("theme.accent", "#e7a03f")
+        self.control_radius = table.number("theme.control_radius", 5.0, 0.0, 16.0)
+        var shortcuts: map[str, str] = {}
+        for id in table.keys("shortcuts"):
+            shortcuts[id] = table.string("shortcuts." + id, "")
+        self.shortcuts = shortcuts
+
+    ## An independent copy, for a draft the dialog edits.
+    pub func copy(self) -> Settings!:
+        let other = Settings()
+        other.canvas_width = self.canvas_width
+        other.canvas_height = self.canvas_height
+        other.display = self.display
+        other.accent = self.accent
+        other.control_radius = self.control_radius
+        var shortcuts: map[str, str] = {}
+        for (id, chord) in self.shortcuts:
+            shortcuts[id] = chord
+        other.shortcuts = shortcuts
+        return other
+
+    ## The file's text.
+    pub func serialize(self) -> str:
+        var text = "# luced-2d settings. Edit here or in Settings… (cmd-,); saved values apply at once.\n\n"
+        text = text + f"[canvas]\nwidth = {self.canvas_width}\nheight = {self.canvas_height}\n\n"
+        text = text + f"[color]\n# The display the viewport targets: \"srgb\" or \"display-p3\".\ndisplay = \"{self.display}\"\n\n"
+        text = text + f"[theme]\naccent = \"{self.accent}\"\ncontrol_radius = {self.control_radius}\n\n"
+        text = text + "# Shortcuts by command id; a chord like \"cmd+shift+s\", \"f5\" or \"none\". Unlisted commands keep their defaults.\n[shortcuts]\n"
+        for (id, chord) in self.shortcuts:
+            text = text + f"{id} = \"{chord}\"\n"
+        return text
+
+## The settings file's home. Reading never rewrites it; saving writes it whole.
+pub class Store:
+    pub let path: str
+    ## Why the last load fell back to defaults, or "".
+    pub var warning: str = ""
+
+    pub func init(self, directory: str = "") -> unit!:
+        let chosen = directory if directory != "" else paths.join(files.home_directory(), ".luced-2d")
+        files.ensure_directory(chosen)
+        self.path = paths.join(chosen, "settings.toml")
+
+    pub func load(self) -> Settings!:
+        self.warning = ""
+        if not files.exists(self.path):
+            return Settings()
+        let source = files.read_text(self.path, limit = 65536)
+        let loaded = Settings(source) catch failure:
+            self.warning = f"Settings not read ({self.path}): {failure.message}"
+            return Settings()
+        return loaded
+
+    pub func save(self, settings: Settings) -> unit!:
+        files.write_text(self.path, settings.serialize())

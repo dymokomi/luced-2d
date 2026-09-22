@@ -28,6 +28,7 @@ jobs:
           echo "ui=$(tr -d '\n' < luced-2d/bootstrap/UI)" >> "$GITHUB_OUTPUT"
           echo "image=$(tr -d '\n' < luced-2d/bootstrap/IMAGE)" >> "$GITHUB_OUTPUT"
           echo "svg=$(tr -d '\n' < luced-2d/bootstrap/SVG)" >> "$GITHUB_OUTPUT"
+          echo "config=$(tr -d '\n' < luced-2d/bootstrap/CONFIG)" >> "$GITHUB_OUTPUT"
           echo "color=$(tr -d '\n' < luced-2d/bootstrap/COLOR)" >> "$GITHUB_OUTPUT"
           echo "prism=$(tr -d '\n' < luced-2d/bootstrap/PRISM)" >> "$GITHUB_OUTPUT"
           echo "crypto=$(tr -d '\n' < luced-2d/bootstrap/CRYPTO)" >> "$GITHUB_OUTPUT"
@@ -68,6 +69,12 @@ jobs:
           repository: dymokomi/luce-svg
           ref: ${{ steps.pins.outputs.svg }}
           path: luce-svg
+          token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: dymokomi/luce-config
+          ref: ${{ steps.pins.outputs.config }}
+          path: luce-config
           token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
       - uses: actions/checkout@v4
         with:

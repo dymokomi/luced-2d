@@ -60,7 +60,7 @@ pub class LayerList: Widget:
             let masked = canvas.layer_masked(index)
             let visible = canvas.layer_visible(index)
             if selected:
-                painter.rectangle(Rect(0.0, top, size.width, self.row_height), theme.accent() if focused else theme.selection_inactive())
+                painter.rectangle(Rect(0.0, top, size.width, self.row_height), workspace.look.accent if focused else workspace.look.selection_inactive)
             let ink = theme.on_accent() if selected and focused else (theme.text() if visible else theme.text_muted())
             let soft = theme.on_accent() if selected and focused else theme.text_muted()
             # The eye.
@@ -79,7 +79,7 @@ pub class LayerList: Widget:
             painter.rectangle(Rect(x, ty, tw, th), theme.checker_light())
             canvas.draw_layer(target, index, Rect(x, ty, tw, th), false)
             if selected and not canvas.editing_mask():
-                self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), theme.accent())
+                self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), self.workspace.look.accent)
             x += thumb + 8.0
             if masked:
                 var mw = mask_thumb
@@ -92,7 +92,7 @@ pub class LayerList: Widget:
                 painter.rectangle(Rect(x, my, mw, mh), Color(1.0, 1.0, 1.0))
                 canvas.draw_layer(target, index, Rect(x, my, mw, mh), true)
                 if selected and canvas.editing_mask():
-                    self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), theme.accent())
+                    self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), self.workspace.look.accent)
                 x += mask_thumb + 8.0
             let name = ("↳ " if clipped else "") + canvas.layer_name(index)
             painter.text(name, x, top + 10.0, ink, self.font)
@@ -111,7 +111,7 @@ pub class LayerList: Widget:
             return
         let count = self.workspace.layer_count()
         let slot = clamp_int(int(math.floor(self.drag_y / self.row_height + 0.5)), 0, count)
-        painter.rectangle(Rect(0.0, float(slot) * self.row_height - 1.0, width, 2.0), theme.accent())
+        painter.rectangle(Rect(0.0, float(slot) * self.row_height - 1.0, width, 2.0), self.workspace.look.accent)
 
     func frame(self, painter: Painter, rect: Rect, color: Color) -> unit!:
         painter.rectangle(Rect(rect.x, rect.y, rect.width, 2.0), color)

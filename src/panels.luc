@@ -6,6 +6,8 @@ from actions import Actions
 from view import CanvasView
 from layers import LayerList
 from colors import Palette, ColorPicker
+from settings import Store
+from settings_panel import SettingsDialog
 
 ## The window's contents, after Compositor's: a contextual tool header, a tool
 ## rail beside the canvas and the layers panel, and a status line. One text
@@ -44,6 +46,7 @@ pub class Panels:
     pub let text_controls: HStack
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
     pub let palette: Palette
+    pub let settings_dialog: SettingsDialog
     pub let picker: ColorPicker
     pub let mask_prompt: Dialog
     pub let text_size_slider: Slider
@@ -77,8 +80,10 @@ pub class Panels:
     var prompt_mode: str = ""
     var mask_background: bool = false
 
-    pub func init(self, workspace: Workspace, actions: Actions, font: Font) -> unit!:
+    pub func init(self, workspace: Workspace, actions: Actions, font: Font, store: Store? = none) -> unit!:
         self.workspace = workspace
+        self.settings_dialog = SettingsDialog(workspace, actions, font, store if let store = store else Store())
+        self.settings_dialog.applied = self.refresh
         self.actions = actions
         self.font = font
         self.connections = []
@@ -175,7 +180,7 @@ pub class Panels:
         self.adjust_dialog = Dialog(dialog_items, width = 420.0)
         # The menus present the shared commands, shortcuts and all.
         let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as], font = font),
-                             Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.fill_background, actions.clear, actions.swap_colors, actions.reset_colors], font = font),
+                             Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.fill_background, actions.clear, actions.swap_colors, actions.reset_colors, Command("", divider = true), actions.settings], font = font),
                              Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
                              Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
                              Menu("Adjust", actions.adjustments, font = font),
@@ -249,7 +254,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.settings_dialog.dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -468,6 +473,7 @@ pub class Panels:
         self.bind(actions.undo, self.undo)
         self.bind(actions.redo, self.redo)
         self.bind(actions.fill, self.fill_selection)
+        self.bind(actions.settings, self.settings_dialog.open)
         self.bind(actions.fill_background, self.fill_background)
         self.bind(actions.clear, self.clear_selection)
         self.bind(actions.swap_colors, func () -> unit!:
@@ -969,6 +975,8 @@ pub class Panels:
 
     pub func close(self):
         self.cancel_prompt()
+        self.settings_dialog.close()
+        self.picker.close()
         if self.workspace.previewing():
             self.workspace.end_preview(false) catch failure:
                 discard(failure)

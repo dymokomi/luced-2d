@@ -1,0 +1,273 @@
+from ui import Widget, Font, Text, Button, VStack, HStack, Spacer, Size, Dialog, ListView, ListItem, TableView, TableColumn, TableCell, NumberField, TextField, Menu, Command, Shortcut, ShortcutField, Application, Rule
+from interop import Connection
+from workspace import Workspace
+from actions import Actions
+from settings import Settings, Store
+from colors import Swatch
+from theme import Look
+import theme
+
+## The Settings dialog after eleusis-layout's: a section list at the left
+## (General, Colour Management, Shortcuts, Theme), the section's rows at the
+## right, and Save/Cancel below. Edits go into a draft, not the live settings:
+## Cancel forgets them all, Save writes the file and applies everything at once.
+## Shortcuts are the application's commands themselves: pick a row, then record
+## a chord in the field beneath; another command already holding it is named,
+## not silently unbound.
+pub class SettingsDialog:
+    pub let dialog: Dialog
+    let store: Store
+    pub var settings: Settings
+    var draft: Settings
+    let workspace: Workspace
+    let actions: Actions
+    let font: Font
+    pub var app: Application? = none
+    let sections: ListView
+    let pages: list[VStack]
+    let width_field: NumberField
+    let height_field: NumberField
+    let display_menu: Menu
+    let accent_field: TextField
+    let accent_swatch: Swatch
+    let radius_field: NumberField
+    let table: TableView
+    let recorder: ShortcutField
+    let selected_label: Text
+    let conflict: Text
+    ## The commands a shortcut can be set for, in the table's order, and their default chords.
+    let commands: list[Command]
+    let defaults: map[str, str]
+    let connections: list[Connection]
+    ## Called after Save applied the settings, so the window can redraw.
+    pub var applied: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, actions: Actions, font: Font, store: Store) -> unit!:
+        self.workspace = workspace
+        self.actions = actions
+        self.font = font
+        self.store = store
+        self.settings = store.load()
+        self.draft = self.settings.copy()
+        self.connections = []
+        self.commands = []
+        var defaults: map[str, str] = {}
+        for command in actions.all:
+            if command.id() != "" and not command.is_divider():
+                self.commands.append(command)
+                defaults[command.id()] = command.shortcut().chord()
+        self.defaults = defaults
+        # General: the size a new canvas takes.
+        self.width_field = NumberField(1280.0, 1.0, 30000.0, 1.0, suffix = " px", font = font, cells = 8.0)
+        self.height_field = NumberField(800.0, 1.0, 30000.0, 1.0, suffix = " px", font = font, cells = 8.0)
+        self.connections.append(self.width_field.on_change(func (value: float) -> unit!:
+            self.draft.canvas_width = int(value)))
+        self.connections.append(self.height_field.on_change(func (value: float) -> unit!:
+            self.draft.canvas_height = int(value)))
+        let general = VStack([self.row("New canvas", HStack([self.width_field, Text("×", font = font, muted = true), self.height_field], spacing = 6.0)), Spacer()], spacing = 8.0)
+        # Colour management: which display the viewport targets.
+        let srgb = Command("sRGB", id = "display_srgb")
+        let p3 = Command("Display P3", id = "display_p3")
+        self.display_menu = Menu("sRGB ▾", [srgb, p3], font = font)
+        self.connections.append(srgb.on_trigger(func () -> unit!:
+            self.choose_display("srgb")))
+        self.connections.append(p3.on_trigger(func () -> unit!:
+            self.choose_display("display-p3")))
+        let color = VStack([self.row("Display", self.display_menu),
+                            Text("Documents are sRGB and blend in linear light; the display setting picks the output transform.", font = font, muted = true), Spacer()], spacing = 8.0)
+        # Shortcuts: every command in a table; the field beneath records for the picked row.
+        self.table = TableView([TableColumn(title = "Action", weight = 1.0), TableColumn(title = "Shortcut", width = 150.0)], self.cells(), font = font)
+        self.table.layout().set_limits(Size(200.0, 230.0), Size(16384.0, 230.0))
+        self.connections.append(self.table.on_activate(func (index: int) -> unit!:
+            self.show_selected()))
+        self.recorder = ShortcutField(font = font)
+        self.connections.append(self.recorder.on_change(self.recorded))
+        self.selected_label = Text("Pick a command above", font = font, muted = true)
+        self.conflict = Text("", font = font, muted = true)
+        let shortcuts = VStack([self.table, HStack([self.selected_label, Spacer()], spacing = 6.0),
+                                HStack([self.recorder, self.button("Clear", self.clear_selected), self.button("Default", self.default_selected), Spacer(), self.button("Restore All", self.restore_shortcuts)], spacing = 8.0),
+                                self.conflict], spacing = 8.0)
+        # Theme: the accent and the control radius.
+        self.accent_swatch = Swatch(24.0)
+        self.accent_field = TextField("#e7a03f", font = font, cells = 9.0)
+        self.connections.append(self.accent_field.on_commit(func (value: str) -> unit!:
+            self.set_accent(value)))
+        self.radius_field = NumberField(5.0, 0.0, 16.0, 1.0, suffix = " px", font = font, cells = 6.0)
+        self.connections.append(self.radius_field.on_change(func (value: float) -> unit!:
+            self.draft.control_radius = value))
+        let look = VStack([self.row("Accent", HStack([self.accent_swatch, self.accent_field], spacing = 8.0)), self.row("Control radius", self.radius_field), Spacer()], spacing = 8.0)
+        self.pages = [general, color, shortcuts, look]
+        for page in self.pages:
+            page.layout().set_limits(Size(400.0, 300.0), Size(16384.0, 300.0))
+            page.layout().set_visible(false)
+        self.pages[0].layout().set_visible(true)
+        self.sections = ListView([ListItem(text = "General"), ListItem(text = "Colour Management"), ListItem(text = "Shortcuts"), ListItem(text = "Theme")], font = font)
+        self.sections.layout().set_limits(Size(170.0, 300.0), Size(170.0, 300.0))
+        self.connections.append(self.sections.on_activate(func (index: int) -> unit!:
+            self.show_page(index)))
+        var content: list[Widget] = []
+        for page in self.pages:
+            content.append(page)
+        let body = HStack([self.sections, Rule(structural = true, vertical = true), VStack(content, spacing = 0.0)], spacing = 12.0)
+        let footer = HStack([Spacer(), self.button("Cancel", self.cancel), self.button("Save", self.save)], spacing = 8.0)
+        self.dialog = Dialog([Text("Settings", font = font), body, footer], width = 720.0)
+
+    func row(self, label: str, control: Widget) -> HStack!:
+        let caption = Text(label, font = self.font, muted = true)
+        caption.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
+        return HStack([caption, control], spacing = 8.0)
+
+    func button(self, text: str, callback: func() -> unit!) -> Button!:
+        let button = Button(text, font = self.font)
+        self.connections.append(button.on_click(callback))
+        return button
+
+    func show_page(self, index: int) -> unit!:
+        var page = 0
+        while page < self.pages.length:
+            self.pages[page].layout().set_visible(page == index)
+            page += 1
+
+    pub func is_open(self) -> bool:
+        return self.dialog.is_open()
+
+    ## Open on the live settings: the draft starts as their copy.
+    pub func open(self) -> unit!:
+        self.draft = self.settings.copy()
+        self.show_draft()
+        self.dialog.open()
+
+    func show_draft(self) -> unit!:
+        self.width_field.set_value(float(self.draft.canvas_width))
+        self.height_field.set_value(float(self.draft.canvas_height))
+        self.display_menu.set_text(("Display P3" if self.draft.display == "display-p3" else "sRGB") + " ▾")
+        self.accent_field.set_text(self.draft.accent)
+        self.show_accent()
+        self.radius_field.set_value(self.draft.control_radius)
+        self.table.set_rows(self.cells())
+        self.conflict.set_text("")
+        self.show_selected()
+
+    func choose_display(self, display: str) -> unit!:
+        self.draft.display = display
+        self.display_menu.set_text(("Display P3" if display == "display-p3" else "sRGB") + " ▾")
+
+    func set_accent(self, value: str) -> unit!:
+        let text = value.trim()
+        let hex = text if text[..<1] == "#" else "#" + text
+        if let bytes = theme.hex_bytes(hex):
+            discard(bytes)
+            self.draft.accent = hex.lower()
+        self.accent_field.set_text(self.draft.accent)
+        self.show_accent()
+
+    func show_accent(self) -> unit!:
+        let look = Look(self.draft.accent, self.draft.control_radius)
+        self.accent_swatch.color = look.accent
+        self.accent_swatch.layout().invalidate()
+
+    ## The chord the draft gives a command: its override, else its default.
+    func chord_for(self, id: str) -> str:
+        if let chord = self.draft.shortcuts[id]:
+            return chord
+        if let chord = self.defaults[id]:
+            return chord
+        return "none"
+
+    ## The table's cells: a command's name and its chord as a menu shows it.
+    func cells(self) -> list[TableCell]!:
+        var cells: list[TableCell] = []
+        for command in self.commands:
+            cells.append(TableCell(text = command.text()))
+            let chord = self.chord_for(command.id())
+            let shortcut = Shortcut.parse(chord)
+            cells.append(TableCell(text = shortcut.text() if shortcut.is_bound() else "—", muted = not shortcut.is_bound()))
+        return cells
+
+    func selected_command(self) -> Command?:
+        let index = self.table.selected_index()
+        if index < 0 or index >= self.commands.length:
+            return none
+        return self.commands[index]
+
+    func show_selected(self) -> unit!:
+        if let command = self.selected_command():
+            self.selected_label.set_text(command.text())
+            self.recorder.set_shortcut(Shortcut.parse(self.chord_for(command.id())))
+        else:
+            self.selected_label.set_text("Pick a command above")
+            self.recorder.set_shortcut(Shortcut())
+
+    ## A chord was recorded for the picked command; another holder is named.
+    func recorded(self) -> unit!:
+        let command = self.selected_command() else return
+        self.set_chord(command.id(), self.recorder.shortcut().chord())
+
+    func set_chord(self, id: str, chord: str) -> unit!:
+        if let fallback = self.defaults[id]:
+            if fallback == chord:
+                self.draft.shortcuts.remove(id)
+            else:
+                self.draft.shortcuts[id] = chord
+        self.table.set_rows(self.cells())
+        var holder = ""
+        if chord != "none":
+            for other in self.commands:
+                if other.id() != id and self.chord_for(other.id()) == chord:
+                    holder = other.text()
+        self.conflict.set_text(f"Also bound to {holder}" if holder != "" else "")
+        self.show_selected()
+
+    func clear_selected(self) -> unit!:
+        let command = self.selected_command() else return
+        self.set_chord(command.id(), "none")
+
+    func default_selected(self) -> unit!:
+        let command = self.selected_command() else return
+        self.set_chord(command.id(), self.chord_for_default(command.id()))
+
+    func chord_for_default(self, id: str) -> str:
+        if let chord = self.defaults[id]:
+            return chord
+        return "none"
+
+    func restore_shortcuts(self) -> unit!:
+        self.draft.shortcuts = {}
+        self.table.set_rows(self.cells())
+        self.conflict.set_text("")
+        self.show_selected()
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    ## Save writes the file and applies the draft as the live settings.
+    func save(self) -> unit!:
+        self.settings = self.draft.copy()
+        self.store.save(self.settings)
+        self.dialog.hide()
+        self.apply()
+
+    ## Apply the live settings: the look, the window theme, every shortcut.
+    pub func apply(self) -> unit!:
+        let look = Look(self.settings.accent, self.settings.control_radius)
+        self.workspace.look = look
+        if let app = self.app:
+            app.set_theme(theme.editor_theme(look))
+        for command in self.commands:
+            let chord = self.live_chord(command.id())
+            let shortcut = Shortcut.parse(chord) catch failure:
+                discard(failure)
+                continue
+            command.set_shortcut(shortcut)
+        if let done = self.applied:
+            done()
+
+    func live_chord(self, id: str) -> str:
+        if let chord = self.settings.shortcuts[id]:
+            return chord
+        return self.chord_for_default(id)
+
+    pub func close(self):
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()

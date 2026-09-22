@@ -3,6 +3,7 @@ from interop import Connection
 from workspace import Workspace
 from panels import Panels
 from actions import Actions
+from settings import Store
 import theme
 
 pub class Luce2D:
@@ -13,16 +14,23 @@ pub class Luce2D:
 
     pub func init(self) -> unit!:
         let font = Font()
-        let workspace = Workspace(1280, 800)
+        # Settings come first: a new canvas takes their size, the window their theme.
+        let store = Store()
+        let settings = store.load()
+        let workspace = Workspace(settings.canvas_width, settings.canvas_height)
         let actions = Actions()
-        let panels = Panels(workspace, actions, font)
-        let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme())
+        let panels = Panels(workspace, actions, font, store)
+        let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme(workspace.look))
         panels.app = app
+        panels.settings_dialog.app = app
         let connections: list[Connection] = []
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()))
         app.set_commands(actions.all)
+        panels.settings_dialog.apply()
+        if store.warning != "":
+            panels.status.set_text(store.warning)
         self.app = app
         self.workspace = workspace
         self.panels = panels

@@ -19,6 +19,35 @@ pub func accent() -> Color:
     return srgb(231.0, 160.0, 63.0)
 pub func selection_inactive() -> Color:
     return srgb(120.0, 84.0, 40.0)
+
+## The part of the look Settings can change: the accent, as sRGB hex, and the
+## control radius. The unfocused selection is the accent at about half its
+## light, as eleusis's is. An invalid hex keeps the orange.
+pub class Look:
+    pub var accent: Color = Color(0.0, 0.0, 0.0)
+    pub var selection_inactive: Color = Color(0.0, 0.0, 0.0)
+    pub var control_radius: float = 5.0
+
+    pub func init(self, hex: str = "#e7a03f", radius: float = 5.0) -> unit!:
+        let components = hex_bytes(hex) else [231.0, 160.0, 63.0]
+        self.accent = srgb(components[0], components[1], components[2])
+        self.selection_inactive = srgb(components[0] * 0.52, components[1] * 0.525, components[2] * 0.635)
+        self.control_radius = radius
+
+## The sRGB bytes of "#rrggbb", or none for anything else.
+pub func hex_bytes(hex: str) -> list[float]?:
+    let digits = "0123456789abcdef"
+    let lowered = hex.trim().lower()
+    if lowered.length != 7 or lowered[..<1] != "#":
+        return none
+    var values: list[float] = []
+    var index = 1
+    while index < 7:
+        let high = digits.index_of(lowered[index..<index + 1]) else return none
+        let low = digits.index_of(lowered[index + 1..<index + 2]) else return none
+        values.append(float(high * 16 + low))
+        index += 2
+    return values
 pub func backdrop() -> Color:
     return grey(26.0)
 pub func tab_strip() -> Color:
@@ -42,15 +71,15 @@ pub func checker_light() -> Color:
 pub func checker_dark() -> Color:
     return grey(56.0)
 
-pub func editor_theme() -> Theme:
+pub func editor_theme(look: Look) -> Theme!:
     var theme = Theme()
     theme.background = backdrop()
     theme.panel = surface()
     theme.gutter = tab_strip()
     theme.foreground = text()
     theme.muted = text_muted()
-    theme.selection = accent()
-    theme.accent = accent()
+    theme.selection = look.accent
+    theme.accent = look.accent
     theme.button = grey(41.0)
     theme.button_hover = grey(58.0)
     theme.pressed = grey(72.0)
@@ -60,10 +89,10 @@ pub func editor_theme() -> Theme:
     theme.sunken = grey(41.0)
     theme.raised = surface_raised()
     theme.accent_text = grey(0.0)
-    theme.menu_selection = accent()
+    theme.menu_selection = look.accent
     theme.border = border()
     theme.active_border = grey(150.0)
     theme.shadow_offset = 0.0
     theme.shadow_opacity = 0.0
-    theme.control_radius = 5.0
+    theme.control_radius = look.control_radius
     return theme

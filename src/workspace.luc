@@ -1,11 +1,14 @@
 from canvas import Canvas
 import math
+from theme import Look
 
 ## One open document and how it is shown: the luce-image canvas, its file,
 ## the view's zoom and offset, and which layer is selected. Every change bumps
 ## `revision` so views know to redraw.
 pub class Workspace:
     pub var canvas: Canvas
+    ## The configurable look (accent, radius), set from Settings.
+    pub var look: Look
     pub var path: str = ""
     pub var zoom: float = 1.0
     pub var offset_x: float = 0.0
@@ -42,6 +45,7 @@ pub class Workspace:
 
     pub func init(self, width: int, height: int) -> unit!:
         self.canvas = Canvas(width, height)
+        self.look = Look()
         discard(self.canvas.add_layer("Background"))
         self.touch()
 
