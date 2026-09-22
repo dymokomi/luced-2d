@@ -1,11 +1,11 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, ColorEditor, TextField, NumberField, Checkbox, Dialog
-from gpu import Color
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog
 from interop import Connection
 from workspace import Workspace
 from canvas import Canvas
 from actions import Actions
 from view import CanvasView
 from layers import LayerList
+from colors import Palette, ColorPicker
 
 ## The window's contents, after Compositor's: a contextual tool header, a tool
 ## rail beside the canvas and the layers panel, and a status line. One text
@@ -42,9 +42,10 @@ pub class Panels:
     pub let blend_menu: Menu
     pub let wand_controls: HStack
     pub let text_controls: HStack
-    ## The foreground colour: a swatch in the header that opens the colour editor.
-    pub let color_swatch: Button
-    pub let color_editor: ColorEditor
+    ## The palette below the tool rail and the picker its swatches open, as Compositor's.
+    pub let palette: Palette
+    pub let picker: ColorPicker
+    pub let mask_prompt: Dialog
     pub let text_size_slider: Slider
     pub let tolerance_slider: Slider
     pub let contiguous_button: Button
@@ -74,6 +75,7 @@ pub class Panels:
     let font: Font
     let connections: list[Connection]
     var prompt_mode: str = ""
+    var mask_background: bool = false
 
     pub func init(self, workspace: Workspace, actions: Actions, font: Font) -> unit!:
         self.workspace = workspace
@@ -102,15 +104,13 @@ pub class Panels:
         self.connections.append(self.opacity_field.on_change(func (value: float) -> unit!:
             self.workspace.opacity = value / 100.0
             self.workspace.touch()))
-        self.color_editor = ColorEditor(font = font)
-        self.color_swatch = Button("    ", font = font)
-        self.connections.append(self.color_swatch.on_click(self.pick_color))
-        self.connections.append(self.color_editor.on_change(func (value: str) -> unit!:
-            self.workspace.set_color_hex(value)
-            self.refresh()))
-        self.brush_controls = HStack([self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field), self.color_swatch,
-                                      self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497),
-                                      self.swatch("  ", 0.02, 0.18, 0.65), self.swatch("  ", 0.75, 0.03, 0.02)], spacing = 12.0)
+        self.palette = Palette(workspace)
+        self.palette.on_pick = self.pick_color
+        self.picker = ColorPicker(workspace, font)
+        self.picker.closed = self.refresh
+        # On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
+        self.mask_prompt = Dialog([Text("Mask colour", font = font), HStack([self.button("Black · Hide", self.choose_mask_black), self.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
+        self.brush_controls = HStack([self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field)], spacing = 12.0)
         self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
         self.connections.append(self.tolerance_slider.on_change(func (value: float) -> unit!:
             self.workspace.tolerance = value))
@@ -119,7 +119,7 @@ pub class Panels:
         self.text_size_slider = Slider("Size", 8.0, 256.0, workspace.text_size, 1.0, font = font)
         self.connections.append(self.text_size_slider.on_change(func (value: float) -> unit!:
             self.workspace.text_size = value))
-        self.text_controls = HStack([self.text_size_slider, self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497)], spacing = 12.0)
+        self.text_controls = HStack([self.text_size_slider], spacing = 12.0)
         self.view.on_text = self.place_text
         self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
         # The adjust dialog's rows, in the units Photoshop shows.
@@ -175,7 +175,7 @@ pub class Panels:
         self.adjust_dialog = Dialog(dialog_items, width = 420.0)
         # The menus present the shared commands, shortcuts and all.
         let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as], font = font),
-                             Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.clear], font = font),
+                             Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.fill_background, actions.clear, actions.swap_colors, actions.reset_colors], font = font),
                              Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
                              Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
                              Menu("Adjust", actions.adjustments, font = font),
@@ -194,6 +194,9 @@ pub class Panels:
             self.tool_buttons.append(button)
             rail_items.append(button)
             index += 1
+        # Below the tools, the palette, as Compositor's rail.
+        rail_items.append(Rule())
+        rail_items.append(self.palette)
         let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
         rail.layout().set_limits(Size(40.0, 100.0), Size(40.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
@@ -246,7 +249,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.color_editor, self.adjust_dialog], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -465,7 +468,14 @@ pub class Panels:
         self.bind(actions.undo, self.undo)
         self.bind(actions.redo, self.redo)
         self.bind(actions.fill, self.fill_selection)
+        self.bind(actions.fill_background, self.fill_background)
         self.bind(actions.clear, self.clear_selection)
+        self.bind(actions.swap_colors, func () -> unit!:
+            self.workspace.swap_colors()
+            self.refresh())
+        self.bind(actions.reset_colors, func () -> unit!:
+            self.workspace.reset_colors()
+            self.refresh())
         self.bind(actions.select_all, self.select_all)
         self.bind(actions.deselect, self.deselect)
         self.bind(actions.inverse, self.invert_selection)
@@ -516,10 +526,30 @@ pub class Panels:
     pub func rename_layer(self) -> unit!:
         self.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename")
 
-    ## The header swatch clicked: the colour editor opens under it with the foreground colour.
-    pub func pick_color(self) -> unit!:
-        let bounds = self.color_swatch.layout().bounds()
-        self.color_editor.open_at(self.workspace.color_hex(), bounds.x, bounds.y + bounds.height + 2.0)
+    ## A palette swatch clicked: the picker opens for that colour — or, on a
+    ## mask, the black/white choice.
+    pub func pick_color(self, background: bool) -> unit!:
+        self.mask_background = background
+        if self.workspace.canvas.editing_mask():
+            self.mask_prompt.open()
+            return
+        self.picker.open(background)
+        self.refresh()
+
+    func choose_mask_black(self) -> unit!:
+        self.choose_mask_color(0.0)
+
+    func choose_mask_white(self) -> unit!:
+        self.choose_mask_color(1.0)
+
+    func choose_mask_color(self, value: float) -> unit!:
+        self.workspace.set_palette(value, value, value, self.mask_background)
+        self.mask_prompt.hide()
+        self.refresh()
+
+    pub func fill_background(self) -> unit!:
+        self.workspace.fill_selection(false, true)
+        self.refresh()
 
     ## The text tool clicked: ask for the text to set there.
     func place_text(self) -> unit!:
@@ -572,14 +602,6 @@ pub class Panels:
     func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
         let button = Button(icon = icon, font = self.font)
         self.connections.append(button.on_click(callback))
-        return button
-
-    func swatch(self, text: str, red: float, green: float, blue: float) -> Button!:
-        let button = self.button(text, func () -> unit!:
-            self.workspace.set_color(red, green, blue)
-            self.refresh())
-        button.layout().set_theme(Theme(button = Color(red, green, blue), panel = Color(red, green, blue), pressed = Color(red, green, blue),
-                                        foreground = Color(1.0, 1.0, 1.0) if red + green + blue < 1.2 else Color(0.0, 0.0, 0.0)))
         return button
 
     pub func choose_tool(self, tool: str) -> unit!:
@@ -892,13 +914,15 @@ pub class Panels:
         self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser" or workspace.tool == "gradient")
         self.wand_controls.layout().set_visible(workspace.tool == "wand")
         self.text_controls.layout().set_visible(workspace.tool == "text")
-        let swatch_color = Color(workspace.red, workspace.green, workspace.blue)
-        self.color_swatch.layout().set_theme(Theme(button = swatch_color, button_hover = swatch_color, pressed = swatch_color, foreground = swatch_color))
+        self.palette.layout().invalidate()
+        self.picker.sync()
         self.size_field.set_value(workspace.diameter)
         self.hardness_field.set_value(workspace.hardness * 100.0)
         self.opacity_field.set_value(workspace.opacity * 100.0)
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
-        if workspace.tool == "move":
+        if self.picker.is_open():
+            hint = "Click the canvas to sample a colour · X swaps · D resets"
+        elif workspace.tool == "move":
             hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
         elif workspace.tool == "marquee" or workspace.tool == "ellipse" or workspace.tool == "lasso":
             hint = "Drag to select · shift adds · alt subtracts · cmd-A all · cmd-D deselect · Delete clears"
@@ -909,7 +933,7 @@ pub class Panels:
         elif workspace.tool == "eyedropper":
             hint = "Click a colour to make it the foreground colour"
         elif workspace.tool == "gradient":
-            hint = "Drag from the foreground colour to where it fades out · fills the selection"
+            hint = "Drag from the foreground colour to the background colour · fills the selection"
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":

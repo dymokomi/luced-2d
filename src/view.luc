@@ -196,7 +196,7 @@ pub class CanvasView: Widget:
             let y1 = self.document_y(event.y)
             if math.abs(x1 - self.gradient_x) + math.abs(y1 - self.gradient_y) >= 1.0:
                 self.workspace.fill_gradient(self.gradient_x, self.gradient_y, x1, y1)
-        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "eyedropper":
+        elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and (self.workspace.tool == "eyedropper" or self.workspace.sampling):
             self.workspace.pick(self.document_x(event.x), self.document_y(event.y))
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "text":
             self.workspace.text_x = self.document_x(event.x)

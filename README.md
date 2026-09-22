@@ -75,6 +75,10 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 - `src/view.luc`: the canvas widget: checkerboard, the document, pan and zoom.
 - `src/actions.luc`: one `Command` per action, as in luced; menus, the tool
   rail and shortcuts present the same instances, enabled by document state.
+- `src/colors.luc`: the palette below the tool rail (foreground over
+  background, swap X, reset D) and the colour picker dialog after Photoshop's
+  and Compositor's: saturation/brightness field, hue strip, preview, R/G/B and
+  hex fields, live on the palette, canvas click samples while it is open.
 - `src/panels.luc`: the window: menu bar, contextual tool header (its
   settings are scrubbable number fields), then a dock of panes after
   eleusis-layout (see `docs/ELEUSIS_UI.md`): the Viewport with its tool rail,

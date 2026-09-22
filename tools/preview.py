@@ -15,9 +15,28 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
+parser.add_argument('--scene', choices=['style', 'picker'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
+SCENES = {
+    'style': '''            editor.panels.layer_style()
+            editor.workspace.choose_tool("brush")
+            editor.panels.refresh()
+            editor.panels.toggle_style(0)
+            editor.panels.adjust_sliders[10][0].set_value(14.0)
+            editor.panels.adjust_sliders[10][1].set_value(14.0)
+            editor.panels.adjust_sliders[10][2].set_value(10.0)
+            editor.panels.toggle_style(1)
+            editor.panels.adjust_sliders[10][4].set_value(6.0)
+            editor.panels.preview()
+            editor.panels.refresh()''',
+    'picker': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.set_color(0.8069, 0.3515, 0.0497)
+            editor.panels.pick_color(false)
+            editor.panels.refresh()''',
+}
+SCENE = SCENES[arguments.scene]
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
@@ -122,17 +141,7 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.deselect()
             editor.workspace.select(1)
             editor.workspace.set_color(0.75, 0.03, 0.02)
-            editor.panels.layer_style()
-            editor.workspace.choose_tool("brush")
-            editor.panels.refresh()
-            editor.panels.toggle_style(0)
-            editor.panels.adjust_sliders[10][0].set_value(14.0)
-            editor.panels.adjust_sliders[10][1].set_value(14.0)
-            editor.panels.adjust_sliders[10][2].set_value(10.0)
-            editor.panels.toggle_style(1)
-            editor.panels.adjust_sliders[10][4].set_value(6.0)
-            editor.panels.preview()
-            editor.panels.refresh()
+''' + SCENE + '''
         if captured:
             editor.app.stop()
         elif frames >= 12:

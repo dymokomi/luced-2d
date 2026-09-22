@@ -16,7 +16,10 @@ pub class Actions:
     pub let undo: Command
     pub let redo: Command
     pub let fill: Command
+    pub let fill_background: Command
     pub let clear: Command
+    pub let swap_colors: Command
+    pub let reset_colors: Command
     pub let free_transform: Command
     # Select
     pub let select_all: Command
@@ -68,6 +71,9 @@ pub class Actions:
         self.redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
         self.fill = Command("Fill Selection with Colour", Shortcut(Key.backspace, alt = true), id = "fill")
         self.clear = Command("Clear Selection", Shortcut(Key.backspace), id = "clear")
+        self.fill_background = Command("Fill Selection with Background", Shortcut(Key.backspace, primary = true), id = "fill_background")
+        self.swap_colors = Command("Swap Colours", Shortcut(Key.x), id = "swap_colors")
+        self.reset_colors = Command("Default Colours", Shortcut(Key.d), id = "reset_colors")
         self.free_transform = Command("Free Transform…", Shortcut(Key.t, primary = true), id = "free_transform")
         self.select_all = Command("All", Shortcut(Key.a, primary = true), id = "select_all")
         self.deselect = Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect")
@@ -115,7 +121,7 @@ pub class Actions:
         self.tool_icons = ["move-tool", "selection-tool", "ellipse-select-tool", "lasso-tool", "magic-wand-tool", "text-tool", "eyedropper-tool", "gradient-tool", "brush-tool", "eraser-tool", "pan-tool", "zoom-in"]
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
-        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.undo, self.redo, self.fill, self.clear, self.free_transform,
+        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.undo, self.redo, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.canvas_size, self.image_size, self.blur,
                     self.add_layer, self.duplicate_layer, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,

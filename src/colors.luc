@@ -1,0 +1,246 @@
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, Dialog, HsbField, HueStrip, NumberField, TextField, Text, Button, HStack, VStack, Spacer, hsb_to_rgb, hue_of, saturation_of, brightness_of
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+from interop import Connection
+from workspace import Workspace
+import theme
+import math
+
+## The palette below the tool rail, after Compositor's: the foreground swatch
+## over the background swatch offset 12 points, a swap arrow (X) at the top
+## right and a reset arrow (D) at the bottom left. Clicking a swatch asks the
+## host to open the picker for it.
+pub class Palette: Widget:
+    let box: Layout
+    let workspace: Workspace
+    pub var on_pick: func(bool) -> unit!? = none
+    let swatch: float = 24.0
+    let offset: float = 12.0
+
+    pub func init(self, workspace: Workspace) -> unit!:
+        self.workspace = workspace
+        self.box = Layout()
+        self.box.set_cursor(Cursor.pointer)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(self.swatch + self.offset + 12.0, self.swatch + self.offset + 12.0)
+
+    ## A swatch: the colour inside a black line inside a white line, corners rounded.
+    func draw_swatch(self, painter: Painter, rect: Rect, color: Color) -> unit!:
+        painter.rounded_rectangle(rect, Color(0.0, 0.0, 0.0), 6.0)
+        painter.rounded_rectangle(Rect(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, rect.height - 2.0), Color(1.0, 1.0, 1.0), 5.0)
+        painter.rounded_rectangle(Rect(rect.x + 2.5, rect.y + 2.5, rect.width - 5.0, rect.height - 5.0), color, 4.0)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let workspace = self.workspace
+        let ink = theme.text_muted()
+        self.draw_swatch(painter, Rect(self.offset, self.offset, self.swatch, self.swatch), Color(workspace.back_red, workspace.back_green, workspace.back_blue))
+        self.draw_swatch(painter, Rect(0.0, 0.0, self.swatch, self.swatch), Color(workspace.red, workspace.green, workspace.blue))
+        # The swap arrow, top right: a diagonal with a head at each end.
+        let ax = self.swatch + 3.0
+        let ay = 0.0
+        painter.line(Point(ax + 2.0, ay + 9.0), Point(ax + 9.0, ay + 2.0), 1.2, ink)
+        painter.line(Point(ax + 9.0, ay + 2.0), Point(ax + 5.5, ay + 2.0), 1.2, ink)
+        painter.line(Point(ax + 9.0, ay + 2.0), Point(ax + 9.0, ay + 5.5), 1.2, ink)
+        painter.line(Point(ax + 2.0, ay + 9.0), Point(ax + 5.5, ay + 9.0), 1.2, ink)
+        painter.line(Point(ax + 2.0, ay + 9.0), Point(ax + 2.0, ay + 5.5), 1.2, ink)
+        # The reset glyph, bottom left: a small pair of squares, black over white.
+        let ry = self.swatch + 3.0
+        painter.rectangle(Rect(3.0, ry + 3.0, 6.0, 6.0), Color(1.0, 1.0, 1.0))
+        painter.rectangle(Rect(0.0, ry, 6.0, 6.0), Color(0.0, 0.0, 0.0))
+        painter.rectangle(Rect(0.5, ry + 0.5, 5.0, 5.0), ink)
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
+            return
+        let workspace = self.workspace
+        if event.x >= self.swatch + 2.0 and event.y < 12.0:
+            workspace.swap_colors()
+        elif event.x < 12.0 and event.y >= self.swatch + 2.0:
+            workspace.reset_colors()
+        elif event.x < self.swatch and event.y < self.swatch:
+            if let pick = self.on_pick:
+                pick(false)
+        elif event.x >= self.offset and event.y >= self.offset:
+            if let pick = self.on_pick:
+                pick(true)
+        self.box.invalidate()
+
+## A colour shown in a rounded well: the picker's preview.
+pub class Swatch: Widget:
+    let box: Layout
+    pub var color: Color = Color(0.0, 0.0, 0.0)
+    let side: float
+
+    pub func init(self, side: float) -> unit!:
+        self.side = side
+        self.box = Layout()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(self.side, self.side)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        painter.rounded_rectangle(Rect(0.0, 0.0, self.side, self.side), theme.border(), 5.0)
+        painter.rounded_rectangle(Rect(1.0, 1.0, self.side - 2.0, self.side - 2.0), self.color, 4.0)
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        discard(event)
+
+## The colour picker after Photoshop's and Compositor's: a 256-point
+## saturation/brightness field, the hue strip, a preview, R/G/B fields and hex,
+## in a floating dialog; the canvas can be clicked to sample while it is open.
+## Changes apply to the palette at once; Cancel puts the colour back.
+pub class ColorPicker:
+    pub let dialog: Dialog
+    let workspace: Workspace
+    let field: HsbField
+    let strip: HueStrip
+    let preview: Swatch
+    let title: Text
+    let channels: list[NumberField]
+    let hex: TextField
+    let connections: list[Connection]
+    var background: bool = false
+    var before: str = ""
+    ## Set while the picker itself writes the fields, so their signals do not echo.
+    var syncing: bool = false
+    pub var closed: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.connections = []
+        self.field = HsbField(256.0)
+        self.strip = HueStrip(256.0)
+        self.preview = Swatch(64.0)
+        self.title = Text("Foreground Colour", font = font)
+        self.channels = []
+        var rows: list[Widget] = []
+        for name in ["R", "G", "B"]:
+            let channel = NumberField(0.0, 0.0, 255.0, 1.0, font = font, cells = 5.0)
+            self.channels.append(channel)
+            let label = Text(name, font = font, muted = true)
+            label.layout().set_limits(Size(14.0, 0.0), Size(14.0, 16384.0))
+            rows.append(HStack([label, channel], spacing = 8.0))
+            self.connections.append(channel.on_change(func (value: float) -> unit!:
+                discard(value)
+                self.channels_changed()))
+        self.hex = TextField("#000000", font = font, cells = 9.0)
+        let hash_label = Text("#", font = font, muted = true)
+        hash_label.layout().set_limits(Size(14.0, 0.0), Size(14.0, 16384.0))
+        rows.append(HStack([hash_label, self.hex], spacing = 8.0))
+        self.connections.append(self.hex.on_commit(func (value: str) -> unit!:
+            self.hex_committed(value)))
+        self.connections.append(self.field.on_change(func () -> unit!:
+            self.hsb_changed()))
+        self.connections.append(self.strip.on_change(func (hue: float) -> unit!:
+            self.field.set_hsb(hue, self.field.saturation_value(), self.field.brightness_value())
+            self.hsb_changed()))
+        let ok = Button("OK", font = font)
+        let cancel = Button("Cancel", font = font)
+        self.connections.append(ok.on_click(func () -> unit!:
+            self.finish(true)))
+        self.connections.append(cancel.on_click(func () -> unit!:
+            self.finish(false)))
+        let buttons = VStack([ok, cancel], spacing = 8.0)
+        buttons.layout().set_limits(Size(90.0, 0.0), Size(90.0, 16384.0))
+        let side = VStack([HStack([self.preview, buttons], spacing = 16.0), VStack(rows, spacing = 6.0),
+                           Text("Click canvas to sample", font = font, muted = true), Spacer()], spacing = 12.0)
+        side.layout().set_limits(Size(210.0, 256.0), Size(210.0, 16384.0))
+        self.dialog = Dialog([self.title, HStack([self.field, self.strip, side], spacing = 14.0)], width = 570.0)
+
+    pub func is_open(self) -> bool:
+        return self.dialog.is_open()
+
+    ## Open for the foreground or the background colour, seeded from the palette.
+    pub func open(self, background: bool) -> unit!:
+        self.background = background
+        self.before = self.workspace.color_hex(background)
+        self.title.set_text("Background Colour" if background else "Foreground Colour")
+        self.workspace.sampling = true
+        self.workspace.sampling_background = background
+        self.show(self.before)
+        self.dialog.open()
+
+    ## The palette changed under the picker (a canvas click sampled): show it.
+    pub func sync(self) -> unit!:
+        if self.is_open():
+            self.show(self.workspace.color_hex(self.background))
+
+    func finish(self, keep: bool) -> unit!:
+        if not keep:
+            self.workspace.set_color_hex(self.before, self.background)
+        self.workspace.sampling = false
+        self.dialog.hide()
+        if let done = self.closed:
+            done()
+
+    ## Show sRGB `hex` in every control without echoing.
+    func show(self, hex: str) -> unit!:
+        let color = srgb_of(hex)
+        self.syncing = true
+        self.field.set_hsb(hue_of(color), saturation_of(color), brightness_of(color))
+        self.strip.set_hue(hue_of(color))
+        self.channels[0].set_value(math.floor(color.red * 255.0 + 0.5))
+        self.channels[1].set_value(math.floor(color.green * 255.0 + 0.5))
+        self.channels[2].set_value(math.floor(color.blue * 255.0 + 0.5))
+        self.hex.set_text(hex)
+        self.preview.color = theme.srgb(color.red * 255.0, color.green * 255.0, color.blue * 255.0)
+        self.preview.layout().invalidate()
+        self.syncing = false
+
+    ## An edit in the picker: the palette takes it, and the other controls follow.
+    func take(self, color: Color) -> unit!:
+        if self.syncing:
+            return
+        let hex = hex_of(color)
+        self.workspace.set_color_hex(hex, self.background)
+        self.show(hex)
+
+    func hsb_changed(self) -> unit!:
+        self.take(hsb_to_rgb(self.field.hue_value(), self.field.saturation_value(), self.field.brightness_value()))
+
+    func channels_changed(self) -> unit!:
+        self.take(Color(self.channels[0].value() / 255.0, self.channels[1].value() / 255.0, self.channels[2].value() / 255.0))
+
+    func hex_committed(self, value: str) -> unit!:
+        let text = value.trim()
+        let color = srgb_of(text if text[..<1] == "#" else "#" + text)
+        self.take(color)
+
+    pub func close(self):
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()
+
+## sRGB hex "#rrggbb" for sRGB components 0..1.
+func hex_of(color: Color) -> str:
+    return "#" + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.red)) * 255.0 + 0.5))) + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.green)) * 255.0 + 0.5))) + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.blue)) * 255.0 + 0.5)))
+
+func hex_byte(value: int) -> str:
+    let digits = "0123456789abcdef"
+    return digits[value // 16..<value // 16 + 1] + digits[value % 16..<value % 16 + 1]
+
+## The sRGB components of "#rrggbb"; black for anything else.
+func srgb_of(hex: str) -> Color:
+    let digits = "0123456789abcdef"
+    let lowered = hex.trim().lower()
+    if lowered.length != 7 or lowered[..<1] != "#":
+        return Color(0.0, 0.0, 0.0)
+    var values: list[float] = []
+    var index = 1
+    while index < 7:
+        let high = digits.index_of(lowered[index..<index + 1]) else return Color(0.0, 0.0, 0.0)
+        let low = digits.index_of(lowered[index + 1..<index + 2]) else return Color(0.0, 0.0, 0.0)
+        values.append(float(high * 16 + low) / 255.0)
+        index += 2
+    return Color(values[0], values[1], values[2])

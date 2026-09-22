@@ -26,9 +26,18 @@ pub class Workspace:
     pub var diameter: float = 32.0
     pub var hardness: float = 0.75
     pub var opacity: float = 1.0
+    ## The foreground and background colours (linear), black over white by
+    ## default, as Compositor's palette: the brush, text and fills use the
+    ## foreground; gradients run to the background; cmd-Delete fills with it.
     pub var red: float = 0.0
     pub var green: float = 0.0
     pub var blue: float = 0.0
+    pub var back_red: float = 1.0
+    pub var back_green: float = 1.0
+    pub var back_blue: float = 1.0
+    ## While the picker is open a canvas click samples into the colour it edits.
+    pub var sampling: bool = false
+    pub var sampling_background: bool = false
     var next_name: int = 1
 
     pub func init(self, width: int, height: int) -> unit!:
@@ -238,31 +247,46 @@ pub class Workspace:
         self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
         self.touch()
 
-    ## The foreground colour as sRGB hex, for the colour editor.
-    pub func color_hex(self) -> str:
-        return "#" + hex_byte(encode_srgb(self.red)) + hex_byte(encode_srgb(self.green)) + hex_byte(encode_srgb(self.blue))
+    ## The foreground (or background) colour as sRGB hex, for the picker.
+    pub func color_hex(self, background: bool = false) -> str:
+        if background:
+            return hex_of(self.back_red, self.back_green, self.back_blue)
+        return hex_of(self.red, self.green, self.blue)
 
-    ## Set the foreground colour from sRGB hex like "#e7a03f"; anything else is ignored.
-    pub func set_color_hex(self, text: str):
-        let digits = "0123456789abcdef"
-        let lowered = text.trim().lower()
-        if lowered.length != 7 or lowered[..<1] != "#":
-            return
-        var values: list[float] = []
-        var index = 1
-        while index < 7:
-            let high = digits.index_of(lowered[index..<index + 1]) else return
-            let low = digits.index_of(lowered[index + 1..<index + 2]) else return
-            values.append(decode_srgb(float(high * 16 + low) / 255.0))
-            index += 2
-        self.set_color(values[0], values[1], values[2])
+    ## Set the foreground (or background) colour from sRGB hex like "#e7a03f"; anything else is ignored.
+    pub func set_color_hex(self, text: str, background: bool = false):
+        let values = parse_hex(text) else return
+        self.set_palette(values[0], values[1], values[2], background)
 
     pub func set_color(self, red: float, green: float, blue: float):
-        self.red = red
-        self.green = green
-        self.blue = blue
-        if self.tool == "eraser":
-            self.choose_tool("brush")
+        self.set_palette(red, green, blue, false)
+
+    ## Set one colour of the palette, linear components.
+    pub func set_palette(self, red: float, green: float, blue: float, background: bool):
+        if background:
+            self.back_red = red
+            self.back_green = green
+            self.back_blue = blue
+        else:
+            self.red = red
+            self.green = green
+            self.blue = blue
+            if self.tool == "eraser":
+                self.choose_tool("brush")
+        self.touch()
+
+    ## X: the foreground and background colours change places.
+    pub func swap_colors(self):
+        let red = self.red
+        let green = self.green
+        let blue = self.blue
+        self.set_palette(self.back_red, self.back_green, self.back_blue, false)
+        self.set_palette(red, green, blue, true)
+
+    ## D: black over white again.
+    pub func reset_colors(self):
+        self.set_palette(0.0, 0.0, 0.0, false)
+        self.set_palette(1.0, 1.0, 1.0, true)
         self.touch()
 
     pub func choose_tool(self, tool: str):
@@ -289,9 +313,9 @@ pub class Workspace:
     ## A rectangle or ellipse between two corners, combined by `mode`
     ## (0 replace, 1 add, 2 subtract, 3 intersect).
     ## A linear gradient on the selected layer from the foreground colour at one
-    ## document point to transparent at another, within the selection.
+    ## document point to the background colour at another, within the selection.
     pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
-        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, self.opacity, self.red, self.green, self.blue, 0.0)
+        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, self.opacity, self.back_red, self.back_green, self.back_blue, self.opacity)
         self.touch()
 
     ## Rename the selected layer.
@@ -307,7 +331,7 @@ pub class Workspace:
             return
         self.canvas.pick(px, py)
         if self.canvas.picked_alpha() > 0.0:
-            self.set_color(self.canvas.picked_red(), self.canvas.picked_green(), self.canvas.picked_blue())
+            self.set_palette(self.canvas.picked_red(), self.canvas.picked_green(), self.canvas.picked_blue(), self.sampling and self.sampling_background)
 
     ## Set `text` on the selected layer at the remembered text position, in the foreground colour.
     pub func draw_text(self, text: str) -> unit!:
@@ -336,8 +360,11 @@ pub class Workspace:
             self.canvas.select_rectangle(left, top, right - left, bottom - top, mode)
         self.touch()
 
-    pub func fill_selection(self, erase: bool) -> unit!:
-        self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.red, self.green, self.blue, false)
+    pub func fill_selection(self, erase: bool, background: bool = false) -> unit!:
+        if background:
+            self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.back_red, self.back_green, self.back_blue, false)
+        else:
+            self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.red, self.green, self.blue, false)
         self.canvas.fill(self.selected_id(), erase)
         self.touch()
 
@@ -437,6 +464,25 @@ func encode_srgb(linear: float) -> int:
     let clamped = math.max(0.0, math.min(1.0, linear))
     let encoded = clamped * 12.92 if clamped <= 0.0031308 else 1.055 * math.pow(clamped, 1.0 / 2.4) - 0.055
     return int(math.floor(encoded * 255.0 + 0.5))
+
+## sRGB hex like "#e7a03f" of linear components.
+func hex_of(red: float, green: float, blue: float) -> str:
+    return "#" + hex_byte(encode_srgb(red)) + hex_byte(encode_srgb(green)) + hex_byte(encode_srgb(blue))
+
+## The linear components of sRGB hex like "#e7a03f", or none for anything else.
+func parse_hex(text: str) -> list[float]?:
+    let digits = "0123456789abcdef"
+    let lowered = text.trim().lower()
+    if lowered.length != 7 or lowered[..<1] != "#":
+        return none
+    var values: list[float] = []
+    var index = 1
+    while index < 7:
+        let high = digits.index_of(lowered[index..<index + 1]) else return none
+        let low = digits.index_of(lowered[index + 1..<index + 2]) else return none
+        values.append(decode_srgb(float(high * 16 + low) / 255.0))
+        index += 2
+    return values
 
 func hex_byte(value: int) -> str:
     let digits = "0123456789abcdef"
