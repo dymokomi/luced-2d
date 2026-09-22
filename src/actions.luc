@@ -43,6 +43,7 @@ pub class Actions:
     pub let toggle_mask_editing: Command
     pub let toggle_clipped: Command
     pub let toggle_visibility: Command
+    pub let layer_style: Command
     pub let blends: list[Command]
     # View
     pub let fit: Command
@@ -92,6 +93,7 @@ pub class Actions:
         self.toggle_mask_editing = Command("Edit Mask / Pixels", Shortcut(Key.backslash), id = "toggle_mask_editing")
         self.toggle_clipped = Command("Clip to Below / Release", Shortcut(Key.g, primary = true, alt = true), id = "toggle_clipped")
         self.toggle_visibility = Command("Hide / Show", Shortcut(Key.h, primary = true, shift = true), id = "toggle_visibility")
+        self.layer_style = Command("Layer Style…", id = "layer_style")
         self.blends = []
         var mode = 0
         while mode < Canvas.blend_mode_count():
@@ -113,7 +115,7 @@ pub class Actions:
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.canvas_size, self.image_size, self.blur,
                     self.add_layer, self.duplicate_layer, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
-                    self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility,
+                    self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style,
                     self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.bigger, self.smaller] + self.adjustments + self.blends + self.tools
 
     ## Enable what the document's state allows.
@@ -140,3 +142,4 @@ pub class Actions:
             command.set_enabled(not previewing)
         self.blur.set_enabled(not previewing)
         self.free_transform.set_enabled(not previewing)
+        self.layer_style.set_enabled(not previewing)

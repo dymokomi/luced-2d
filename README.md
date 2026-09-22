@@ -11,6 +11,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 ## What it does today
 
 - Opens PNG, JPEG, TIFF and EXR pictures as a document, or creates an empty one.
+- Layer › Layer Style: drop shadow, stroke and outer glow drawn under the
+  layer, non-destructively, edited live and saved in `.l2d`.
 - Layers with names, visibility, opacity and all 26 Photoshop blend modes,
   composed on the GPU with a cache
   that re-renders only the tiles an edit touches.

@@ -206,6 +206,19 @@ pub class Workspace:
         self.canvas.preview_blur(radius)
         self.touch()
 
+    ## Layer styles on the selected layer; colours: shadow black, stroke the foreground colour, glow white.
+    pub func set_styles(self, shadow: bool, shadow_x: float, shadow_y: float, shadow_blur: float, shadow_opacity: float,
+                        stroke: bool, stroke_size: float, stroke_opacity: float, glow: bool, glow_size: float, glow_opacity: float) -> unit!:
+        let id = self.selected_id()
+        self.canvas.set_shadow(id, shadow, shadow_x, shadow_y, shadow_blur, 0.0, 0.0, 0.0, shadow_opacity)
+        self.canvas.set_stroke(id, stroke, stroke_size, self.red, self.green, self.blue, stroke_opacity)
+        self.canvas.set_glow(id, glow, glow_size, 1.0, 1.0, 1.0, glow_opacity)
+        self.touch()
+
+    ## One style setting of the selected layer (see Canvas.style_value).
+    pub func style_value(self, field: int) -> float!:
+        return self.canvas.style_value(self.selected, field)
+
     pub func preview_transform(self, scale_x: float, scale_y: float, angle: float, dx: float, dy: float) -> unit!:
         self.canvas.preview_transform(scale_x, scale_y, angle, dx, dy)
         self.touch()

@@ -39,6 +39,11 @@ pub class Panels:
     pub let curve_channel_label: Text
     var curve_channel: int = 0
     var adjust_kind: int = -1
+    ## Layer Style (row 10): three effect toggles beside their sliders; the style
+    ## before the bar opened, for Cancel.
+    pub let style_toggles: list[Button]
+    var style_on: list[bool]
+    var style_before: list[float]
     pub var app: Application? = none
     let font: Font
     let connections: list[Connection]
@@ -53,6 +58,8 @@ pub class Panels:
         self.prompt = TextPrompt(font = font)
         self.layers = LayerList(workspace, font)
         self.status = Text("", font = font)
+        self.style_on = [false, false, false]
+        self.style_before = []
         self.connect()
         # The contextual header: what the active tool needs.
         self.header_title = Text("Brush", font = font)
@@ -97,6 +104,25 @@ pub class Panels:
         self.adjust_row([self.adjust_slider("Radius", 0.5, 250.0, 8.0, 1)])
         self.adjust_row([self.adjust_slider("Width %", 1.0, 400.0, 100.0), self.adjust_slider("Height %", 1.0, 400.0, 100.0),
                          self.adjust_slider("Angle", -180.0, 180.0, 0.0), self.adjust_slider("X", -2000.0, 2000.0, 0.0), self.adjust_slider("Y", -2000.0, 2000.0, 0.0)])
+        # Layer Style (row 10): shadow, stroke and glow, each a toggle and its sliders, stacked.
+        self.adjust_row([])
+        self.adjust_sliders[10] = [self.adjust_slider("X", -100.0, 100.0, 4.0), self.adjust_slider("Y", -100.0, 100.0, 4.0), self.adjust_slider("Blur", 0.0, 100.0, 4.0), self.adjust_slider("Opacity", 0.0, 100.0, 75.0),
+                                   self.adjust_slider("Size", 0.0, 100.0, 3.0), self.adjust_slider("Opacity", 0.0, 100.0, 100.0),
+                                   self.adjust_slider("Size", 0.0, 100.0, 8.0), self.adjust_slider("Opacity", 0.0, 100.0, 75.0)]
+        self.style_toggles = []
+        var effect = 0
+        for name in ["Drop Shadow", "Stroke", "Outer Glow"]:
+            let chosen = effect
+            self.style_toggles.append(self.button(name, func () -> unit!:
+                self.toggle_style(chosen)))
+            effect += 1
+        let style_sliders = self.adjust_sliders[10]
+        let style_rows = VStack([HStack([self.style_toggles[0], style_sliders[0], style_sliders[1], style_sliders[2], style_sliders[3]], spacing = 12.0),
+                                 HStack([self.style_toggles[1], style_sliders[4], style_sliders[5]], spacing = 12.0),
+                                 HStack([self.style_toggles[2], style_sliders[6], style_sliders[7]], spacing = 12.0)], spacing = 6.0)
+        let style_row = HStack([style_rows], spacing = 0.0)
+        style_row.layout().set_visible(false)
+        self.adjust_rows[10] = style_row
         # Curves (row 7) hold an editor rather than sliders; the bar grows to fit it.
         self.curve_editor = CurveEditor()
         self.connections.append(self.curve_editor.on_change(self.curve_changed))
@@ -129,7 +155,7 @@ pub class Panels:
                              Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
                              Menu("Adjust", actions.adjustments, font = font),
                              Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
-                                            actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility], font = font),
+                                            actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.layer_style], font = font),
                              Menu("Filter", [actions.blur], font = font),
                              Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
                              Spacer(), self.header_hint], font = font)
@@ -202,6 +228,9 @@ pub class Panels:
     ## Show the open adjustment (the blur, row 8; the free transform, row 9) with the controls as they are.
     pub func preview(self) -> unit!:
         let kind = self.adjust_kind
+        if kind == 10:
+            self.apply_styles()
+            return
         if kind < 0 or not self.workspace.previewing():
             return
         if kind == 8:
@@ -239,6 +268,56 @@ pub class Panels:
         self.show_curve_channel(self.curve_channel)
         self.preview()
 
+    ## Layer styles are not destructive: the controls write straight to the layer.
+    func apply_styles(self) -> unit!:
+        let s = self.adjust_sliders[10]
+        self.workspace.set_styles(self.style_on[0], s[0].value(), s[1].value(), s[2].value(), s[3].value() / 100.0,
+                                  self.style_on[1], s[4].value(), s[5].value() / 100.0, self.style_on[2], s[6].value(), s[7].value() / 100.0)
+        self.view.layout().invalidate()
+        self.layers.layout().invalidate()
+
+    pub func toggle_style(self, effect: int) -> unit!:
+        self.style_on[effect] = not self.style_on[effect]
+        self.show_style_toggles()
+        self.apply_styles()
+
+    func show_style_toggles(self) -> unit!:
+        let names = ["Drop Shadow", "Stroke", "Outer Glow"]
+        var effect = 0
+        while effect < 3:
+            self.style_toggles[effect].set_text(names[effect] + (" ✓" if self.style_on[effect] else ""))
+            effect += 1
+
+    ## Layer › Layer Style…: the bar shows the selected layer's styles for editing.
+    pub func layer_style(self) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        self.style_before = []
+        var field = 0
+        while field < 20:
+            self.style_before.append(self.workspace.style_value(field))
+            field += 1
+        let before = self.style_before
+        self.style_on = [before[0] != 0.0, before[8] != 0.0, before[14] != 0.0]
+        let s = self.adjust_sliders[10]
+        s[0].set_value(before[1])
+        s[1].set_value(before[2])
+        s[2].set_value(before[3])
+        s[3].set_value(before[7] * 100.0)
+        s[4].set_value(before[9])
+        s[5].set_value(before[13] * 100.0)
+        s[6].set_value(before[15])
+        s[7].set_value(before[19] * 100.0)
+        self.show_style_toggles()
+        self.adjust_kind = 10
+        var index = 0
+        for row in self.adjust_rows:
+            row.layout().set_visible(index == 10)
+            index += 1
+        self.adjust_title.set_text("Layer Style")
+        self.adjust_bar.layout().set_visible(true)
+        self.refresh()
+
     ## Open the adjust bar for `kind` (8 for blur) with its controls at their defaults.
     func open_preview(self, kind: int, title: str) -> unit!:
         if self.workspace.previewing():
@@ -263,6 +342,14 @@ pub class Panels:
         self.refresh()
 
     func close_preview(self, keep: bool) -> unit!:
+        if self.adjust_kind == 10 and not keep and self.style_before.length == 20:
+            # Cancel puts the styles back as they were when the bar opened.
+            let b = self.style_before
+            let id = self.workspace.selected_id()
+            self.workspace.canvas.set_shadow(id, b[0] != 0.0, b[1], b[2], b[3], b[4], b[5], b[6], b[7])
+            self.workspace.canvas.set_stroke(id, b[8] != 0.0, b[9], b[10], b[11], b[12], b[13])
+            self.workspace.canvas.set_glow(id, b[14] != 0.0, b[15], b[16], b[17], b[18], b[19])
+            self.workspace.touch()
         if self.workspace.previewing():
             self.workspace.end_preview(keep)
         self.adjust_kind = -1
@@ -302,6 +389,7 @@ pub class Panels:
         self.bind(actions.image_size, self.image_size)
         self.bind(actions.blur, self.blur)
         self.bind(actions.free_transform, self.free_transform)
+        self.bind(actions.layer_style, self.layer_style)
         self.bind(actions.add_layer, self.add_layer)
         self.bind(actions.duplicate_layer, self.duplicate_layer)
         self.bind(actions.layer_up, self.layer_up)
