@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, ColorEditor
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, ColorEditor, TextField, NumberField, Checkbox, Dialog
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -20,10 +20,12 @@ pub class Panels:
     pub let actions: Actions
     pub let header_title: Text
     pub let header_hint: Text
-    pub let size_slider: Slider
-    pub let hardness_slider: Slider
-    pub let opacity_slider: Slider
+    ## The brush settings are eleusis scrubbers: drag to change, click to type.
+    pub let size_field: NumberField
+    pub let hardness_field: NumberField
+    pub let opacity_field: NumberField
     pub let layer_opacity: Slider
+    pub let layer_opacity_field: NumberField
     pub let brush_controls: HStack
     ## The dock and its three panes: the viewport, the layers and the properties
     ## of the selected layer, each pane's buttons on a shelf at its bottom.
@@ -32,10 +34,10 @@ pub class Panels:
     pub let layers_panel: Panel
     pub let properties_panel: Panel
     pub let tool_buttons: list[Button]
-    pub let layer_name: Text
-    pub let visible_button: Button
-    pub let clipped_button: Button
-    pub let mask_button: Button
+    pub let layer_name: TextField
+    pub let visible_box: Checkbox
+    pub let clipped_box: Checkbox
+    pub let mask_box: Checkbox
     pub let styles_text: Text
     pub let blend_menu: Menu
     pub let wand_controls: HStack
@@ -47,12 +49,17 @@ pub class Panels:
     pub let tolerance_slider: Slider
     pub let contiguous_button: Button
     pub let layer_count: Text
-    ## The adjust bar: one row of sliders per adjustment (and one for blur),
-    ## shown one at a time under the header while a preview is live.
-    pub let adjust_bar: HStack
+    ## The adjust dialog, after Compositor's floating panels: a card centred over
+    ## the canvas holding one column of rows for the open adjustment (or the
+    ## blur, the free transform, the layer style), live-previewing, with
+    ## Cancel/Apply. Each row is a slider and a number field showing one value.
+    pub let adjust_dialog: Dialog
     pub let adjust_title: Text
-    let adjust_rows: list[HStack]
+    let adjust_rows: list[VStack]
     pub let adjust_sliders: list[list[Slider]]
+    pub let adjust_fields: list[list[NumberField]]
+    var built_sliders: list[Slider]
+    var built_fields: list[NumberField]
     ## The Curves row: the editor for one channel at a time, chosen from a menu.
     pub let curve_editor: CurveEditor
     pub let curve_channel_label: Text
@@ -60,7 +67,7 @@ pub class Panels:
     var adjust_kind: int = -1
     ## Layer Style (row 10): three effect toggles beside their sliders; the style
     ## before the bar opened, for Cancel.
-    pub let style_toggles: list[Button]
+    pub let style_toggles: list[Checkbox]
     var style_on: list[bool]
     var style_before: list[float]
     pub var app: Application? = none
@@ -83,16 +90,16 @@ pub class Panels:
         # The contextual header: what the active tool needs.
         self.header_title = Text("Brush", font = font)
         self.header_hint = Text("", font = font)
-        self.size_slider = Slider("Size", 1.0, 500.0, workspace.diameter, 1.0, font = font)
-        self.hardness_slider = Slider("Hardness", 0.0, 100.0, workspace.hardness * 100.0, 1.0, font = font)
-        self.opacity_slider = Slider("Opacity", 1.0, 100.0, workspace.opacity * 100.0, 1.0, font = font)
-        self.connections.append(self.size_slider.on_change(func (value: float) -> unit!:
+        self.size_field = NumberField(workspace.diameter, 1.0, 500.0, 1.0, suffix = " px", font = font)
+        self.hardness_field = NumberField(workspace.hardness * 100.0, 0.0, 100.0, 1.0, suffix = "%", font = font)
+        self.opacity_field = NumberField(workspace.opacity * 100.0, 1.0, 100.0, 1.0, suffix = "%", font = font)
+        self.connections.append(self.size_field.on_change(func (value: float) -> unit!:
             self.workspace.diameter = value
             self.workspace.touch()))
-        self.connections.append(self.hardness_slider.on_change(func (value: float) -> unit!:
+        self.connections.append(self.hardness_field.on_change(func (value: float) -> unit!:
             self.workspace.hardness = value / 100.0
             self.workspace.touch()))
-        self.connections.append(self.opacity_slider.on_change(func (value: float) -> unit!:
+        self.connections.append(self.opacity_field.on_change(func (value: float) -> unit!:
             self.workspace.opacity = value / 100.0
             self.workspace.touch()))
         self.color_editor = ColorEditor(font = font)
@@ -101,7 +108,7 @@ pub class Panels:
         self.connections.append(self.color_editor.on_change(func (value: str) -> unit!:
             self.workspace.set_color_hex(value)
             self.refresh()))
-        self.brush_controls = HStack([self.size_slider, self.hardness_slider, self.opacity_slider, self.color_swatch,
+        self.brush_controls = HStack([self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field), self.color_swatch,
                                       self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497),
                                       self.swatch("  ", 0.02, 0.18, 0.65), self.swatch("  ", 0.75, 0.03, 0.02)], spacing = 12.0)
         self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
@@ -115,45 +122,24 @@ pub class Panels:
         self.text_controls = HStack([self.text_size_slider, self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497)], spacing = 12.0)
         self.view.on_text = self.place_text
         self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
-        # The adjust bar's rows: sliders in the units Photoshop shows.
+        # The adjust dialog's rows, in the units Photoshop shows.
         self.adjust_title = Text("", font = font)
-        self.adjust_title.layout().set_limits(Size(200.0, 0.0), Size(200.0, 16384.0))
         self.adjust_rows = []
         self.adjust_sliders = []
-        self.adjust_row([self.adjust_slider("Brightness", -100.0, 100.0, 0.0), self.adjust_slider("Contrast", -100.0, 100.0, 0.0)])
-        self.adjust_row([self.adjust_slider("Hue", -180.0, 180.0, 0.0), self.adjust_slider("Saturation", -100.0, 100.0, 0.0),
-                         self.adjust_slider("Lightness", -100.0, 100.0, 0.0)])
+        self.adjust_fields = []
+        self.built_sliders = []
+        self.built_fields = []
+        self.adjust_row([self.adjust_control("Brightness", -100.0, 100.0, 0.0), self.adjust_control("Contrast", -100.0, 100.0, 0.0)])
+        self.adjust_row([self.adjust_control("Hue", -180.0, 180.0, 0.0, 0, "°"), self.adjust_control("Saturation", -100.0, 100.0, 0.0),
+                         self.adjust_control("Lightness", -100.0, 100.0, 0.0)])
         self.adjust_row([])
-        self.adjust_row([self.adjust_slider("In Black", 0.0, 255.0, 0.0), self.adjust_slider("In White", 0.0, 255.0, 255.0),
-                         self.adjust_slider("Gamma", 0.1, 9.99, 1.0, 2), self.adjust_slider("Out Black", 0.0, 255.0, 0.0),
-                         self.adjust_slider("Out White", 0.0, 255.0, 255.0)])
+        self.adjust_row([self.adjust_control("In Black", 0.0, 255.0, 0.0), self.adjust_control("In White", 0.0, 255.0, 255.0),
+                         self.adjust_control("Gamma", 0.1, 9.99, 1.0, 2), self.adjust_control("Out Black", 0.0, 255.0, 0.0),
+                         self.adjust_control("Out White", 0.0, 255.0, 255.0)])
         self.adjust_row([])
-        self.adjust_row([self.adjust_slider("Threshold", 0.0, 255.0, 128.0)])
-        self.adjust_row([self.adjust_slider("Levels", 2.0, 32.0, 4.0)])
-        self.adjust_row([])
-        self.adjust_row([self.adjust_slider("Radius", 0.5, 250.0, 8.0, 1)])
-        self.adjust_row([self.adjust_slider("Width %", 1.0, 400.0, 100.0), self.adjust_slider("Height %", 1.0, 400.0, 100.0),
-                         self.adjust_slider("Angle", -180.0, 180.0, 0.0), self.adjust_slider("X", -2000.0, 2000.0, 0.0), self.adjust_slider("Y", -2000.0, 2000.0, 0.0)])
-        # Layer Style (row 10): shadow, stroke and glow, each a toggle and its sliders, stacked.
-        self.adjust_row([])
-        self.adjust_sliders[10] = [self.adjust_slider("X", -100.0, 100.0, 4.0), self.adjust_slider("Y", -100.0, 100.0, 4.0), self.adjust_slider("Blur", 0.0, 100.0, 4.0), self.adjust_slider("Opacity", 0.0, 100.0, 75.0),
-                                   self.adjust_slider("Size", 0.0, 100.0, 3.0), self.adjust_slider("Opacity", 0.0, 100.0, 100.0),
-                                   self.adjust_slider("Size", 0.0, 100.0, 8.0), self.adjust_slider("Opacity", 0.0, 100.0, 75.0)]
-        self.style_toggles = []
-        var effect = 0
-        for name in ["Drop Shadow", "Stroke", "Outer Glow"]:
-            let chosen = effect
-            self.style_toggles.append(self.button(name, func () -> unit!:
-                self.toggle_style(chosen)))
-            effect += 1
-        let style_sliders = self.adjust_sliders[10]
-        let style_rows = VStack([HStack([self.style_toggles[0], style_sliders[0], style_sliders[1], style_sliders[2], style_sliders[3]], spacing = 12.0),
-                                 HStack([self.style_toggles[1], style_sliders[4], style_sliders[5]], spacing = 12.0),
-                                 HStack([self.style_toggles[2], style_sliders[6], style_sliders[7]], spacing = 12.0)], spacing = 6.0)
-        let style_row = HStack([style_rows], spacing = 0.0)
-        style_row.layout().set_visible(false)
-        self.adjust_rows[10] = style_row
-        # Curves (row 7) hold an editor rather than sliders; the bar grows to fit it.
+        self.adjust_row([self.adjust_control("Threshold", 0.0, 255.0, 128.0)])
+        self.adjust_row([self.adjust_control("Levels", 2.0, 32.0, 4.0)])
+        # Curves (row 7): the editor for one channel at a time, chosen from a menu.
         self.curve_editor = CurveEditor()
         self.connections.append(self.curve_editor.on_change(self.curve_changed))
         var channels: list[Command] = []
@@ -166,18 +152,27 @@ pub class Panels:
             channels.append(command)
             channel += 1
         self.curve_channel_label = Text("RGB", font = font)
-        let curve_row = HStack([self.curve_editor, VStack([HStack([Menu("Channel ▾", channels, font = font), self.curve_channel_label], spacing = 8.0),
-                                                           self.button("Reset", self.reset_curve), Spacer()], spacing = 6.0)], spacing = 12.0)
-        curve_row.layout().set_visible(false)
-        self.adjust_rows[7] = curve_row
-        var bar_items: list[Widget] = [self.adjust_title]
+        var curve_items: list[Widget] = []
+        curve_items.append(HStack([Menu("Channel ▾", channels, font = font), self.curve_channel_label, Spacer(), self.button("Reset", self.reset_curve)], spacing = 8.0))
+        curve_items.append(self.curve_editor)
+        self.adjust_row(curve_items)
+        self.adjust_row([self.adjust_control("Radius", 0.5, 250.0, 8.0, 1, " px")])
+        self.adjust_row([self.adjust_control("Width", 1.0, 400.0, 100.0, 0, "%"), self.adjust_control("Height", 1.0, 400.0, 100.0, 0, "%"),
+                         self.adjust_control("Angle", -180.0, 180.0, 0.0, 0, "°"), self.adjust_control("X", -2000.0, 2000.0, 0.0, 0, " px"),
+                         self.adjust_control("Y", -2000.0, 2000.0, 0.0, 0, " px")])
+        # Layer Style (row 10): each effect is a checkbox heading over its rows, as Compositor's Effects panel.
+        self.style_toggles = []
+        var style_items: list[Widget] = []
+        self.style_section(style_items, 0, "Drop Shadow", [self.adjust_control("X", -100.0, 100.0, 4.0, 0, " px"), self.adjust_control("Y", -100.0, 100.0, 4.0, 0, " px"),
+                                                          self.adjust_control("Blur", 0.0, 100.0, 4.0, 0, " px"), self.adjust_control("Opacity", 0.0, 100.0, 75.0, 0, "%")])
+        self.style_section(style_items, 1, "Stroke", [self.adjust_control("Size", 0.0, 100.0, 3.0, 0, " px"), self.adjust_control("Opacity", 0.0, 100.0, 100.0, 0, "%")])
+        self.style_section(style_items, 2, "Outer Glow", [self.adjust_control("Size", 0.0, 100.0, 8.0, 0, " px"), self.adjust_control("Opacity", 0.0, 100.0, 75.0, 0, "%")])
+        self.adjust_row(style_items)
+        var dialog_items: list[Widget] = [self.adjust_title]
         for row in self.adjust_rows:
-            bar_items.append(row)
-        bar_items.append(Spacer())
-        # The buttons keep their height at the top of the bar however tall a row is.
-        bar_items.append(VStack([HStack([self.button("Cancel", self.cancel_preview), self.button("Apply", self.apply_preview)], spacing = 8.0), Spacer()], spacing = 0.0))
-        self.adjust_bar = HStack(bar_items, spacing = 12.0, padding = 8.0)
-        self.adjust_bar.layout().set_visible(false)
+            dialog_items.append(row)
+        dialog_items.append(HStack([Spacer(), self.button("Cancel", self.cancel_preview), self.button("Apply", self.apply_preview)], spacing = 8.0))
+        self.adjust_dialog = Dialog(dialog_items, width = 420.0)
         # The menus present the shared commands, shortcuts and all.
         let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as], font = font),
                              Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.clear], font = font),
@@ -204,9 +199,15 @@ pub class Panels:
         rail.layout().set_flex(horizontal = 0.0)
         # The layers panel: appearance, the list, and the footer.
         self.layer_count = Text("", font = font)
-        self.layer_opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font)
+        self.layer_opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font, show_value = false)
+        self.layer_opacity_field = NumberField(100.0, 0.0, 100.0, 1.0, suffix = "%", font = font, cells = 6.0)
         self.connections.append(self.layer_opacity.on_change(func (value: float) -> unit!:
             self.workspace.set_opacity(value / 100.0)
+            self.layer_opacity_field.set_value(value)
+            self.layers.layout().invalidate()))
+        self.connections.append(self.layer_opacity_field.on_change(func (value: float) -> unit!:
+            self.workspace.set_opacity(value / 100.0)
+            self.layer_opacity.set_value(value)
             self.layers.layout().invalidate()))
         # Layers: the list, with its actions on the shelf below (the destructive one alone at the right).
         let layers_shelf = Shelf([self.shelf_button("plus", self.add_layer), self.shelf_button("duplicate", self.duplicate_layer),
@@ -215,15 +216,21 @@ pub class Panels:
         self.layers.layout().set_flex()
         self.layers_panel = Panel("Layers", self.layers, minimum = Size(220.0, 120.0), closable = false, footer = layers_shelf)
         # Properties: what the selected layer is, one row each.
-        self.layer_name = Text("", font = font)
-        self.visible_button = self.button("Visible", self.toggle_visibility)
-        self.clipped_button = self.button("Clip to Below", self.toggle_clipped)
-        self.mask_button = self.button("Mask", self.toggle_mask)
+        # The name is edited in place; committing it renames the layer.
+        self.layer_name = TextField("", font = font, placeholder = "Layer name", cells = 18.0)
+        self.connections.append(self.layer_name.on_commit(func (value: str) -> unit!:
+            if value.trim() != "":
+                self.workspace.rename(value.trim())
+            self.refresh()))
+        self.visible_box = self.checkbox("Visible", self.toggle_visibility)
+        self.clipped_box = self.checkbox("Clip", self.toggle_clipped)
+        self.mask_box = self.checkbox("Mask", self.toggle_mask)
         self.styles_text = Text("None", font = font)
         self.blend_menu = Menu("Normal ▾", actions.blends, font = font)
-        let properties = VStack([self.property_row("Layer", HStack([self.layer_name, self.button("Rename…", self.rename_layer)], spacing = 8.0)), self.property_row("Blend", self.blend_menu),
-                                 self.property_row("Opacity", self.layer_opacity),
-                                 self.property_row("Flags", HStack([self.visible_button, self.clipped_button, self.mask_button], spacing = 6.0)),
+        self.layer_opacity.layout().set_flex()
+        let properties = VStack([self.property_row("Layer", self.layer_name), self.property_row("Blend", self.blend_menu),
+                                 self.property_row("Opacity", HStack([self.layer_opacity, self.layer_opacity_field], spacing = 6.0)),
+                                 self.property_row("Flags", HStack([self.visible_box, self.clipped_box, self.mask_box], spacing = 10.0)),
                                  self.property_row("Styles", HStack([self.styles_text, self.button("Edit…", self.layer_style)], spacing = 8.0)),
                                  Spacer()], spacing = 0.0, padding = 0.0)
         self.properties_panel = Panel("Properties", properties, minimum = Size(220.0, 100.0), closable = false)
@@ -239,29 +246,57 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.adjust_bar, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.color_editor], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.color_editor, self.adjust_dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
 
-    ## A slider of the adjust bar; every change re-previews the open adjustment.
-    func adjust_slider(self, label: str, minimum: float, maximum: float, value: float, decimals: int = 0) -> Slider!:
+    ## One control of the adjust dialog, after Compositor's rows: a muted label
+    ## in a 64-point column, a slider, and a number field with its unit, both
+    ## showing one value. Every change re-previews the open adjustment.
+    func adjust_control(self, label: str, minimum: float, maximum: float, value: float, decimals: int = 0, suffix: str = "") -> Widget!:
         let step = 0.01 if decimals == 2 else (0.1 if decimals == 1 else 1.0)
-        let slider = Slider(label, minimum, maximum, value, step, decimals = decimals, font = self.font)
+        let slider = Slider("", minimum, maximum, value, step, decimals = decimals, font = self.font, show_value = false)
+        slider.layout().set_flex()
+        let field = NumberField(value, minimum, maximum, step, decimals, suffix = suffix, font = self.font, cells = 7.0)
         self.connections.append(slider.on_change(func (changed: float) -> unit!:
-            discard(changed)
+            field.set_value(changed)
             self.preview()))
-        return slider
+        self.connections.append(field.on_change(func (changed: float) -> unit!:
+            slider.set_value(changed)
+            self.preview()))
+        self.built_sliders.append(slider)
+        self.built_fields.append(field)
+        let caption = Text(label, font = self.font, muted = true)
+        caption.layout().set_limits(Size(64.0, 0.0), Size(64.0, 16384.0))
+        return HStack([caption, slider, field], spacing = 10.0)
 
-    ## One row of the adjust bar, hidden until its adjustment opens.
-    func adjust_row(self, sliders: list[Slider]) -> unit!:
-        var items: list[Widget] = []
-        for slider in sliders:
-            items.append(slider)
-        let row = HStack(items, spacing = 12.0)
+    ## One adjustment's column of rows, hidden until it opens; the controls
+    ## built since the last row belong to it.
+    func adjust_row(self, items: list[Widget]) -> unit!:
+        let row = VStack(items, spacing = 10.0)
         row.layout().set_visible(false)
         self.adjust_rows.append(row)
-        self.adjust_sliders.append(sliders)
+        self.adjust_sliders.append(self.built_sliders)
+        self.adjust_fields.append(self.built_fields)
+        self.built_sliders = []
+        self.built_fields = []
+
+    ## One effect of the Layer Style: its checkbox heading, then its rows.
+    func style_section(self, items: list[Widget], effect: int, name: str, controls: list[Widget]) -> unit!:
+        let box = Checkbox(name, font = self.font)
+        self.connections.append(box.on_change(func (value: bool) -> unit!:
+            discard(value)
+            self.toggle_style(effect)))
+        self.style_toggles.append(box)
+        items.append(box)
+        for control in controls:
+            items.append(control)
+
+    ## Set one control of row `kind` from code: the slider and its field together.
+    func set_control(self, kind: int, index: int, value: float) -> unit!:
+        self.adjust_sliders[kind][index].set_value(value)
+        self.adjust_fields[kind][index].set_value(value)
 
     ## The open adjustment's slider values in the units the canvas takes.
     func adjust_values(self) -> list[float]:
@@ -337,13 +372,12 @@ pub class Panels:
         self.apply_styles()
 
     func show_style_toggles(self) -> unit!:
-        let names = ["Drop Shadow", "Stroke", "Outer Glow"]
         var effect = 0
         while effect < 3:
-            self.style_toggles[effect].set_text(names[effect] + (" ✓" if self.style_on[effect] else ""))
+            self.style_toggles[effect].set_checked(self.style_on[effect])
             effect += 1
 
-    ## Layer › Layer Style…: the bar shows the selected layer's styles for editing.
+    ## Layer › Layer Style…: the dialog shows the selected layer's styles for editing.
     pub func layer_style(self) -> unit!:
         if self.workspace.previewing():
             self.workspace.end_preview(false)
@@ -354,15 +388,14 @@ pub class Panels:
             field += 1
         let before = self.style_before
         self.style_on = [before[0] != 0.0, before[8] != 0.0, before[14] != 0.0]
-        let s = self.adjust_sliders[10]
-        s[0].set_value(before[1])
-        s[1].set_value(before[2])
-        s[2].set_value(before[3])
-        s[3].set_value(before[7] * 100.0)
-        s[4].set_value(before[9])
-        s[5].set_value(before[13] * 100.0)
-        s[6].set_value(before[15])
-        s[7].set_value(before[19] * 100.0)
+        self.set_control(10, 0, before[1])
+        self.set_control(10, 1, before[2])
+        self.set_control(10, 2, before[3])
+        self.set_control(10, 3, before[7] * 100.0)
+        self.set_control(10, 4, before[9])
+        self.set_control(10, 5, before[13] * 100.0)
+        self.set_control(10, 6, before[15])
+        self.set_control(10, 7, before[19] * 100.0)
         self.show_style_toggles()
         self.adjust_kind = 10
         var index = 0
@@ -370,10 +403,10 @@ pub class Panels:
             row.layout().set_visible(index == 10)
             index += 1
         self.adjust_title.set_text("Layer Style")
-        self.adjust_bar.layout().set_visible(true)
+        self.adjust_dialog.open()
         self.refresh()
 
-    ## Open the adjust bar for `kind` (8 for blur) with its controls at their defaults.
+    ## Open the adjust dialog for `kind` (8 for blur) with its controls at their defaults.
     func open_preview(self, kind: int, title: str) -> unit!:
         if self.workspace.previewing():
             self.workspace.end_preview(false)
@@ -392,13 +425,13 @@ pub class Panels:
             row.layout().set_visible(index == kind)
             index += 1
         self.adjust_title.set_text(title)
-        self.adjust_bar.layout().set_visible(true)
+        self.adjust_dialog.open()
         self.preview()
         self.refresh()
 
     func close_preview(self, keep: bool) -> unit!:
         if self.adjust_kind == 10 and not keep and self.style_before.length == 20:
-            # Cancel puts the styles back as they were when the bar opened.
+            # Cancel puts the styles back as they were when the dialog opened.
             let b = self.style_before
             let id = self.workspace.selected_id()
             self.workspace.canvas.set_shadow(id, b[0] != 0.0, b[1], b[2], b[3], b[4], b[5], b[6], b[7])
@@ -408,7 +441,7 @@ pub class Panels:
         if self.workspace.previewing():
             self.workspace.end_preview(keep)
         self.adjust_kind = -1
-        self.adjust_bar.layout().set_visible(false)
+        self.adjust_dialog.hide()
         self.refresh()
 
     pub func apply_preview(self) -> unit!:
@@ -515,7 +548,6 @@ pub class Panels:
         button.layout().set_size(25.0, 25.0)
         return button
 
-    ## A properties row: a muted label in a fixed column, then the control.
     ## A properties row after eleusis: a muted label in a fixed column, the
     ## control, and a one-point rule beneath.
     func property_row(self, label: str, control: Widget) -> VStack!:
@@ -523,6 +555,19 @@ pub class Panels:
         caption.layout().set_limits(Size(64.0, 0.0), Size(64.0, 16384.0))
         let row = HStack([caption, control], spacing = 6.0, padding = 4.0)
         return VStack([row, Rule()], spacing = 0.0)
+
+    ## A header control with its muted caption before it.
+    func labelled(self, label: str, control: Widget) -> HStack!:
+        return HStack([Text(label, font = self.font, muted = true), control], spacing = 4.0)
+
+    ## A flag checkbox; the state itself comes from the layer on refresh, so the
+    ## callback toggles the flag rather than copying the box's value.
+    func checkbox(self, label: str, callback: func() -> unit!) -> Checkbox!:
+        let box = Checkbox(label, font = self.font)
+        self.connections.append(box.on_change(func (value: bool) -> unit!:
+            discard(value)
+            callback()))
+        return box
 
     func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
         let button = Button(icon = icon, font = self.font)
@@ -545,10 +590,10 @@ pub class Panels:
         self.open_preview(8, "Gaussian Blur")
 
     pub func free_transform(self) -> unit!:
-        for slider in self.adjust_sliders[9]:
-            slider.set_value(0.0)
-        self.adjust_sliders[9][0].set_value(100.0)
-        self.adjust_sliders[9][1].set_value(100.0)
+        var index = 0
+        while index < 5:
+            self.set_control(9, index, 100.0 if index < 2 else 0.0)
+            index += 1
         self.open_preview(9, "Free Transform")
 
     pub func select_all(self) -> unit!:
@@ -849,9 +894,9 @@ pub class Panels:
         self.text_controls.layout().set_visible(workspace.tool == "text")
         let swatch_color = Color(workspace.red, workspace.green, workspace.blue)
         self.color_swatch.layout().set_theme(Theme(button = swatch_color, button_hover = swatch_color, pressed = swatch_color, foreground = swatch_color))
-        self.size_slider.set_value(workspace.diameter)
-        self.hardness_slider.set_value(workspace.hardness * 100.0)
-        self.opacity_slider.set_value(workspace.opacity * 100.0)
+        self.size_field.set_value(workspace.diameter)
+        self.hardness_field.set_value(workspace.hardness * 100.0)
+        self.opacity_field.set_value(workspace.opacity * 100.0)
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
         if workspace.tool == "move":
             hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
@@ -873,11 +918,12 @@ pub class Panels:
         self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  sRGB · Transparent  |  {name}")
         self.layer_count.set_text(f"{workspace.layer_count()}")
         self.layers_panel.set_text(f"Layers · {workspace.layer_count()}")
-        self.layer_name.set_text(workspace.canvas.layer_name(workspace.selected))
+        if not self.layer_name.layout().is_focused():
+            self.layer_name.set_text(workspace.canvas.layer_name(workspace.selected))
         self.blend_menu.set_text(Canvas.blend_mode_name(workspace.canvas.layer_blend(workspace.selected)) + " ▾")
-        self.visible_button.set_style(ButtonStyle.selected if workspace.canvas.layer_visible(workspace.selected) else ButtonStyle.sunken)
-        self.clipped_button.set_style(ButtonStyle.selected if workspace.canvas.layer_clipped(workspace.selected) else ButtonStyle.sunken)
-        self.mask_button.set_style(ButtonStyle.selected if workspace.canvas.layer_masked(workspace.selected) else ButtonStyle.sunken)
+        self.visible_box.set_checked(workspace.canvas.layer_visible(workspace.selected))
+        self.clipped_box.set_checked(workspace.canvas.layer_clipped(workspace.selected))
+        self.mask_box.set_checked(workspace.canvas.layer_masked(workspace.selected))
         var styled = ""
         if workspace.canvas.layer_styled(workspace.selected):
             if workspace.style_value(0) != 0.0:
@@ -893,6 +939,7 @@ pub class Panels:
             slot += 1
         self.actions.update(workspace)
         self.layer_opacity.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
+        self.layer_opacity_field.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
         self.layers.layout().invalidate()
         self.view.layout().invalidate()
 
