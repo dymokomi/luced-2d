@@ -206,7 +206,7 @@ pub class CanvasView: Widget:
             elif self.select_mode == 0:
                 self.workspace.deselect()
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0:
-            self.workspace.begin_stroke(self.document_x(event.x), self.document_y(event.y))
+            self.workspace.begin_stroke(self.document_x(event.x), self.document_y(event.y), event.pressure)
             self.painting = self.workspace.canvas.painting()
         elif event.kind == EventKind.pointer_moved:
             self.pointer_x = event.x
@@ -217,7 +217,7 @@ pub class CanvasView: Widget:
                 self.last_x = event.x
                 self.last_y = event.y
             elif self.painting:
-                self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))
+                self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y), event.pressure)
             elif self.selecting:
                 self.select_now_x = self.document_x(event.x)
                 self.select_now_y = self.document_y(event.y)
@@ -252,7 +252,7 @@ pub class CanvasView: Widget:
                     self.workspace.select_shape(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y), self.workspace.tool == "ellipse", self.select_mode)
             if self.painting:
                 self.painting = false
-                self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y))
+                self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y), event.pressure)
                 self.workspace.end_stroke()
         elif event.kind == EventKind.pointer_left:
             self.pointer_inside = false
