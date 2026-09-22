@@ -13,6 +13,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - Opens PNG, JPEG, TIFF and EXR pictures as a document, Photoshop `.psd` files
   as layers (names, visibility, opacity, blend modes, clipping), or creates an
   empty one.
+- Layers pane: click the eye to hide, drag rows to reorder, rename from the
+  Properties pane or Layer › Rename Layer….
 - Layer › Layer Style: drop shadow, stroke and outer glow drawn under the
   layer, non-destructively, edited live and saved in `.l2d`.
 - Layers with names, visibility, opacity and all 26 Photoshop blend modes,
