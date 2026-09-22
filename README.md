@@ -33,6 +33,8 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - Eyedropper (`I`): click to pick the flattened colour as the foreground.
 - Text tool (`T`): click, type, and the text is set into the layer's pixels
   in the foreground colour at the chosen size.
+- A foreground colour swatch in the tool header opens a colour editor (RGB
+  sliders and hex), beside quick swatches.
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
   edges and no dab artefacts; undo and redo of strokes.
 - Pan with two-finger scroll, hand tool (`H`) or space-drag; zoom about the

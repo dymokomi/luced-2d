@@ -238,6 +238,25 @@ pub class Workspace:
         self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
         self.touch()
 
+    ## The foreground colour as sRGB hex, for the colour editor.
+    pub func color_hex(self) -> str:
+        return "#" + hex_byte(encode_srgb(self.red)) + hex_byte(encode_srgb(self.green)) + hex_byte(encode_srgb(self.blue))
+
+    ## Set the foreground colour from sRGB hex like "#e7a03f"; anything else is ignored.
+    pub func set_color_hex(self, text: str):
+        let digits = "0123456789abcdef"
+        let lowered = text.trim().lower()
+        if lowered.length != 7 or lowered[..<1] != "#":
+            return
+        var values: list[float] = []
+        var index = 1
+        while index < 7:
+            let high = digits.index_of(lowered[index..<index + 1]) else return
+            let low = digits.index_of(lowered[index + 1..<index + 2]) else return
+            values.append(decode_srgb(float(high * 16 + low) / 255.0))
+            index += 2
+        self.set_color(values[0], values[1], values[2])
+
     pub func set_color(self, red: float, green: float, blue: float):
         self.red = red
         self.green = green
@@ -409,3 +428,16 @@ func pad(values: list[float]) -> list[float]:
     while params.length < 5:
         params.append(0.0)
     return params
+
+## sRGB transfer, both ways, for the colour editor's hex.
+func decode_srgb(encoded: float) -> float:
+    return encoded / 12.92 if encoded <= 0.04045 else math.pow((encoded + 0.055) / 1.055, 2.4)
+
+func encode_srgb(linear: float) -> int:
+    let clamped = math.max(0.0, math.min(1.0, linear))
+    let encoded = clamped * 12.92 if clamped <= 0.0031308 else 1.055 * math.pow(clamped, 1.0 / 2.4) - 0.055
+    return int(math.floor(encoded * 255.0 + 0.5))
+
+func hex_byte(value: int) -> str:
+    let digits = "0123456789abcdef"
+    return digits[value // 16..<value // 16 + 1] + digits[value % 16..<value % 16 + 1]

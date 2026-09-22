@@ -123,6 +123,8 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.select(1)
             editor.workspace.set_color(0.75, 0.03, 0.02)
             editor.panels.layer_style()
+            editor.workspace.choose_tool("brush")
+            editor.panels.refresh()
             editor.panels.toggle_style(0)
             editor.panels.adjust_sliders[10][0].set_value(14.0)
             editor.panels.adjust_sliders[10][1].set_value(14.0)

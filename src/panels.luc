@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, ColorEditor
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -40,6 +40,9 @@ pub class Panels:
     pub let blend_menu: Menu
     pub let wand_controls: HStack
     pub let text_controls: HStack
+    ## The foreground colour: a swatch in the header that opens the colour editor.
+    pub let color_swatch: Button
+    pub let color_editor: ColorEditor
     pub let text_size_slider: Slider
     pub let tolerance_slider: Slider
     pub let contiguous_button: Button
@@ -92,7 +95,13 @@ pub class Panels:
         self.connections.append(self.opacity_slider.on_change(func (value: float) -> unit!:
             self.workspace.opacity = value / 100.0
             self.workspace.touch()))
-        self.brush_controls = HStack([self.size_slider, self.hardness_slider, self.opacity_slider,
+        self.color_editor = ColorEditor(font = font)
+        self.color_swatch = Button("    ", font = font)
+        self.connections.append(self.color_swatch.on_click(self.pick_color))
+        self.connections.append(self.color_editor.on_change(func (value: str) -> unit!:
+            self.workspace.set_color_hex(value)
+            self.refresh()))
+        self.brush_controls = HStack([self.size_slider, self.hardness_slider, self.opacity_slider, self.color_swatch,
                                       self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497),
                                       self.swatch("  ", 0.02, 0.18, 0.65), self.swatch("  ", 0.75, 0.03, 0.02)], spacing = 12.0)
         self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
@@ -229,7 +238,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.adjust_bar, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt], spacing = 0.0)
+        self.body = VStack([menus, header, self.adjust_bar, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.color_editor], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -472,6 +481,11 @@ pub class Panels:
     ## Layer › Rename…: ask for the selected layer's new name.
     pub func rename_layer(self) -> unit!:
         self.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename")
+
+    ## The header swatch clicked: the colour editor opens under it with the foreground colour.
+    pub func pick_color(self) -> unit!:
+        let bounds = self.color_swatch.layout().bounds()
+        self.color_editor.open_at(self.workspace.color_hex(), bounds.x, bounds.y + bounds.height + 2.0)
 
     ## The text tool clicked: ask for the text to set there.
     func place_text(self) -> unit!:
@@ -832,6 +846,8 @@ pub class Panels:
         self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser" or workspace.tool == "gradient")
         self.wand_controls.layout().set_visible(workspace.tool == "wand")
         self.text_controls.layout().set_visible(workspace.tool == "text")
+        let swatch_color = Color(workspace.red, workspace.green, workspace.blue)
+        self.color_swatch.layout().set_theme(Theme(button = swatch_color, button_hover = swatch_color, pressed = swatch_color, foreground = swatch_color))
         self.size_slider.set_value(workspace.diameter)
         self.hardness_slider.set_value(workspace.hardness * 100.0)
         self.opacity_slider.set_value(workspace.opacity * 100.0)
