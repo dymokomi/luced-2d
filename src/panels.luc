@@ -228,7 +228,8 @@ pub class Panels:
                                  Spacer()], spacing = 0.0, padding = 0.0)
         self.properties_panel = Panel("Properties", properties, minimum = Size(220.0, 100.0), closable = false)
         # The viewport: the tool rail beside the canvas.
-        let viewport = HStack([rail, self.view], spacing = 0.0)
+        # A one-point backdrop rule separates the rail from the canvas, as eleusis's viewport does.
+        let viewport = HStack([rail, Rule(structural = true, vertical = true), self.view], spacing = 0.0)
         viewport.layout().set_flex()
         self.viewport_panel = Panel("Viewport", viewport, minimum = Size(320.0, 200.0), closable = false)
         self.dock = DStack([self.viewport_panel, self.layers_panel, self.properties_panel], font = font)
