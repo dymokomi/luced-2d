@@ -92,8 +92,9 @@ pub class Panels:
                              Spacer(), self.header_hint], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, Spacer()], font = font)
         # The tool rail: one button per tool.
-        let rail = VStack([self.tool_button("V", "move"), self.tool_button("M", "marquee"), self.tool_button("B", "brush"), self.tool_button("E", "eraser"), self.tool_button("H", "hand"), self.tool_button("Z", "zoom"),
-                           Spacer(), self.button("Undo", self.undo), self.button("Redo", self.redo)], spacing = 6.0, padding = 6.0)
+        let rail = VStack([self.tool_button("move-tool", "move"), self.tool_button("selection-tool", "marquee"), self.tool_button("brush-tool", "brush"),
+                           self.tool_button("eraser-tool", "eraser"), self.tool_button("pan-tool", "hand"), self.tool_button("zoom-in", "zoom"),
+                           Spacer(), self.icon_button("undo", self.undo), self.icon_button("redo", self.redo)], spacing = 6.0, padding = 10.0)
         rail.layout().set_limits(Size(56.0, 100.0), Size(56.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
         # The layers panel: appearance, the list, and the footer.
@@ -105,8 +106,8 @@ pub class Panels:
         let appearance = VStack([HStack([Text("Layers", font = font), Spacer(), self.layer_count], spacing = 8.0),
                                  HStack([Text("Blend", font = font), Menu("Choose ▾", self.blends, font = font), Spacer()], spacing = 8.0),
                                  self.layer_opacity], spacing = 6.0, padding = 10.0)
-        let footer = HStack([self.button("+", self.add_layer), self.button("Mask", self.toggle_mask), self.button("Clip", self.toggle_clipped),
-                             Spacer(), self.button("Delete", self.delete_layer)], spacing = 6.0, padding = 8.0)
+        let footer = HStack([self.icon_button("plus", self.add_layer), self.icon_button("layer-mask", self.toggle_mask), self.icon_button("send-backward", self.toggle_clipped),
+                             Spacer(), self.icon_button("trash", self.delete_layer)], spacing = 6.0, padding = 8.0)
         let layer_panel = VStack([appearance, self.layers, footer], spacing = 0.0)
         layer_panel.layout().set_limits(Size(252.0, 200.0), Size(352.0, 16384.0))
         let middle = HStack([rail, SplitView(self.view, layer_panel, fraction = 0.8)], spacing = 0.0)
@@ -126,9 +127,17 @@ pub class Panels:
         self.connections.append(command.on_trigger(callback))
         return command
 
-    func tool_button(self, text: str, tool: str) -> Button!:
-        return self.button(text, func () -> unit!:
-            self.choose_tool(tool))
+    func tool_button(self, icon: str, tool: str) -> Button!:
+        let button = Button(icon = icon, font = self.font)
+        self.connections.append(button.on_click(func () -> unit!:
+            self.choose_tool(tool)))
+        button.layout().set_size(36.0, 36.0)
+        return button
+
+    func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
+        let button = Button(icon = icon, font = self.font)
+        self.connections.append(button.on_click(callback))
+        return button
 
     func swatch(self, text: str, red: float, green: float, blue: float) -> Button!:
         let button = self.button(text, func () -> unit!:

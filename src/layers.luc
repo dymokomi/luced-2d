@@ -1,4 +1,4 @@
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, draw_icon
 from gpu import RenderTarget, Rect, Color
 from input import EventKind, Cursor
 from workspace import Workspace
@@ -55,16 +55,8 @@ pub class LayerList: Widget:
             let visible = canvas.layer_visible(index)
             if selected:
                 painter.rectangle(Rect(0.0, top, size.width, self.row_height), theme.selection_inactive())
-            # The eye: a filled square when visible, an outline when hidden.
-            let eye_x = 10.0
-            let eye_y = top + (self.row_height - 12.0) * 0.5
-            if visible:
-                painter.rectangle(Rect(eye_x, eye_y, 12.0, 12.0), theme.text())
-            else:
-                painter.rectangle(Rect(eye_x, eye_y, 12.0, 1.0), theme.text_muted())
-                painter.rectangle(Rect(eye_x, eye_y + 11.0, 12.0, 1.0), theme.text_muted())
-                painter.rectangle(Rect(eye_x, eye_y, 1.0, 12.0), theme.text_muted())
-                painter.rectangle(Rect(eye_x + 11.0, eye_y, 1.0, 12.0), theme.text_muted())
+            # The eye.
+            draw_icon(target, "visible" if visible else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), theme.text() if visible else theme.text_muted())
             var x = 32.0 + (24.0 if clipped else 0.0)
             # The layer thumbnail: a checker-grey slot with the layer's own pixels in
             # the document's shape, bordered in the accent when it is the target.
