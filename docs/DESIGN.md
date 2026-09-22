@@ -34,7 +34,7 @@ Three packages, each with a real client:
 
 ```
 luced-2d      (Luce)       the application: tools, panels, commands, theme
-  ├─ luce-pixel (Luce Base) the image engine: document, tiles, render graph,
+  ├─ luce-pixel (Luce Base) the image engine: document, tiles, compositing,
   │                         blend/adjust/filter shaders, brush, selections,
   │                         file format, PSD import; runs headless in tests
   ├─ luce-ui    (Luce Base) widgets, docking, theme roles, Painter.image
