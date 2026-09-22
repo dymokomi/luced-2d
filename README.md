@@ -28,8 +28,10 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   pointer with a touchpad pinch, the mouse wheel, cmd/ctrl-scroll, the zoom
   tool (`Z`), `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
 - An Adjust menu with destructive adjustments: brightness/contrast, hue/
-  saturation/lightness, invert, levels, desaturate, threshold, posterize —
-  all undoable.
+  saturation/lightness, invert, levels (cmd-L), desaturate, threshold,
+  posterize, and Filter › Gaussian Blur. Each opens a bar of sliders under
+  the header that previews live on the layer; Apply keeps the result as one
+  undo step, Cancel puts the pixels back.
 - Opens and saves through the desktop's file dialogs. Saving as `.l2d` keeps
   every layer, mask and blend setting (a directory with a `document.prisma`
   manifest and one PNG per layer); PNG, JPEG or TIFF save the flattened picture.
@@ -55,9 +57,11 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 
 - `src/workspace.luc`: the open document, its file, zoom, offset and selection.
 - `src/view.luc`: the canvas widget: checkerboard, the document, pan and zoom.
+- `src/actions.luc`: one `Command` per action, as in luced; menus, the tool
+  rail and shortcuts present the same instances, enabled by document state.
 - `src/panels.luc`: the window after Compositor's: menu bar, contextual tool
-  header, tool rail, layers panel, status line and the text prompt.
+  header, adjust bar, tool rail, layers panel, status line and the text prompt.
 - `src/layers.luc`: the layer list with thumbnails, masks and clipping.
 - `src/theme.luc`: the look, eleusis-layout's greys and orange.
-- `src/app.luc`: application composition and commands.
+- `src/app.luc`: application composition.
 - `src/main.luc`: entry point.
