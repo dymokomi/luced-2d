@@ -34,18 +34,23 @@ Three packages, each with a real client:
 
 ```
 luced-2d      (Luce)       the application: tools, panels, commands, theme
-  ├─ luce-pixel (Luce Base) the image engine: document, tiles, compositing,
-  │                         blend/adjust/filter shaders, brush, selections,
-  │                         file format, PSD import; runs headless in tests
+  ├─ luce-image (Luce Base) the image library, PIL-like: codecs (PNG, JPEG,
+  │                         TIFF, EXR, PSD), pixel operations, and the layered
+  │                         document: tiles, compositing, blend/adjust/filter
+  │                         shaders, brush, selections, native format; runs
+  │                         headless in tests
   ├─ luce-ui    (Luce Base) widgets, docking, theme roles, Painter.image
-  ├─ luce-image (Luce Base) codecs
   └─ luce-base std.gpu      textures, targets, pipelines, readback
 ```
 
-The canvas is not a widget; it is a second renderer (eleusis' load-bearing
-finding). `luce-pixel` owns pixels and never imports `luce-ui`; the `Canvas`
-widget in luced-2d only turns input into requests and draws the result plus
-chrome (grid, guides, marquee, cursor) at screen resolution on top.
+Two packages, not three: the owner's call is that 2D image manipulation belongs
+in `luce-image`, beside the file reading already there, so it becomes one
+versatile image library like Python's PIL — usable from a script that resizes a
+JPEG as much as from the editor. The canvas is not a widget; it is a second
+renderer (eleusis' load-bearing finding). `luce-image` owns pixels and never
+imports `luce-ui`; the `Canvas` widget in luced-2d only turns input into
+requests and draws the result plus chrome (grid, guides, marquee, cursor) at
+screen resolution on top.
 
 ### 2.1 std.gpu, second version
 
@@ -92,7 +97,7 @@ Blend is `over` with premultiplied alpha everywhere; `gpu.Color` gains alpha.
 - Shortcuts as a table with a duplicate-chord test; unbound is representable;
   user overrides merge per action.
 
-### 2.3 luce-pixel
+### 2.3 luce-image, the document side
 
 **Document** — a real tree, not a flat array with parent ids:
 
@@ -168,10 +173,11 @@ Outer/Inner Glow, Color Overlay, Gradient Overlay, Bevel.
 perspective, warp): previews on the GPU, resamples and commits on Enter,
 sampling nearest/bilinear/bicubic.
 
-**Files**: native document is a directory package `Name.l2d` holding
+**Files**: `luce-image` keeps its codecs (PNG, JPEG, TIFF, EXR) and gains a
+native document: a directory package `Name.l2d` holding
 `document.prisma` (the tree, validated with explicit limits) and
 `layers/<id>.png` / `<id>.mask.png` (16-bit where needed), written atomically.
-Open/save PNG, JPEG, TIFF, EXR via luce-image. PSD import (8/16-bit RGB, groups,
+PSD import (8/16-bit RGB, groups,
 masks, blend modes, editable fills; text rasterized) with a conversion report
 before anything is applied; PSD export flattened + layers later.
 
@@ -205,7 +211,7 @@ pixel where that applies.
 1. **std.gpu v2** — textures, targets, readback, client pipelines, shader tool,
    alpha colour, boundary test; Metal first, Vulkan parity. `Painter.image`;
    `luce_ui.Raster` deleted; luced-2d and wolf3d moved to textures.
-2. **luce-pixel core** — tiles, document tree, cached over chain with masks
+2. **luce-image document core** — tiles, document tree, cached over chain with masks
    and clipping, canvas request with pyramid levels, zoom/pan camera,
    export; checkerboard fixtures with measured edges.
 3. **luced-2d skeleton** — theme roles, eleusis look, docking layout, tabs,
