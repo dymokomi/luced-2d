@@ -47,14 +47,19 @@ pub func editor_theme() -> Theme:
     theme.muted = text_muted()
     theme.selection = accent()
     theme.accent = accent()
-    theme.button = surface_raised()
-    theme.button_hover = grey(64.0)
-    theme.pressed = grey(40.0)
-    theme.menu = tab_strip()
+    theme.button = grey(41.0)
+    theme.button_hover = grey(58.0)
+    theme.pressed = grey(72.0)
+    theme.menu = surface_raised()
     theme.menu_hover = grey(64.0)
+    theme.strip = tab_strip()
+    theme.sunken = grey(41.0)
+    theme.raised = surface_raised()
+    theme.accent_text = grey(0.0)
     theme.menu_selection = accent()
     theme.border = border()
     theme.active_border = grey(150.0)
     theme.shadow_offset = 0.0
     theme.shadow_opacity = 0.0
+    theme.control_radius = 5.0
     return theme

@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -24,6 +24,18 @@ pub class Panels:
     pub let opacity_slider: Slider
     pub let layer_opacity: Slider
     pub let brush_controls: HStack
+    ## The dock and its three panes: the viewport, the layers and the properties
+    ## of the selected layer, each pane's buttons on a shelf at its bottom.
+    pub let dock: DStack
+    pub let viewport_panel: Panel
+    pub let layers_panel: Panel
+    pub let properties_panel: Panel
+    pub let tool_buttons: list[Button]
+    pub let layer_name: Text
+    pub let visible_button: Button
+    pub let clipped_button: Button
+    pub let mask_button: Button
+    pub let styles_text: Text
     pub let wand_controls: HStack
     pub let text_controls: HStack
     pub let text_size_slider: Slider
@@ -165,33 +177,56 @@ pub class Panels:
                                             actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.layer_style], font = font),
                              Menu("Filter", [actions.blur], font = font),
                              Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
-                             Spacer(), self.header_hint], font = font)
+                             Spacer()], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
-        # The tool rail: one icon button per tool command.
+        # The tool rail, as eleusis's viewport rail: 28-point buttons, the active tool selected.
         var rail_items: list[Widget] = []
+        self.tool_buttons = []
         var index = 0
         for command in actions.tools:
-            rail_items.append(self.tool_button(actions.tool_icons[index], command))
+            let button = self.tool_button(actions.tool_icons[index], command)
+            self.tool_buttons.append(button)
+            rail_items.append(button)
             index += 1
-        let rail = VStack(rail_items, spacing = 6.0, padding = 10.0)
-        rail.layout().set_limits(Size(56.0, 100.0), Size(56.0, 16384.0))
+        let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
+        rail.layout().set_limits(Size(40.0, 100.0), Size(40.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
         # The layers panel: appearance, the list, and the footer.
         self.layer_count = Text("", font = font)
-        self.layer_opacity = Slider("Opacity", 0.0, 100.0, 100.0, 1.0, font = font)
+        self.layer_opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font)
         self.connections.append(self.layer_opacity.on_change(func (value: float) -> unit!:
             self.workspace.set_opacity(value / 100.0)
             self.layers.layout().invalidate()))
-        let appearance = VStack([HStack([Text("Layers", font = font), Spacer(), self.layer_count], spacing = 8.0),
-                                 HStack([Text("Blend", font = font), Menu("Choose ▾", actions.blends, font = font), Spacer()], spacing = 8.0),
-                                 self.layer_opacity], spacing = 6.0, padding = 10.0)
-        let footer = HStack([self.icon_button("plus", self.add_layer), self.icon_button("layer-mask", self.toggle_mask), self.icon_button("send-backward", self.toggle_clipped),
-                             Spacer(), self.icon_button("trash", self.delete_layer)], spacing = 6.0, padding = 8.0)
-        let layer_panel = VStack([appearance, self.layers, footer], spacing = 0.0)
-        layer_panel.layout().set_limits(Size(252.0, 200.0), Size(352.0, 16384.0))
-        let middle = HStack([rail, SplitView(self.view, layer_panel, fraction = 0.8)], spacing = 0.0)
-        middle.layout().set_flex()
-        self.body = VStack([menus, header, self.adjust_bar, middle, Toolbar([self.status], font = font), self.prompt], spacing = 0.0)
+        # Layers: the list, with its actions on the shelf below (the destructive one alone at the right).
+        let layers_shelf = Shelf([self.shelf_button("plus", self.add_layer), self.shelf_button("duplicate", self.duplicate_layer),
+                                  self.shelf_button("layer-mask", self.toggle_mask), self.shelf_button("send-backward", self.toggle_clipped),
+                                  Spacer(), self.shelf_button("trash", self.delete_layer)])
+        self.layers.layout().set_flex()
+        self.layers_panel = Panel("Layers", self.layers, minimum = Size(220.0, 120.0), closable = false, footer = layers_shelf)
+        # Properties: what the selected layer is, one row each.
+        self.layer_name = Text("", font = font)
+        self.visible_button = self.button("Visible", self.toggle_visibility)
+        self.clipped_button = self.button("Clip to Below", self.toggle_clipped)
+        self.mask_button = self.button("Mask", self.toggle_mask)
+        self.styles_text = Text("None", font = font)
+        let properties = VStack([self.property_row("Layer", self.layer_name), self.property_row("Blend", Menu("Choose ▾", actions.blends, font = font)),
+                                 self.property_row("Opacity", self.layer_opacity),
+                                 self.property_row("Flags", HStack([self.visible_button, self.clipped_button, self.mask_button], spacing = 6.0)),
+                                 self.property_row("Styles", HStack([self.styles_text, self.button("Edit…", self.layer_style)], spacing = 8.0)),
+                                 Spacer()], spacing = 0.0, padding = 0.0)
+        self.properties_panel = Panel("Properties", properties, minimum = Size(220.0, 100.0), closable = false)
+        # The viewport: the tool rail beside the canvas.
+        let viewport = HStack([rail, self.view], spacing = 0.0)
+        viewport.layout().set_flex()
+        self.viewport_panel = Panel("Viewport", viewport, minimum = Size(320.0, 200.0), closable = false)
+        self.dock = DStack([self.viewport_panel, self.layers_panel, self.properties_panel], font = font)
+        self.dock.move(self.layers_panel, self.viewport_panel, DockPosition.right)
+        self.dock.move(self.properties_panel, self.layers_panel, DockPosition.bottom)
+        self.dock.set_fraction(self.viewport_panel, 0.76)
+        self.dock.set_fraction(self.layers_panel, 0.55)
+        self.dock.layout().set_flex()
+        # The status bar is where a control's hint shows, as in eleusis: no tooltips.
+        self.body = VStack([menus, header, self.adjust_bar, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -446,8 +481,23 @@ pub class Panels:
         let button = Button(icon = icon, font = self.font)
         self.connections.append(button.on_click(func () -> unit!:
             command.trigger()))
-        button.layout().set_size(36.0, 36.0)
+        button.layout().set_size(28.0, 28.0)
         return button
+
+    ## A shelf button: 25 points square, plain, so only the icon shows at rest.
+    func shelf_button(self, icon: str, callback: func() -> unit!) -> Button!:
+        let button = Button(icon = icon, font = self.font)
+        button.set_style(ButtonStyle.plain)
+        self.connections.append(button.on_click(callback))
+        button.layout().set_size(25.0, 25.0)
+        return button
+
+    ## A properties row: a muted label in a fixed column, then the control.
+    func property_row(self, label: str, control: Widget) -> HStack!:
+        let caption = Text(label, font = self.font)
+        caption.layout().set_limits(Size(64.0, 0.0), Size(64.0, 16384.0))
+        let row = HStack([caption, control], spacing = 6.0, padding = 4.0)
+        return row
 
     func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
         let button = Button(icon = icon, font = self.font)
@@ -789,6 +839,24 @@ pub class Panels:
         self.header_hint.set_text(hint)
         self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  sRGB · Transparent  |  {name}")
         self.layer_count.set_text(f"{workspace.layer_count()}")
+        self.layers_panel.set_text(f"Layers · {workspace.layer_count()}")
+        self.layer_name.set_text(workspace.canvas.layer_name(workspace.selected))
+        self.visible_button.set_style(ButtonStyle.selected if workspace.canvas.layer_visible(workspace.selected) else ButtonStyle.sunken)
+        self.clipped_button.set_style(ButtonStyle.selected if workspace.canvas.layer_clipped(workspace.selected) else ButtonStyle.sunken)
+        self.mask_button.set_style(ButtonStyle.selected if workspace.canvas.layer_masked(workspace.selected) else ButtonStyle.sunken)
+        var styled = ""
+        if workspace.canvas.layer_styled(workspace.selected):
+            if workspace.style_value(0) != 0.0:
+                styled = styled + "Shadow "
+            if workspace.style_value(8) != 0.0:
+                styled = styled + "Stroke "
+            if workspace.style_value(14) != 0.0:
+                styled = styled + "Glow"
+        self.styles_text.set_text(styled if styled != "" else "None")
+        var slot = 0
+        for command in self.actions.tools:
+            self.tool_buttons[slot].set_style(ButtonStyle.selected if command.id() == workspace.tool else ButtonStyle.sunken)
+            slot += 1
         self.actions.update(workspace)
         self.layer_opacity.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
         self.layers.layout().invalidate()
