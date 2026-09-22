@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider
+from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, TextPrompt, Spacer, Theme, Application, Menu, Command, Slider, Widget
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
@@ -26,6 +26,13 @@ pub class Panels:
     pub let layer_opacity: Slider
     pub let brush_controls: HStack
     pub let layer_count: Text
+    ## The adjust bar: one row of sliders per adjustment (and one for blur),
+    ## shown one at a time under the header while a preview is live.
+    pub let adjust_bar: HStack
+    pub let adjust_title: Text
+    let adjust_rows: list[HStack]
+    pub let adjust_sliders: list[list[Slider]]
+    var adjust_kind: int = -1
     pub var app: Application? = none
     let font: Font
     let connections: list[Connection]
@@ -77,6 +84,30 @@ pub class Panels:
                                       self.swatch("  ", 0.0, 0.0, 0.0), self.swatch("  ", 1.0, 1.0, 1.0), self.swatch("  ", 0.8069, 0.3515, 0.0497),
                                       self.swatch("  ", 0.02, 0.18, 0.65), self.swatch("  ", 0.75, 0.03, 0.02)], spacing = 12.0)
         self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
+        # The adjust bar's rows: sliders in the units Photoshop shows.
+        self.adjust_title = Text("", font = font)
+        self.adjust_title.layout().set_limits(Size(200.0, 0.0), Size(200.0, 16384.0))
+        self.adjust_rows = []
+        self.adjust_sliders = []
+        self.adjust_row([self.adjust_slider("Brightness", -100.0, 100.0, 0.0), self.adjust_slider("Contrast", -100.0, 100.0, 0.0)])
+        self.adjust_row([self.adjust_slider("Hue", -180.0, 180.0, 0.0), self.adjust_slider("Saturation", -100.0, 100.0, 0.0),
+                         self.adjust_slider("Lightness", -100.0, 100.0, 0.0)])
+        self.adjust_row([])
+        self.adjust_row([self.adjust_slider("In Black", 0.0, 255.0, 0.0), self.adjust_slider("In White", 0.0, 255.0, 255.0),
+                         self.adjust_slider("Gamma", 0.1, 9.99, 1.0, 2), self.adjust_slider("Out Black", 0.0, 255.0, 0.0),
+                         self.adjust_slider("Out White", 0.0, 255.0, 255.0)])
+        self.adjust_row([])
+        self.adjust_row([self.adjust_slider("Threshold", 0.0, 255.0, 128.0)])
+        self.adjust_row([self.adjust_slider("Levels", 2.0, 32.0, 4.0)])
+        self.adjust_row([self.adjust_slider("Radius", 0.5, 250.0, 8.0, 1)])
+        var bar_items: list[Widget] = [self.adjust_title]
+        for row in self.adjust_rows:
+            bar_items.append(row)
+        bar_items.append(Spacer())
+        bar_items.append(self.button("Cancel", self.cancel_preview))
+        bar_items.append(self.button("Apply", self.apply_preview))
+        self.adjust_bar = HStack(bar_items, spacing = 12.0, padding = 8.0)
+        self.adjust_bar.layout().set_visible(false)
         let menus = Toolbar([Menu("File", [self.command("New…", self.new_document), self.command("Open…", self.open_document),
                                            self.command("Save", self.save_document), self.command("Save As…", self.save_document_as)], font = font),
                              Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo),
@@ -118,10 +149,87 @@ pub class Panels:
         layer_panel.layout().set_limits(Size(252.0, 200.0), Size(352.0, 16384.0))
         let middle = HStack([rail, SplitView(self.view, layer_panel, fraction = 0.8)], spacing = 0.0)
         middle.layout().set_flex()
-        self.body = VStack([menus, header, middle, Toolbar([self.status], font = font), self.prompt], spacing = 0.0)
+        self.body = VStack([menus, header, self.adjust_bar, middle, Toolbar([self.status], font = font), self.prompt], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
+
+    ## A slider of the adjust bar; every change re-previews the open adjustment.
+    func adjust_slider(self, label: str, minimum: float, maximum: float, value: float, decimals: int = 0) -> Slider!:
+        let step = 0.01 if decimals == 2 else (0.1 if decimals == 1 else 1.0)
+        let slider = Slider(label, minimum, maximum, value, step, decimals = decimals, font = self.font)
+        self.connections.append(slider.on_change(func (changed: float) -> unit!:
+            discard(changed)
+            self.preview()))
+        return slider
+
+    ## One row of the adjust bar, hidden until its adjustment opens.
+    func adjust_row(self, sliders: list[Slider]) -> unit!:
+        var items: list[Widget] = []
+        for slider in sliders:
+            items.append(slider)
+        let row = HStack(items, spacing = 12.0)
+        row.layout().set_visible(false)
+        self.adjust_rows.append(row)
+        self.adjust_sliders.append(sliders)
+
+    ## The open adjustment's slider values in the units the canvas takes.
+    func adjust_values(self) -> list[float]:
+        let kind = self.adjust_kind
+        let sliders = self.adjust_sliders[kind]
+        var values: list[float] = []
+        for slider in sliders:
+            values.append(slider.value())
+        if kind == 0:
+            return [values[0] / 100.0, values[1] / 100.0]
+        if kind == 1:
+            return [values[0] / 360.0, values[1] / 100.0, values[2] / 100.0]
+        if kind == 3:
+            return [values[0] / 255.0, values[1] / 255.0, values[2], values[3] / 255.0, values[4] / 255.0]
+        if kind == 5:
+            return [values[0] / 255.0]
+        return values
+
+    ## Show the open adjustment (or the blur, row 7) with the sliders as they are.
+    pub func preview(self) -> unit!:
+        let kind = self.adjust_kind
+        if kind < 0 or not self.workspace.previewing():
+            return
+        if kind == 7:
+            self.workspace.preview_blur(self.adjust_sliders[7][0].value())
+        else:
+            self.workspace.preview_adjust(kind, self.adjust_values())
+        self.view.layout().invalidate()
+
+    ## Open the adjust bar for `kind` (7 for blur) with its sliders at their defaults.
+    func open_preview(self, kind: int, title: str) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        self.workspace.begin_preview() catch failure:
+            self.ask("", f"Cannot adjust: {failure.message}", "", "OK")
+            return
+        self.adjust_kind = kind
+        var index = 0
+        for row in self.adjust_rows:
+            row.layout().set_visible(index == kind)
+            index += 1
+        self.adjust_title.set_text(title)
+        self.adjust_bar.layout().set_visible(true)
+        self.preview()
+        self.refresh()
+
+    func close_preview(self, keep: bool) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(keep)
+        self.adjust_kind = -1
+        self.adjust_bar.layout().set_visible(false)
+        self.refresh()
+
+    pub func apply_preview(self) -> unit!:
+        self.close_preview(true)
+
+    pub func cancel_preview(self) -> unit!:
+        self.close_preview(false)
 
     func button(self, text: str, callback: func() -> unit!) -> Button!:
         let button = Button(text, font = self.font)
@@ -173,7 +281,7 @@ pub class Panels:
         self.choose_tool("move")
 
     pub func blur(self) -> unit!:
-        self.ask("blur", "Gaussian blur radius, 0.5..250 pixels", "8", "Apply")
+        self.open_preview(7, "Gaussian Blur")
 
     pub func select_all(self) -> unit!:
         self.workspace.select_all()
@@ -258,63 +366,23 @@ pub class Panels:
             return
         self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
 
-    ## Ask for an adjustment's parameters, or apply the ones that need none.
+    ## Open the adjustment's sliders with a live preview, or apply the ones
+    ## that take no parameters at once.
     pub func adjust(self, kind: int) -> unit!:
         if kind == 2 or kind == 4:
             self.workspace.adjust(kind, [])
             self.refresh()
             return
-        var title = ""
-        var value = ""
-        if kind == 0:
-            title = "Brightness and contrast, each -100..100"
-            value = "0 0"
-        elif kind == 1:
-            title = "Hue shift in degrees, saturation and lightness -100..100"
-            value = "0 0 0"
+        var title = "Brightness / Contrast"
+        if kind == 1:
+            title = "Hue / Saturation / Lightness"
         elif kind == 3:
-            title = "Levels: input black, input white (0..255), gamma, output black, output white (0..255)"
-            value = "0 255 1.0 0 255"
+            title = "Levels"
         elif kind == 5:
-            title = "Threshold level, 0..255"
-            value = "128"
+            title = "Threshold"
         elif kind == 6:
-            title = "Posterize levels, 2..255"
-            value = "4"
-        self.ask(f"adjust {kind}", title, value, "Apply")
-
-    func apply_adjustment(self, kind: int, text: str) -> bool!:
-        var numbers: list[float] = []
-        for part in text.split(" "):
-            let piece = part.trim()
-            if piece == "":
-                continue
-            let number = float(piece) catch failure:
-                return false
-            numbers.append(number)
-        var values: list[float] = []
-        if kind == 0:
-            if numbers.length != 2:
-                return false
-            values = [numbers[0] / 100.0, numbers[1] / 100.0]
-        elif kind == 1:
-            if numbers.length != 3:
-                return false
-            values = [numbers[0] / 360.0, numbers[1] / 100.0, numbers[2] / 100.0]
-        elif kind == 3:
-            if numbers.length != 5:
-                return false
-            values = [numbers[0] / 255.0, numbers[1] / 255.0, numbers[2], numbers[3] / 255.0, numbers[4] / 255.0]
-        elif kind == 5:
-            if numbers.length != 1:
-                return false
-            values = [numbers[0] / 255.0]
-        elif kind == 6:
-            if numbers.length != 1:
-                return false
-            values = [numbers[0]]
-        self.workspace.adjust(kind, values)
-        return true
+            title = "Posterize"
+        self.open_preview(kind, title)
 
     pub func crop(self) -> unit!:
         self.workspace.crop() catch failure:
@@ -492,22 +560,6 @@ pub class Panels:
             self.workspace.adjust_selection(pixels, amount if mode == "feather" else 0) catch failure:
                 self.reject(text, f"Could not adjust: {failure.message}")
                 return
-        elif mode == "blur":
-            let radius = float(trimmed) catch failure:
-                self.reject(text, "Enter a radius: 0.5..250")
-                return
-            self.workspace.blur(radius) catch failure:
-                self.reject(text, f"Could not blur: {failure.message}")
-                return
-        elif mode.length > 7 and mode[..<7] == "adjust ":
-            let kind = int(mode[7..]) catch failure:
-                return
-            let applied = self.apply_adjustment(kind, trimmed) catch failure:
-                self.reject(text, f"Could not adjust: {failure.message}")
-                return
-            if not applied:
-                self.reject(text, "Enter the numbers the title asks for, separated by spaces")
-                return
         self.cancel_prompt()
         self.refresh()
 
@@ -541,6 +593,9 @@ pub class Panels:
 
     pub func close(self):
         self.cancel_prompt()
+        if self.workspace.previewing():
+            self.workspace.end_preview(false) catch failure:
+                discard(failure)
         for connection in self.connections:
             connection.disconnect()
         self.connections.clear()

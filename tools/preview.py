@@ -107,6 +107,10 @@ pub func main(arguments: list[str]) -> int!:
             editor.workspace.canvas.select_rectangle(700, 300, 500, 400, 1)
             editor.workspace.adjust_selection(0, 12)
             editor.workspace.choose_tool("lasso")
+            editor.panels.adjust(3)
+            editor.panels.adjust_sliders[3][1].set_value(200.0)
+            editor.panels.adjust_sliders[3][2].set_value(1.6)
+            editor.panels.preview()
             editor.panels.refresh()
         if captured:
             editor.app.stop()

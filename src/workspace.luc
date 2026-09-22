@@ -178,22 +178,38 @@ pub class Workspace:
             self.touch()
 
     pub func undo(self) -> unit!:
-        if self.canvas.can_undo():
+        if self.canvas.can_undo() and not self.canvas.previewing():
             self.canvas.undo()
             self.touch()
 
     pub func redo(self) -> unit!:
-        if self.canvas.can_redo():
+        if self.canvas.can_redo() and not self.canvas.previewing():
             self.canvas.redo()
             self.touch()
 
+    ## Start showing edits live on the selected layer; `end_preview` keeps or drops them.
+    pub func begin_preview(self) -> unit!:
+        self.canvas.begin_preview(self.selected_id())
+
+    pub func previewing(self) -> bool:
+        return self.canvas.previewing()
+
+    pub func preview_adjust(self, kind: int, values: list[float]) -> unit!:
+        let params = pad(values)
+        self.canvas.preview_adjust(kind, params[0], params[1], params[2], params[3], params[4])
+        self.touch()
+
+    pub func preview_blur(self, radius: float) -> unit!:
+        self.canvas.preview_blur(radius)
+        self.touch()
+
+    pub func end_preview(self, keep: bool) -> unit!:
+        self.canvas.end_preview(keep)
+        self.touch()
+
     ## Apply a destructive adjustment to the selected layer.
     pub func adjust(self, kind: int, values: list[float]) -> unit!:
-        var params: list[float] = []
-        for value in values:
-            params.append(value)
-        while params.length < 5:
-            params.append(0.0)
+        let params = pad(values)
         self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
         self.touch()
 
@@ -316,3 +332,12 @@ pub class Workspace:
     func center(self, width: float, height: float):
         self.offset_x = math.floor((width - float(self.width()) * self.zoom) * 0.5)
         self.offset_y = math.floor((height - float(self.height()) * self.zoom) * 0.5)
+
+## `values` padded with zeros to the five parameters every adjustment takes.
+func pad(values: list[float]) -> list[float]:
+    var params: list[float] = []
+    for value in values:
+        params.append(value)
+    while params.length < 5:
+        params.append(0.0)
+    return params
