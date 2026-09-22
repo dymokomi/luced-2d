@@ -1,0 +1,137 @@
+## One Command instance per action, as in luced: the menus, the tool rail and
+## the keyboard all present the same command, so a shortcut shows beside its
+## menu item and disabling an action disables it everywhere at once.
+from ui import Command, Shortcut
+from input import Key
+from workspace import Workspace
+from canvas import Canvas
+
+pub class Actions:
+    # File
+    pub let new_document: Command
+    pub let open_document: Command
+    pub let save: Command
+    pub let save_as: Command
+    # Edit
+    pub let undo: Command
+    pub let redo: Command
+    pub let fill: Command
+    pub let clear: Command
+    # Select
+    pub let select_all: Command
+    pub let deselect: Command
+    pub let inverse: Command
+    pub let expand: Command
+    pub let contract: Command
+    pub let feather: Command
+    # Image
+    pub let crop: Command
+    pub let canvas_size: Command
+    pub let image_size: Command
+    # Adjust, one per luce-image adjustment kind, and Filter
+    pub let adjustments: list[Command]
+    pub let blur: Command
+    # Layer
+    pub let add_layer: Command
+    pub let duplicate_layer: Command
+    pub let layer_up: Command
+    pub let layer_down: Command
+    pub let merge_down: Command
+    pub let delete_layer: Command
+    pub let toggle_mask: Command
+    pub let toggle_mask_editing: Command
+    pub let toggle_clipped: Command
+    pub let toggle_visibility: Command
+    pub let blends: list[Command]
+    # View
+    pub let fit: Command
+    pub let actual_size: Command
+    pub let zoom_in: Command
+    pub let zoom_out: Command
+    # Tools: the command id is the workspace's tool name; `tool_icons` pairs
+    # each with its luciaos-assets icon in rail order.
+    pub let tools: list[Command]
+    pub let tool_icons: list[str]
+    pub let bigger: Command
+    pub let smaller: Command
+    pub let all: list[Command]
+
+    pub func init(self) -> unit!:
+        self.new_document = Command("New…", Shortcut(Key.n, primary = true), id = "new")
+        self.open_document = Command("Open…", Shortcut(Key.o, primary = true), id = "open")
+        self.save = Command("Save", Shortcut(Key.s, primary = true), id = "save")
+        self.save_as = Command("Save As…", Shortcut(Key.s, primary = true, shift = true), id = "save_as")
+        self.undo = Command("Undo", Shortcut(Key.z, primary = true), id = "undo")
+        self.redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
+        self.fill = Command("Fill Selection with Colour", Shortcut(Key.backspace, alt = true), id = "fill")
+        self.clear = Command("Clear Selection", Shortcut(Key.backspace), id = "clear")
+        self.select_all = Command("All", Shortcut(Key.a, primary = true), id = "select_all")
+        self.deselect = Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect")
+        self.inverse = Command("Inverse", Shortcut(Key.i, primary = true, shift = true), id = "inverse")
+        self.expand = Command("Expand…", id = "expand")
+        self.contract = Command("Contract…", id = "contract")
+        self.feather = Command("Feather…", id = "feather")
+        self.crop = Command("Crop to Selection", id = "crop")
+        self.canvas_size = Command("Canvas Size…", id = "canvas_size")
+        self.image_size = Command("Image Size…", id = "image_size")
+        self.adjustments = [Command("Brightness / Contrast…", id = "adjust_0"), Command("Hue / Saturation / Lightness…", id = "adjust_1"),
+                            Command("Invert", Shortcut(Key.i, primary = true), id = "adjust_2"), Command("Levels…", Shortcut(Key.l, primary = true), id = "adjust_3"),
+                            Command("Desaturate", Shortcut(Key.u, primary = true, shift = true), id = "adjust_4"),
+                            Command("Threshold…", id = "adjust_5"), Command("Posterize…", id = "adjust_6")]
+        self.blur = Command("Gaussian Blur…", id = "blur")
+        self.add_layer = Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer")
+        self.duplicate_layer = Command("Duplicate Layer", Shortcut(Key.j, primary = true), id = "duplicate_layer")
+        self.layer_up = Command("Move Layer Up", Shortcut(Key.right_bracket, primary = true), id = "layer_up")
+        self.layer_down = Command("Move Layer Down", Shortcut(Key.left_bracket, primary = true), id = "layer_down")
+        self.merge_down = Command("Merge Down", Shortcut(Key.e, primary = true), id = "merge_down")
+        self.delete_layer = Command("Delete Layer", Shortcut(Key.delete, primary = true, shift = true), id = "delete_layer")
+        self.toggle_mask = Command("Add / Remove Mask", id = "toggle_mask")
+        self.toggle_mask_editing = Command("Edit Mask / Pixels", Shortcut(Key.backslash), id = "toggle_mask_editing")
+        self.toggle_clipped = Command("Clip to Below / Release", Shortcut(Key.g, primary = true, alt = true), id = "toggle_clipped")
+        self.toggle_visibility = Command("Hide / Show", Shortcut(Key.h, primary = true, shift = true), id = "toggle_visibility")
+        self.blends = []
+        var mode = 0
+        while mode < Canvas.blend_mode_count():
+            self.blends.append(Command(Canvas.blend_mode_name(mode), id = f"blend_{mode}"))
+            mode += 1
+        self.fit = Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit")
+        self.actual_size = Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size")
+        self.zoom_in = Command("Zoom In", Shortcut(Key.equal, primary = true), id = "zoom_in")
+        self.zoom_out = Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out")
+        self.tools = [Command("Move", Shortcut(Key.v), id = "move"), Command("Rectangular Marquee", Shortcut(Key.m), id = "marquee"),
+                      Command("Elliptical Marquee", Shortcut(Key.m, shift = true), id = "ellipse"), Command("Lasso", Shortcut(Key.l), id = "lasso"),
+                      Command("Brush", Shortcut(Key.b), id = "brush"), Command("Eraser", Shortcut(Key.e), id = "eraser"),
+                      Command("Hand", Shortcut(Key.h), id = "hand"), Command("Zoom", Shortcut(Key.z), id = "zoom")]
+        self.tool_icons = ["move-tool", "selection-tool", "ellipse-select-tool", "lasso-tool", "brush-tool", "eraser-tool", "pan-tool", "zoom-in"]
+        self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
+        self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
+        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.undo, self.redo, self.fill, self.clear,
+                    self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
+                    self.crop, self.canvas_size, self.image_size, self.blur,
+                    self.add_layer, self.duplicate_layer, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
+                    self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility,
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.bigger, self.smaller] + self.adjustments + self.blends + self.tools
+
+    ## Enable what the document's state allows.
+    pub func update(self, workspace: Workspace) -> unit!:
+        let canvas = workspace.canvas
+        let previewing = canvas.previewing()
+        let selection = canvas.has_selection()
+        let layers = workspace.layer_count()
+        self.undo.set_enabled(canvas.can_undo() and not previewing)
+        self.redo.set_enabled(canvas.can_redo() and not previewing)
+        self.deselect.set_enabled(selection)
+        self.inverse.set_enabled(selection)
+        self.expand.set_enabled(selection)
+        self.contract.set_enabled(selection)
+        self.feather.set_enabled(selection)
+        self.crop.set_enabled(selection)
+        self.layer_up.set_enabled(workspace.selected < layers - 1)
+        self.layer_down.set_enabled(workspace.selected > 0)
+        self.merge_down.set_enabled(workspace.selected > 0)
+        self.delete_layer.set_enabled(layers > 1)
+        self.toggle_mask_editing.set_enabled(canvas.layer_masked(workspace.selected))
+        self.toggle_clipped.set_enabled(workspace.selected > 0)
+        for command in self.adjustments:
+            command.set_enabled(not previewing)
+        self.blur.set_enabled(not previewing)

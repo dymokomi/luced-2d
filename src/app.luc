@@ -1,8 +1,8 @@
-from ui import Application, Font, Command, Shortcut
-from input import Key
+from ui import Application, Font
 from interop import Connection
 from workspace import Workspace
 from panels import Panels
+from actions import Actions
 import theme
 
 pub class Luce2D:
@@ -14,76 +14,15 @@ pub class Luce2D:
     pub func init(self) -> unit!:
         let font = Font()
         let workspace = Workspace(1280, 800)
-        let panels = Panels(workspace, font)
+        let actions = Actions()
+        let panels = Panels(workspace, actions, font)
         let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme())
         panels.app = app
-        let commands = [Command("New", Shortcut(Key.n, primary = true), id = "new"),
-                        Command("Open", Shortcut(Key.o, primary = true), id = "open"),
-                        Command("Save", Shortcut(Key.s, primary = true), id = "save"),
-                        Command("Save As", Shortcut(Key.s, primary = true, shift = true), id = "save_as"),
-                        Command("Zoom In", Shortcut(Key.equal, primary = true), id = "zoom_in"),
-                        Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out"),
-                        Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit"),
-                        Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size"),
-                        Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer"),
-                        Command("Delete Layer", Shortcut(Key.delete, primary = true, shift = true), id = "delete_layer"),
-                        Command("Show/Hide Layer", Shortcut(Key.h, primary = true, shift = true), id = "toggle_layer"),
-                        Command("Brush", Shortcut(Key.b), id = "brush"),
-                        Command("Eraser", Shortcut(Key.e), id = "eraser"),
-                        Command("Hand", Shortcut(Key.h), id = "hand"),
-                        Command("Zoom", Shortcut(Key.z), id = "zoom"),
-                        Command("Undo", Shortcut(Key.z, primary = true), id = "undo"),
-                        Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo"),
-                        Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger"),
-                        Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller"),
-                        Command("Marquee", Shortcut(Key.m), id = "marquee"),
-                        Command("Select All", Shortcut(Key.a, primary = true), id = "select_all"),
-                        Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect"),
-                        Command("Clear", Shortcut(Key.backspace), id = "clear"),
-                        Command("Fill", Shortcut(Key.backspace, alt = true), id = "fill"),
-                        Command("Move", Shortcut(Key.v), id = "move"),
-                        Command("Duplicate Layer", Shortcut(Key.j, primary = true), id = "duplicate"),
-                        Command("Move Layer Up", Shortcut(Key.right_bracket, primary = true), id = "layer_up"),
-                        Command("Move Layer Down", Shortcut(Key.left_bracket, primary = true), id = "layer_down"),
-                        Command("Merge Down", Shortcut(Key.e, primary = true), id = "merge_down"),
-                        Command("Lasso", Shortcut(Key.l), id = "lasso"),
-                        Command("Inverse", Shortcut(Key.i, primary = true, shift = true), id = "inverse")]
         let connections: list[Connection] = []
-        connections.append(commands[0].on_trigger(panels.new_document))
-        connections.append(commands[1].on_trigger(panels.open_document))
-        connections.append(commands[2].on_trigger(panels.save_document))
-        connections.append(commands[3].on_trigger(panels.save_document_as))
-        connections.append(commands[4].on_trigger(panels.zoom_in))
-        connections.append(commands[5].on_trigger(panels.zoom_out))
-        connections.append(commands[6].on_trigger(panels.fit))
-        connections.append(commands[7].on_trigger(panels.actual_size))
-        connections.append(commands[8].on_trigger(panels.add_layer))
-        connections.append(commands[9].on_trigger(panels.delete_layer))
-        connections.append(commands[10].on_trigger(panels.toggle_visibility))
-        connections.append(commands[11].on_trigger(panels.brush))
-        connections.append(commands[12].on_trigger(panels.eraser))
-        connections.append(commands[13].on_trigger(panels.hand))
-        connections.append(commands[14].on_trigger(panels.zoom_tool))
-        connections.append(commands[15].on_trigger(panels.undo))
-        connections.append(commands[16].on_trigger(panels.redo))
-        connections.append(commands[17].on_trigger(panels.bigger))
-        connections.append(commands[18].on_trigger(panels.smaller))
-        connections.append(commands[19].on_trigger(panels.marquee))
-        connections.append(commands[20].on_trigger(panels.select_all))
-        connections.append(commands[21].on_trigger(panels.deselect))
-        connections.append(commands[22].on_trigger(panels.clear_selection))
-        connections.append(commands[23].on_trigger(panels.fill_selection))
-        connections.append(commands[24].on_trigger(panels.move))
-        connections.append(commands[25].on_trigger(panels.duplicate_layer))
-        connections.append(commands[26].on_trigger(panels.layer_up))
-        connections.append(commands[27].on_trigger(panels.layer_down))
-        connections.append(commands[28].on_trigger(panels.merge_down))
-        connections.append(commands[29].on_trigger(panels.lasso))
-        connections.append(commands[30].on_trigger(panels.invert_selection))
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()))
-        app.set_commands(commands)
+        app.set_commands(actions.all)
         self.app = app
         self.workspace = workspace
         self.panels = panels

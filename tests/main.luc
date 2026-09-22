@@ -2,6 +2,7 @@ from ui import Font
 from gpu import Frame
 from workspace import Workspace
 from panels import Panels
+from actions import Actions
 from view import CanvasView
 import window
 
@@ -53,11 +54,17 @@ func viewing() -> unit!:
 func contents() -> unit!:
     let workspace = Workspace(300, 200)
     let font = Font()
-    let panels = Panels(workspace, font)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, font)
     panels.add_layer()
     assert(workspace.layer_count() == 2)
     panels.select_layer(0)
     assert(workspace.selected == 0)
-    panels.zoom_in()
+    actions.zoom_in.trigger()
     assert(workspace.zoom == 2.0)
+    assert(not actions.undo.is_enabled() and not actions.crop.is_enabled())
+    actions.select_all.trigger()
+    assert(actions.crop.is_enabled())
+    actions.tools[4].trigger()
+    assert(workspace.tool == "brush")
     panels.close()

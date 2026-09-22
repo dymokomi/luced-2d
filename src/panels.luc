@@ -2,7 +2,7 @@ from ui import Font, Text, Button, VStack, HStack, Toolbar, SplitView, Size, Tex
 from gpu import Color
 from interop import Connection
 from workspace import Workspace
-from canvas import Canvas
+from actions import Actions
 from view import CanvasView
 from layers import LayerList
 
@@ -16,8 +16,7 @@ pub class Panels:
     pub let status: Text
     pub let prompt: TextPrompt
     pub let layers: LayerList
-    pub let adjustments: list[Command]
-    pub let blends: list[Command]
+    pub let actions: Actions
     pub let header_title: Text
     pub let header_hint: Text
     pub let size_slider: Slider
@@ -38,33 +37,16 @@ pub class Panels:
     let connections: list[Connection]
     var prompt_mode: str = ""
 
-    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+    pub func init(self, workspace: Workspace, actions: Actions, font: Font) -> unit!:
         self.workspace = workspace
+        self.actions = actions
         self.font = font
         self.connections = []
         self.view = CanvasView(workspace)
         self.prompt = TextPrompt(font = font)
         self.layers = LayerList(workspace, font)
         self.status = Text("", font = font)
-        # Adjustments and blend modes are commands, so menus and shortcuts share them.
-        self.adjustments = [Command("Brightness / Contrast", id = "adjust_0"), Command("Hue / Saturation / Lightness", id = "adjust_1"),
-                            Command("Invert", id = "adjust_2"), Command("Levels", id = "adjust_3"), Command("Desaturate", id = "adjust_4"),
-                            Command("Threshold", id = "adjust_5"), Command("Posterize", id = "adjust_6")]
-        var kind = 0
-        for command in self.adjustments:
-            let selected = kind
-            self.connections.append(command.on_trigger(func () -> unit!:
-                self.adjust(selected)))
-            kind += 1
-        self.blends = []
-        var mode = 0
-        while mode < Canvas.blend_mode_count():
-            let chosen = mode
-            let command = Command(Canvas.blend_mode_name(mode), id = f"blend_{mode}")
-            self.connections.append(command.on_trigger(func () -> unit!:
-                self.set_blend(chosen)))
-            self.blends.append(command)
-            mode += 1
+        self.connect()
         # The contextual header: what the active tool needs.
         self.header_title = Text("Brush", font = font)
         self.header_hint = Text("", font = font)
@@ -108,30 +90,25 @@ pub class Panels:
         bar_items.append(self.button("Apply", self.apply_preview))
         self.adjust_bar = HStack(bar_items, spacing = 12.0, padding = 8.0)
         self.adjust_bar.layout().set_visible(false)
-        let menus = Toolbar([Menu("File", [self.command("New…", self.new_document), self.command("Open…", self.open_document),
-                                           self.command("Save", self.save_document), self.command("Save As…", self.save_document_as)], font = font),
-                             Menu("Edit", [self.command("Undo", self.undo), self.command("Redo", self.redo),
-                                           self.command("Fill Selection with Colour", self.fill_selection), self.command("Clear Selection", self.clear_selection)], font = font),
-                             Menu("Select", [self.command("All", self.select_all), self.command("Deselect", self.deselect), self.command("Inverse", self.invert_selection),
-                                             self.command("Expand…", self.expand_selection), self.command("Contract…", self.contract_selection), self.command("Feather…", self.feather_selection)], font = font),
-                             Menu("Image", [self.command("Crop to Selection", self.crop), self.command("Canvas Size…", self.canvas_size),
-                                            self.command("Image Size…", self.image_size)], font = font),
-                             Menu("Adjust", self.adjustments, font = font),
-                             Menu("Layer", [self.command("New Layer", self.add_layer), self.command("Duplicate Layer", self.duplicate_layer),
-                                            self.command("Move Layer Up", self.layer_up), self.command("Move Layer Down", self.layer_down),
-                                            self.command("Merge Down", self.merge_down), self.command("Delete Layer", self.delete_layer),
-                                            self.command("Add / Remove Mask", self.toggle_mask), self.command("Edit Mask / Pixels", self.toggle_mask_editing),
-                                            self.command("Clip to Below / Release", self.toggle_clipped), self.command("Hide / Show", self.toggle_visibility)], font = font),
-                             Menu("Filter", [self.command("Gaussian Blur…", self.blur)], font = font),
-                             Menu("View", [self.command("Fit", self.fit), self.command("Actual Size", self.actual_size),
-                                           self.command("Zoom In", self.zoom_in), self.command("Zoom Out", self.zoom_out)], font = font),
+        # The menus present the shared commands, shortcuts and all.
+        let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as], font = font),
+                             Menu("Edit", [actions.undo, actions.redo, actions.fill, actions.clear], font = font),
+                             Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
+                             Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
+                             Menu("Adjust", actions.adjustments, font = font),
+                             Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
+                                            actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility], font = font),
+                             Menu("Filter", [actions.blur], font = font),
+                             Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
                              Spacer(), self.header_hint], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, Spacer()], font = font)
-        # The tool rail: one button per tool.
-        let rail = VStack([self.tool_button("move-tool", "move"), self.tool_button("selection-tool", "marquee"), self.tool_button("ellipse-select-tool", "ellipse"),
-                           self.tool_button("lasso-tool", "lasso"), self.tool_button("brush-tool", "brush"),
-                           self.tool_button("eraser-tool", "eraser"), self.tool_button("pan-tool", "hand"), self.tool_button("zoom-in", "zoom"),
-                           Spacer(), self.icon_button("undo", self.undo), self.icon_button("redo", self.redo)], spacing = 6.0, padding = 10.0)
+        # The tool rail: one icon button per tool command.
+        var rail_items: list[Widget] = []
+        var index = 0
+        for command in actions.tools:
+            rail_items.append(self.tool_button(actions.tool_icons[index], command))
+            index += 1
+        let rail = VStack(rail_items, spacing = 6.0, padding = 10.0)
         rail.layout().set_limits(Size(56.0, 100.0), Size(56.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
         # The layers panel: appearance, the list, and the footer.
@@ -141,7 +118,7 @@ pub class Panels:
             self.workspace.set_opacity(value / 100.0)
             self.layers.layout().invalidate()))
         let appearance = VStack([HStack([Text("Layers", font = font), Spacer(), self.layer_count], spacing = 8.0),
-                                 HStack([Text("Blend", font = font), Menu("Choose ▾", self.blends, font = font), Spacer()], spacing = 8.0),
+                                 HStack([Text("Blend", font = font), Menu("Choose ▾", actions.blends, font = font), Spacer()], spacing = 8.0),
                                  self.layer_opacity], spacing = 6.0, padding = 10.0)
         let footer = HStack([self.icon_button("plus", self.add_layer), self.icon_button("layer-mask", self.toggle_mask), self.icon_button("send-backward", self.toggle_clipped),
                              Spacer(), self.icon_button("trash", self.delete_layer)], spacing = 6.0, padding = 8.0)
@@ -236,15 +213,68 @@ pub class Panels:
         self.connections.append(button.on_click(callback))
         return button
 
-    func command(self, text: str, callback: func() -> unit!) -> Command!:
-        let command = Command(text)
-        self.connections.append(command.on_trigger(callback))
-        return command
+    ## Wire every shared command to what this window does for it.
+    func connect(self) -> unit!:
+        let actions = self.actions
+        self.bind(actions.new_document, self.new_document)
+        self.bind(actions.open_document, self.open_document)
+        self.bind(actions.save, self.save_document)
+        self.bind(actions.save_as, self.save_document_as)
+        self.bind(actions.undo, self.undo)
+        self.bind(actions.redo, self.redo)
+        self.bind(actions.fill, self.fill_selection)
+        self.bind(actions.clear, self.clear_selection)
+        self.bind(actions.select_all, self.select_all)
+        self.bind(actions.deselect, self.deselect)
+        self.bind(actions.inverse, self.invert_selection)
+        self.bind(actions.expand, self.expand_selection)
+        self.bind(actions.contract, self.contract_selection)
+        self.bind(actions.feather, self.feather_selection)
+        self.bind(actions.crop, self.crop)
+        self.bind(actions.canvas_size, self.canvas_size)
+        self.bind(actions.image_size, self.image_size)
+        self.bind(actions.blur, self.blur)
+        self.bind(actions.add_layer, self.add_layer)
+        self.bind(actions.duplicate_layer, self.duplicate_layer)
+        self.bind(actions.layer_up, self.layer_up)
+        self.bind(actions.layer_down, self.layer_down)
+        self.bind(actions.merge_down, self.merge_down)
+        self.bind(actions.delete_layer, self.delete_layer)
+        self.bind(actions.toggle_mask, self.toggle_mask)
+        self.bind(actions.toggle_mask_editing, self.toggle_mask_editing)
+        self.bind(actions.toggle_clipped, self.toggle_clipped)
+        self.bind(actions.toggle_visibility, self.toggle_visibility)
+        self.bind(actions.fit, self.fit)
+        self.bind(actions.actual_size, self.actual_size)
+        self.bind(actions.zoom_in, self.zoom_in)
+        self.bind(actions.zoom_out, self.zoom_out)
+        self.bind(actions.bigger, self.bigger)
+        self.bind(actions.smaller, self.smaller)
+        var kind = 0
+        for command in actions.adjustments:
+            let selected = kind
+            self.bind(command, func () -> unit!:
+                self.adjust(selected))
+            kind += 1
+        var mode = 0
+        for command in actions.blends:
+            let chosen = mode
+            self.bind(command, func () -> unit!:
+                self.set_blend(chosen))
+            mode += 1
+        for command in actions.tools:
+            let tool = command.id()
+            self.bind(command, func () -> unit!:
+                self.choose_tool(tool))
 
-    func tool_button(self, icon: str, tool: str) -> Button!:
+    func bind(self, command: Command, callback: func() -> unit!) -> unit!:
+        self.connections.append(command.on_trigger(callback))
+
+    ## A square icon button that triggers a tool command.
+    func tool_button(self, icon: str, command: Command) -> Button!:
         let button = Button(icon = icon, font = self.font)
         self.connections.append(button.on_click(func () -> unit!:
-            self.choose_tool(tool)))
+            command.trigger()))
         button.layout().set_size(36.0, 36.0)
         return button
 
@@ -264,21 +294,6 @@ pub class Panels:
     pub func choose_tool(self, tool: str) -> unit!:
         self.workspace.choose_tool(tool)
         self.refresh()
-
-    pub func brush(self) -> unit!:
-        self.choose_tool("brush")
-
-    pub func eraser(self) -> unit!:
-        self.choose_tool("eraser")
-
-    pub func hand(self) -> unit!:
-        self.choose_tool("hand")
-
-    pub func marquee(self) -> unit!:
-        self.choose_tool("marquee")
-
-    pub func move(self) -> unit!:
-        self.choose_tool("move")
 
     pub func blur(self) -> unit!:
         self.open_preview(7, "Gaussian Blur")
@@ -300,12 +315,6 @@ pub class Panels:
     pub func feather_selection(self) -> unit!:
         self.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather")
 
-    pub func ellipse(self) -> unit!:
-        self.choose_tool("ellipse")
-
-    pub func lasso(self) -> unit!:
-        self.choose_tool("lasso")
-
     pub func deselect(self) -> unit!:
         self.workspace.deselect()
         self.refresh()
@@ -317,9 +326,6 @@ pub class Panels:
     pub func clear_selection(self) -> unit!:
         self.workspace.fill_selection(true)
         self.refresh()
-
-    pub func zoom_tool(self) -> unit!:
-        self.choose_tool("zoom")
 
     func cancel_prompt(self):
         self.prompt_mode = ""
@@ -587,6 +593,7 @@ pub class Panels:
         self.header_hint.set_text(hint)
         self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  sRGB · Transparent  |  {name}")
         self.layer_count.set_text(f"{workspace.layer_count()}")
+        self.actions.update(workspace)
         self.layer_opacity.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
         self.layers.layout().invalidate()
         self.view.layout().invalidate()
