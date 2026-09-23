@@ -14,6 +14,8 @@ pub class CanvasView: Widget:
     pub let workspace: Workspace
     ## Called when the text tool clicks, after the position is remembered.
     pub var on_text: func() -> unit!? = none
+    ## Files dropped on the canvas: the ones luced-2d can open.
+    pub var on_open_files: func(list[str]) -> unit!? = none
     var dragging: bool = false
     var painting: bool = false
     ## A gradient drag in progress, from a document point.
@@ -55,6 +57,8 @@ pub class CanvasView: Widget:
         self.box.set_cursor(Cursor.arrow)
         self.box.set_flex()
         self.box.set_limits(Size(200.0, 160.0), Size(16384.0, 16384.0))
+        # Pictures and documents dropped on the canvas open, each in its own tab.
+        self.box.set_drop_target(true)
 
     pub func layout(self) -> Layout:
         return self.box
@@ -151,7 +155,28 @@ pub class CanvasView: Widget:
     func document_y(self, y: float) -> float:
         return (y - self.workspace.offset_y) / self.workspace.zoom
 
+    ## The dragged files luced-2d can open.
+    func openable(self) -> list[str]!:
+        var found: list[str] = []
+        var index = 0
+        while index < self.box.drop_count():
+            let path = self.box.drop_path(index)
+            if self.workspace.can_open(path):
+                found.append(path)
+            index += 1
+        return found
+
     pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.drag_entered:
+            self.box.set_drop_accepted(self.openable().length > 0)
+            return
+        if event.kind == EventKind.drop:
+            let files = self.openable()
+            if let open = self.on_open_files:
+                open(files)
+            return
+        if event.kind == EventKind.drag_moved or event.kind == EventKind.drag_left:
+            return
         if event.cancelled:
             self.dragging = false
             if self.painting:

@@ -230,6 +230,31 @@ pub class Workspace:
         self.path = path
         self.touch()
 
+    ## Whether `path` is a file luced-2d opens: a picture, a Photoshop document or
+    ## its own .l2d package.
+    pub func can_open(self, path: str) -> bool:
+        let lowered = path.lower()
+        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".psd", ".l2d"]:
+            if lowered.ends_with(suffix):
+                return true
+        return false
+
+    ## Whether `path` is a picture that can become a layer.
+    pub func can_place(self, path: str) -> bool:
+        let lowered = path.lower()
+        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr"]:
+            if lowered.ends_with(suffix):
+                return true
+        return false
+
+    ## Put the picture at `path` on a new layer named after the file, centred on
+    ## document point (`x`, `y`), and select it.
+    pub func place_file(self, path: str, x: float, y: float) -> unit!:
+        let id = self.canvas.add_layer(paths.stem(path))
+        self.canvas.place_layer(id, path, int(x), int(y))
+        self.selected = self.layer_count() - 1
+        self.touch()
+
     pub func layer_count(self) -> int:
         return self.canvas.layer_count()
 

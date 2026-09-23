@@ -109,11 +109,13 @@ pub class Panels:
         self.connections = []
         self.view = CanvasView(workspace)
         self.tabs = DocumentTabs(workspace, font)
+        self.view.on_open_files = self.open_files
         self.tabs.on_switch = self.switch_document
         self.tabs.on_close = self.close_document_at
         self.tabs.on_new = self.new_document
         self.prompt = TextPrompt(font = font)
         self.layers = LayerList(workspace, font)
+        self.layers.on_place_files = self.place_files
         self.status = Text("", font = font)
         self.style_on = [false, false, false]
         self.style_before = []
@@ -871,6 +873,22 @@ pub class Panels:
 
     func close_crash(self) -> unit!:
         self.crash_dialog.hide()
+
+    ## Files dropped on the canvas: each opens in its own tab.
+    pub func open_files(self, files: list[str]) -> unit!:
+        for path in files:
+            self.workspace.open(path) catch failure:
+                self.ask("", f"Could not open {path}: {failure.message}", "", "OK")
+                continue
+        self.refresh()
+
+    ## Pictures dropped on the layer list: each becomes a layer, centred.
+    pub func place_files(self, files: list[str]) -> unit!:
+        for path in files:
+            self.workspace.place_file(path, float(self.workspace.width()) * 0.5, float(self.workspace.height()) * 0.5) catch failure:
+                self.ask("", f"Could not place {path}: {failure.message}", "", "OK")
+                continue
+        self.refresh()
 
     pub func switch_document(self, index: int) -> unit!:
         self.workspace.switch_document(index)
