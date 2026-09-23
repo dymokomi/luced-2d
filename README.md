@@ -93,8 +93,9 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   luce-color's (`hsl`, `lab`, `space`, `transfer`).
 - `src/panels.luc`: the window: menu bar, contextual tool header (preset
   menu, Size/Hardness/Opacity/Flow/Spacing scrubbers and Brush…, which opens
-  the Brush Settings dialog: Tip Shape, Shape Dynamics, Scattering, Texture,
-  Colour Dynamics, Transfer), then a dock of panes after
+  the Brush Settings dialog — an accordion of Tip Shape, Shape Dynamics,
+  Scattering, Texture, Colour Dynamics and Transfer, one section open at a
+  time), then a dock of panes after
   eleusis-layout (see `docs/ELEUSIS_UI.md`): the Viewport with its tool rail,
   Layers with its actions on a shelf at the bottom, Properties for the
   selected layer (name field, blend menu, opacity slider and field, flag

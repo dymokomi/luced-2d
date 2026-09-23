@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion
 from interop import Connection
 from workspace import Workspace
 from canvas import Canvas
@@ -636,54 +636,55 @@ pub class Panels:
         return button
 
     ## Brush Settings…: Photoshop's sections — Tip Shape, Shape Dynamics,
-    ## Scattering, Texture, Colour Dynamics, Transfer — each a heading over rows
-    ## of a slider and a number field. Edits go straight to the workspace; the
-    ## next stroke paints with them.
+    ## Scattering, Texture, Colour Dynamics, Transfer — as an accordion, one
+    ## open at a time, each rows of a slider and a number field. Edits go
+    ## straight to the workspace; the next stroke paints with them.
     func build_brush_dialog(self, font: Font) -> Dialog!:
-        var items: list[Widget] = [Text("Brush Settings", font = font)]
-        items.append(self.section("Tip Shape"))
-        items.append(self.brush_row("Spacing", 1.0, 500.0, 0, "%", func (value: float) -> unit!:
+        var tip: list[Widget] = []
+        tip.append(self.brush_row("Spacing", 1.0, 500.0, 0, "%", func (value: float) -> unit!:
             self.workspace.spacing = value / 100.0))
-        items.append(self.brush_row("Angle", -180.0, 180.0, 0, "°", func (value: float) -> unit!:
+        tip.append(self.brush_row("Angle", -180.0, 180.0, 0, "°", func (value: float) -> unit!:
             self.workspace.angle = value))
-        items.append(self.brush_row("Roundness", 5.0, 100.0, 0, "%", func (value: float) -> unit!:
+        tip.append(self.brush_row("Roundness", 5.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.roundness = value / 100.0))
-        items.append(self.brush_row("Smoothing", 0.0, 100.0, 0, " px", func (value: float) -> unit!:
+        tip.append(self.brush_row("Smoothing", 0.0, 100.0, 0, " px", func (value: float) -> unit!:
             self.workspace.smoothing = value))
-        items.append(self.section("Shape Dynamics"))
-        items.append(self.brush_row("Size Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        var shape: list[Widget] = []
+        shape.append(self.brush_row("Size Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.size_jitter = value / 100.0))
-        items.append(self.brush_row("Angle Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        shape.append(self.brush_row("Angle Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.angle_jitter = value / 100.0))
-        items.append(self.brush_row("Roundness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        shape.append(self.brush_row("Roundness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.roundness_jitter = value / 100.0))
-        items.append(self.brush_check("Pen pressure controls size", func () -> unit!:
+        shape.append(self.brush_check("Pen pressure controls size", func () -> unit!:
             self.workspace.pressure_size = not self.workspace.pressure_size))
-        items.append(self.section("Scattering"))
-        items.append(self.brush_row("Scatter", 0.0, 1000.0, 0, "%", func (value: float) -> unit!:
+        var scattering: list[Widget] = []
+        scattering.append(self.brush_row("Scatter", 0.0, 1000.0, 0, "%", func (value: float) -> unit!:
             self.workspace.scatter = value / 100.0))
-        items.append(self.brush_row("Count", 1.0, 16.0, 0, "", func (value: float) -> unit!:
+        scattering.append(self.brush_row("Count", 1.0, 16.0, 0, "", func (value: float) -> unit!:
             self.workspace.scatter_count = int(value)))
-        items.append(self.section("Texture"))
-        items.append(self.dialog_row("Pattern", self.texture_menu))
-        items.append(self.brush_row("Scale", 10.0, 1000.0, 0, "%", func (value: float) -> unit!:
+        var texture: list[Widget] = [self.dialog_row("Pattern", self.texture_menu)]
+        texture.append(self.brush_row("Scale", 10.0, 1000.0, 0, "%", func (value: float) -> unit!:
             self.workspace.texture_scale = value / 100.0))
-        items.append(self.brush_row("Depth", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        texture.append(self.brush_row("Depth", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.texture_depth = value / 100.0))
-        items.append(self.section("Colour Dynamics"))
-        items.append(self.brush_row("Hue Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        var colour: list[Widget] = []
+        colour.append(self.brush_row("Hue Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.hue_jitter = value / 100.0))
-        items.append(self.brush_row("Saturation Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        colour.append(self.brush_row("Saturation Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.saturation_jitter = value / 100.0))
-        items.append(self.brush_row("Brightness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        colour.append(self.brush_row("Brightness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.brightness_jitter = value / 100.0))
-        items.append(self.section("Transfer"))
-        items.append(self.brush_row("Flow Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        var transfer: list[Widget] = []
+        transfer.append(self.brush_row("Flow Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.flow_jitter = value / 100.0))
-        items.append(self.brush_check("Pen pressure controls flow", func () -> unit!:
+        transfer.append(self.brush_check("Pen pressure controls flow", func () -> unit!:
             self.workspace.pressure_flow = not self.workspace.pressure_flow))
-        items.append(HStack([Spacer(), self.button("Done", self.close_brush)], spacing = 8.0))
-        return Dialog(items, width = 480.0, spacing = 6.0)
+        var sections: list[Widget] = []
+        for rows in [tip, shape, scattering, texture, colour, transfer]:
+            sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
+        let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Colour Dynamics", "Transfer"], sections, font = font, open = 0)
+        return Dialog([Text("Brush Settings", font = font), stack, HStack([Spacer(), self.button("Done", self.close_brush)], spacing = 8.0)], width = 480.0, spacing = 8.0)
 
     ## The texture menu's entries: picking one sets the pattern.
     func texture_commands(self) -> list[Command]!:
@@ -698,10 +699,6 @@ pub class Panels:
             kinds.append(command)
             kind += 1
         return kinds
-
-    ## A section heading in the brush dialog.
-    func section(self, title: str) -> Widget!:
-        return VStack([Text(title, font = self.font), Rule()], spacing = 2.0)
 
     ## A dialog row: a muted label in a 140-point column, then the control.
     func dialog_row(self, label: str, control: Widget) -> Widget!:
