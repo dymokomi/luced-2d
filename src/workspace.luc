@@ -26,9 +26,31 @@ pub class Workspace:
     ## Magic wand settings: colour tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     pub var contiguous: bool = true
+    ## The brush, in Photoshop's units: size and edge, strength, tip shape,
+    ## dynamics (jitters 0..1, pressure controls), scattering, texture.
     pub var diameter: float = 32.0
     pub var hardness: float = 0.75
     pub var opacity: float = 1.0
+    pub var flow: float = 1.0
+    pub var spacing: float = 0.25
+    pub var angle: float = 0.0
+    pub var roundness: float = 1.0
+    pub var smoothing: float = 0.0
+    pub var size_jitter: float = 0.0
+    pub var angle_jitter: float = 0.0
+    pub var roundness_jitter: float = 0.0
+    pub var pressure_size: bool = true
+    pub var pressure_flow: bool = false
+    pub var scatter: float = 0.0
+    pub var scatter_count: int = 1
+    pub var flow_jitter: float = 0.0
+    pub var hue_jitter: float = 0.0
+    pub var saturation_jitter: float = 0.0
+    pub var brightness_jitter: float = 0.0
+    pub var texture: int = 0
+    pub var texture_scale: float = 1.0
+    pub var texture_depth: float = 0.5
+    pub var preset: str = "Hard Round"
     ## The foreground and background colours (linear), black over white by
     ## default, as Compositor's palette: the brush, text and fills use the
     ## foreground; gradients run to the background; cmd-Delete fills with it.
@@ -184,10 +206,79 @@ pub class Workspace:
 
     ## Push the brush settings to the canvas and start a stroke on the selected layer.
     ## Start a stroke; `pressure` is the stylus's, 0..1, or zero from a mouse.
+    ## Push every brush setting to the canvas.
+    pub func apply_brush(self) -> unit!:
+        self.canvas.set_brush(self.diameter, self.hardness, self.opacity, self.flow, self.red, self.green, self.blue, self.erasing)
+        self.canvas.set_brush_shape(self.spacing, self.angle, self.roundness, self.smoothing)
+        self.canvas.set_brush_dynamics(self.size_jitter, self.angle_jitter, self.roundness_jitter, self.scatter, self.scatter_count,
+                                       self.flow_jitter, self.hue_jitter, self.saturation_jitter, self.brightness_jitter, self.pressure_size, self.pressure_flow)
+        self.canvas.set_brush_texture(self.texture, self.texture_scale, self.texture_depth)
+
+    ## The built-in presets, Photoshop's usual first few; `name` picks one.
+    pub func preset_names(self) -> list[str]:
+        return ["Hard Round", "Soft Round", "Airbrush", "Chalk", "Spatter", "Ink Pen", "Canvas Wash"]
+
+    pub func apply_preset(self, name: str) -> unit!:
+        self.preset = name
+        self.hardness = 1.0
+        self.flow = 1.0
+        self.spacing = 0.25
+        self.angle = 0.0
+        self.roundness = 1.0
+        self.smoothing = 0.0
+        self.size_jitter = 0.0
+        self.angle_jitter = 0.0
+        self.roundness_jitter = 0.0
+        self.pressure_size = true
+        self.pressure_flow = false
+        self.scatter = 0.0
+        self.scatter_count = 1
+        self.flow_jitter = 0.0
+        self.hue_jitter = 0.0
+        self.saturation_jitter = 0.0
+        self.brightness_jitter = 0.0
+        self.texture = 0
+        self.texture_scale = 1.0
+        self.texture_depth = 0.5
+        if name == "Soft Round":
+            self.hardness = 0.2
+        elif name == "Airbrush":
+            self.hardness = 0.0
+            self.flow = 0.1
+            self.spacing = 0.05
+            self.pressure_flow = true
+        elif name == "Chalk":
+            self.hardness = 0.9
+            self.roundness = 0.8
+            self.angle = 35.0
+            self.texture = 1
+            self.texture_depth = 0.9
+            self.spacing = 0.1
+        elif name == "Spatter":
+            self.hardness = 0.6
+            self.spacing = 0.5
+            self.scatter = 1.5
+            self.scatter_count = 4
+            self.size_jitter = 0.6
+            self.flow_jitter = 0.5
+        elif name == "Ink Pen":
+            self.spacing = 0.08
+            self.smoothing = 6.0
+            self.roundness = 0.6
+            self.angle = 45.0
+        elif name == "Canvas Wash":
+            self.hardness = 0.3
+            self.flow = 0.3
+            self.spacing = 0.15
+            self.texture = 2
+            self.texture_scale = 1.5
+            self.texture_depth = 0.7
+        self.touch()
+
     pub func begin_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
         if not self.canvas.layer_visible(self.selected):
             return
-        self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.red, self.green, self.blue, self.erasing)
+        self.apply_brush()
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
 

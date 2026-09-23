@@ -26,6 +26,16 @@ pub class Panels:
     pub let size_field: NumberField
     pub let hardness_field: NumberField
     pub let opacity_field: NumberField
+    pub let flow_field: NumberField
+    pub let spacing_field: NumberField
+    pub let preset_menu: Menu
+    ## Brush Settings…: one dialog with Photoshop's sections, its controls in the
+    ## order `show_brush` writes them.
+    pub let brush_dialog: Dialog
+    let brush_fields: list[NumberField]
+    let brush_sliders: list[Slider]
+    let brush_checks: list[Checkbox]
+    let texture_menu: Menu
     pub let layer_opacity: Slider
     pub let layer_opacity_field: NumberField
     pub let brush_controls: HStack
@@ -110,6 +120,28 @@ pub class Panels:
         self.connections.append(self.opacity_field.on_change(func (value: float) -> unit!:
             self.workspace.opacity = value / 100.0
             self.workspace.touch()))
+        self.flow_field = NumberField(workspace.flow * 100.0, 1.0, 100.0, 1.0, suffix = "%", font = font)
+        self.connections.append(self.flow_field.on_change(func (value: float) -> unit!:
+            self.workspace.flow = value / 100.0
+            self.workspace.touch()))
+        self.spacing_field = NumberField(workspace.spacing * 100.0, 1.0, 500.0, 1.0, suffix = "%", font = font)
+        self.connections.append(self.spacing_field.on_change(func (value: float) -> unit!:
+            self.workspace.spacing = value / 100.0
+            self.workspace.touch()))
+        var presets: list[Command] = []
+        for name in workspace.preset_names():
+            let chosen = name
+            let command = Command(name, id = "preset_" + name)
+            self.connections.append(command.on_trigger(func () -> unit!:
+                self.workspace.apply_preset(chosen)
+                self.refresh()))
+            presets.append(command)
+        self.preset_menu = Menu(workspace.preset + " ▾", presets, font = font)
+        self.brush_fields = []
+        self.brush_sliders = []
+        self.brush_checks = []
+        self.texture_menu = Menu("None ▾", self.texture_commands(), font = font)
+        self.brush_dialog = self.build_brush_dialog(font)
         self.palette = Palette(workspace)
         self.palette.on_pick = self.pick_color
         self.picker = ColorPicker(workspace, font)
@@ -117,7 +149,8 @@ pub class Panels:
         self.picker.committed = self.settings_dialog.remember
         # On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
         self.mask_prompt = Dialog([Text("Mask colour", font = font), HStack([self.button("Black · Hide", self.choose_mask_black), self.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
-        self.brush_controls = HStack([self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field)], spacing = 12.0)
+        self.brush_controls = HStack([self.preset_menu, self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field),
+                                      self.labelled("Flow", self.flow_field), self.labelled("Spacing", self.spacing_field), self.button("Brush…", self.open_brush)], spacing = 12.0)
         self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
         self.connections.append(self.tolerance_slider.on_change(func (value: float) -> unit!:
             self.workspace.tolerance = value))
@@ -256,7 +289,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.settings_dialog.dialog], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.brush_dialog, self.settings_dialog.dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -585,6 +618,142 @@ pub class Panels:
         self.connections.append(button.on_click(callback))
         button.layout().set_size(25.0, 25.0)
         return button
+
+    ## Brush Settings…: Photoshop's sections — Tip Shape, Shape Dynamics,
+    ## Scattering, Texture, Colour Dynamics, Transfer — each a heading over rows
+    ## of a slider and a number field. Edits go straight to the workspace; the
+    ## next stroke paints with them.
+    func build_brush_dialog(self, font: Font) -> Dialog!:
+        var items: list[Widget] = [Text("Brush Settings", font = font)]
+        items.append(self.section("Tip Shape"))
+        items.append(self.brush_row("Spacing", 1.0, 500.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.spacing = value / 100.0))
+        items.append(self.brush_row("Angle", -180.0, 180.0, 0, "°", func (value: float) -> unit!:
+            self.workspace.angle = value))
+        items.append(self.brush_row("Roundness", 5.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.roundness = value / 100.0))
+        items.append(self.brush_row("Smoothing", 0.0, 100.0, 0, " px", func (value: float) -> unit!:
+            self.workspace.smoothing = value))
+        items.append(self.section("Shape Dynamics"))
+        items.append(self.brush_row("Size Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.size_jitter = value / 100.0))
+        items.append(self.brush_row("Angle Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.angle_jitter = value / 100.0))
+        items.append(self.brush_row("Roundness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.roundness_jitter = value / 100.0))
+        items.append(self.brush_check("Pen pressure controls size", func () -> unit!:
+            self.workspace.pressure_size = not self.workspace.pressure_size))
+        items.append(self.section("Scattering"))
+        items.append(self.brush_row("Scatter", 0.0, 1000.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.scatter = value / 100.0))
+        items.append(self.brush_row("Count", 1.0, 16.0, 0, "", func (value: float) -> unit!:
+            self.workspace.scatter_count = int(value)))
+        items.append(self.section("Texture"))
+        items.append(self.dialog_row("Pattern", self.texture_menu))
+        items.append(self.brush_row("Scale", 10.0, 1000.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.texture_scale = value / 100.0))
+        items.append(self.brush_row("Depth", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.texture_depth = value / 100.0))
+        items.append(self.section("Colour Dynamics"))
+        items.append(self.brush_row("Hue Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.hue_jitter = value / 100.0))
+        items.append(self.brush_row("Saturation Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.saturation_jitter = value / 100.0))
+        items.append(self.brush_row("Brightness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.brightness_jitter = value / 100.0))
+        items.append(self.section("Transfer"))
+        items.append(self.brush_row("Flow Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+            self.workspace.flow_jitter = value / 100.0))
+        items.append(self.brush_check("Pen pressure controls flow", func () -> unit!:
+            self.workspace.pressure_flow = not self.workspace.pressure_flow))
+        items.append(HStack([Spacer(), self.button("Done", self.close_brush)], spacing = 8.0))
+        return Dialog(items, width = 480.0, spacing = 6.0)
+
+    ## The texture menu's entries: picking one sets the pattern.
+    func texture_commands(self) -> list[Command]!:
+        var kinds: list[Command] = []
+        var kind = 0
+        for name in ["None", "Grain", "Canvas", "Dots"]:
+            let chosen = kind
+            let command = Command(name, id = f"texture_{kind}")
+            self.connections.append(command.on_trigger(func () -> unit!:
+                self.workspace.texture = chosen
+                self.show_brush()))
+            kinds.append(command)
+            kind += 1
+        return kinds
+
+    ## A section heading in the brush dialog.
+    func section(self, title: str) -> Widget!:
+        return VStack([Text(title, font = self.font), Rule()], spacing = 2.0)
+
+    ## A dialog row: a muted label in a 140-point column, then the control.
+    func dialog_row(self, label: str, control: Widget) -> Widget!:
+        let caption = Text(label, font = self.font, muted = true)
+        caption.layout().set_limits(Size(140.0, 0.0), Size(140.0, 16384.0))
+        return HStack([caption, control], spacing = 10.0)
+
+    ## A brush setting: slider and number field in step, `apply` taking the value.
+    func brush_row(self, label: str, minimum: float, maximum: float, decimals: int, suffix: str, apply: func(float) -> unit!) -> Widget!:
+        let step = 1.0 if decimals == 0 else 0.1
+        let slider = Slider("", minimum, maximum, minimum, step, decimals = decimals, font = self.font, show_value = false)
+        slider.layout().set_flex()
+        let field = NumberField(minimum, minimum, maximum, step, decimals, suffix = suffix, font = self.font, cells = 7.0)
+        self.connections.append(slider.on_change(func (value: float) -> unit!:
+            field.set_value(value)
+            apply(value)
+            self.workspace.touch()))
+        self.connections.append(field.on_change(func (value: float) -> unit!:
+            slider.set_value(value)
+            apply(value)
+            self.workspace.touch()))
+        self.brush_sliders.append(slider)
+        self.brush_fields.append(field)
+        return self.dialog_row(label, HStack([slider, field], spacing = 10.0))
+
+    func brush_check(self, label: str, toggle: func() -> unit!) -> Widget!:
+        let box = Checkbox(label, font = self.font)
+        self.connections.append(box.on_change(func (value: bool) -> unit!:
+            discard(value)
+            toggle()
+            self.workspace.touch()))
+        self.brush_checks.append(box)
+        return box
+
+    ## Set one brush row from code, slider and field together.
+    func set_brush_row(self, index: int, value: float) -> unit!:
+        self.brush_sliders[index].set_value(value)
+        self.brush_fields[index].set_value(value)
+
+    ## Show the workspace's brush in the dialog, in the rows' order.
+    func show_brush(self) -> unit!:
+        let w = self.workspace
+        self.set_brush_row(0, w.spacing * 100.0)
+        self.set_brush_row(1, w.angle)
+        self.set_brush_row(2, w.roundness * 100.0)
+        self.set_brush_row(3, w.smoothing)
+        self.set_brush_row(4, w.size_jitter * 100.0)
+        self.set_brush_row(5, w.angle_jitter * 100.0)
+        self.set_brush_row(6, w.roundness_jitter * 100.0)
+        self.set_brush_row(7, w.scatter * 100.0)
+        self.set_brush_row(8, float(w.scatter_count))
+        self.set_brush_row(9, w.texture_scale * 100.0)
+        self.set_brush_row(10, w.texture_depth * 100.0)
+        self.set_brush_row(11, w.hue_jitter * 100.0)
+        self.set_brush_row(12, w.saturation_jitter * 100.0)
+        self.set_brush_row(13, w.brightness_jitter * 100.0)
+        self.set_brush_row(14, w.flow_jitter * 100.0)
+        self.brush_checks[0].set_checked(w.pressure_size)
+        self.brush_checks[1].set_checked(w.pressure_flow)
+        self.texture_menu.set_text(["None", "Grain", "Canvas", "Dots"][w.texture] + " ▾")
+
+    pub func open_brush(self) -> unit!:
+        self.show_brush()
+        self.brush_dialog.open()
+
+    func close_brush(self) -> unit!:
+        self.brush_dialog.hide()
+        self.refresh()
 
     ## A properties row after eleusis: a muted label in a fixed column, the
     ## control, and a one-point rule beneath.
@@ -927,6 +1096,11 @@ pub class Panels:
         self.size_field.set_value(workspace.diameter)
         self.hardness_field.set_value(workspace.hardness * 100.0)
         self.opacity_field.set_value(workspace.opacity * 100.0)
+        self.flow_field.set_value(workspace.flow * 100.0)
+        self.spacing_field.set_value(workspace.spacing * 100.0)
+        self.preset_menu.set_text(workspace.preset + " ▾")
+        if self.brush_dialog.is_open():
+            self.show_brush()
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
         if self.picker.is_open():
             hint = "Click the canvas to sample a colour · X swaps · D resets"
