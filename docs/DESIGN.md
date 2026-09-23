@@ -70,10 +70,10 @@ parity, no vendor type crossing `std.gpu` (a test enforces it):
   are a binding table (textures, uniforms) replayed by the backend. No lent
   encoders.
 - **Shaders**: written once in GLSL (Vulkan dialect). A tool
-  (`luce-base/tools/shaders.py`, needs `glslc` + `spirv-cross` only when a shader
+  (`luce-gpu/tools/embed_shaders.py`, needs `glslc` + `spirv-cross` only when a shader
   changes) emits a generated `.lucb` holding SPIR-V words and MSL source, checked
   in like the bootstrap snapshots. Metal compiles the MSL at runtime as it does
-  today. Any package can ship shaders this way; `std.gpu` ships only the
+  today. Any package can ship shaders this way; `luce-gpu` ships only the
   built-in ones (solid, image, coverage).
 - **Offscreen queue**: compositing and export submit-and-wait on their own queue
   so a bake never blocks presentation.

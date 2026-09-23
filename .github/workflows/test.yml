@@ -46,6 +46,16 @@ jobs:
           ref: ${{ steps.pins.outputs.base }}
           path: luce-base
           token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
+      - name: Check out the pinned library packages
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          while read -r name revision; do
+            [ -n "$name" ] || continue
+            git init -q "$name"
+            git -C "$name" fetch -q --depth 1 "https://github.com/dymokomi/$name.git" "$revision"
+            git -C "$name" checkout -q --detach FETCH_HEAD
+          done < luced-2d/bootstrap/PACKAGES
       - uses: actions/checkout@v4
         with:
           repository: dymokomi/luce
