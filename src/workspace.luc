@@ -53,7 +53,7 @@ pub class Workspace:
     pub var text_size: float = 48.0
     pub var text_x: float = 0.0
     pub var text_y: float = 0.0
-    ## Magic wand settings: colour tolerance 0..255 and whether the pixels must connect.
+    ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     pub var contiguous: bool = true
     ## The brush, in Photoshop's units: size and edge, strength, tip shape,
@@ -81,7 +81,7 @@ pub class Workspace:
     pub var texture_scale: float = 1.0
     pub var texture_depth: float = 0.5
     pub var preset: str = "Hard Round"
-    ## The foreground and background colours (linear), black over white by
+    ## The foreground and background colors (linear), black over white by
     ## default, as Compositor's palette: the brush, text and fills use the
     ## foreground; gradients run to the background; cmd-Delete fills with it.
     pub var red: float = 0.0
@@ -90,9 +90,14 @@ pub class Workspace:
     pub var back_red: float = 1.0
     pub var back_green: float = 1.0
     pub var back_blue: float = 1.0
-    ## While the picker is open a canvas click samples into the colour it edits.
+    ## While the picker is open a canvas click samples into the color it edits.
     pub var sampling: bool = false
     pub var sampling_background: bool = false
+    ## The view aids: rulers, the grid, and the unit rulers and sizes are shown in
+    ## ("px", "mm" or "in"; physical units use the document's resolution).
+    pub var show_rulers: bool = true
+    pub var show_grid: bool = false
+    pub var units: str = "px"
     ## The picker's history: sRGB hex strings, newest first, at most 16.
     pub var recent: list[str]
     var next_name: int = 1
@@ -254,6 +259,30 @@ pub class Workspace:
         self.canvas.place_layer(id, path, int(x), int(y))
         self.selected = self.layer_count() - 1
         self.touch()
+
+    ## Document pixels per one of the current unit.
+    pub func pixels_per_unit(self) -> float:
+        if self.units == "mm":
+            return self.canvas.resolution() / 25.4
+        if self.units == "in":
+            return self.canvas.resolution()
+        return 1.0
+
+    ## The unit's short name, as rulers and fields show it.
+    pub func unit_suffix(self) -> str:
+        return " mm" if self.units == "mm" else (" in" if self.units == "in" else " px")
+
+    ## The grid in document pixels: a major line every 64 px, 10 mm or 1 inch,
+    ## and how many parts each major is cut into.
+    pub func grid_major(self) -> float:
+        if self.units == "mm":
+            return 10.0 * self.pixels_per_unit()
+        if self.units == "in":
+            return self.pixels_per_unit()
+        return 64.0
+
+    pub func grid_divisions(self) -> int:
+        return 10 if self.units == "mm" else 8
 
     pub func layer_count(self) -> int:
         return self.canvas.layer_count()
@@ -463,7 +492,7 @@ pub class Workspace:
         self.canvas.preview_blur(radius)
         self.touch()
 
-    ## Layer styles on the selected layer; colours: shadow black, stroke the foreground colour, glow white.
+    ## Layer styles on the selected layer; colors: shadow black, stroke the foreground color, glow white.
     pub func set_styles(self, shadow: bool, shadow_x: float, shadow_y: float, shadow_blur: float, shadow_opacity: float,
                         stroke: bool, stroke_size: float, stroke_opacity: float, glow: bool, glow_size: float, glow_opacity: float) -> unit!:
         let id = self.selected_id()
@@ -490,13 +519,13 @@ pub class Workspace:
         self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
         self.touch()
 
-    ## The foreground (or background) colour as sRGB hex, for the picker.
+    ## The foreground (or background) color as sRGB hex, for the picker.
     pub func color_hex(self, background: bool = false) -> str:
         if background:
             return hex_of(self.back_red, self.back_green, self.back_blue)
         return hex_of(self.red, self.green, self.blue)
 
-    ## Set the foreground (or background) colour from sRGB hex like "#e7a03f"; anything else is ignored.
+    ## Set the foreground (or background) color from sRGB hex like "#e7a03f"; anything else is ignored.
     pub func set_color_hex(self, text: str, background: bool = false):
         let values = parse_hex(text) else return
         self.set_palette(values[0], values[1], values[2], background)
@@ -504,7 +533,7 @@ pub class Workspace:
     pub func set_color(self, red: float, green: float, blue: float):
         self.set_palette(red, green, blue, false)
 
-    ## Set one colour of the palette, linear components.
+    ## Set one color of the palette, linear components.
     pub func set_palette(self, red: float, green: float, blue: float, background: bool):
         if background:
             self.back_red = red
@@ -518,7 +547,7 @@ pub class Workspace:
                 self.choose_tool("brush")
         self.touch()
 
-    ## X: the foreground and background colours change places.
+    ## X: the foreground and background colors change places.
     pub func swap_colors(self):
         let red = self.red
         let green = self.green
@@ -555,8 +584,8 @@ pub class Workspace:
 
     ## A rectangle or ellipse between two corners, combined by `mode`
     ## (0 replace, 1 add, 2 subtract, 3 intersect).
-    ## A linear gradient on the selected layer from the foreground colour at one
-    ## document point to the background colour at another, within the selection.
+    ## A linear gradient on the selected layer from the foreground color at one
+    ## document point to the background color at another, within the selection.
     pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
         self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, self.opacity, self.back_red, self.back_green, self.back_blue, self.opacity)
         self.touch()
@@ -566,7 +595,7 @@ pub class Workspace:
         self.canvas.rename_layer(self.selected_id(), name)
         self.touch()
 
-    ## The eyedropper: the flattened colour under a document point becomes the foreground colour.
+    ## The eyedropper: the flattened color under a document point becomes the foreground color.
     pub func pick(self, x: float, y: float) -> unit!:
         let px = int(math.floor(x))
         let py = int(math.floor(y))
@@ -576,7 +605,7 @@ pub class Workspace:
         if self.canvas.picked_alpha() > 0.0:
             self.set_palette(self.canvas.picked_red(), self.canvas.picked_green(), self.canvas.picked_blue(), self.sampling and self.sampling_background)
 
-    ## Set `text` on the selected layer at the remembered text position, in the foreground colour.
+    ## Set `text` on the selected layer at the remembered text position, in the foreground color.
     pub func draw_text(self, text: str) -> unit!:
         self.canvas.draw_text(self.selected_id(), self.text_x, self.text_y, text, self.text_size, self.red, self.green, self.blue)
         self.touch()
@@ -697,7 +726,7 @@ func pad(values: list[float]) -> list[float]:
         params.append(0.0)
     return params
 
-## sRGB transfer, both ways, for the colour editor's hex.
+## sRGB transfer, both ways, for the color editor's hex.
 func decode_srgb(encoded: float) -> float:
     return encoded / 12.92 if encoded <= 0.04045 else math.pow((encoded + 0.055) / 1.055, 2.4)
 

@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion, TextEditor
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion, TextEditor, ContextMenu
 from interop import Connection
 from workspace import Workspace
 from canvas import Canvas
@@ -6,9 +6,12 @@ from actions import Actions
 from view import CanvasView
 from layers import LayerList
 from tabs import DocumentTabs
+from rulers import Ruler, RulerCorner
+from document_panel import DocumentSettings
 from colors import Palette, ColorPicker
 from settings import Store
 import clipboard
+import math
 from settings_panel import SettingsDialog
 
 ## The window's contents, after Compositor's: a contextual tool header, a tool
@@ -19,6 +22,12 @@ pub class Panels:
     pub let view: CanvasView
     ## The open documents' tabs across the top of the viewport.
     pub let tabs: DocumentTabs
+    ## Rulers above and left of the canvas; the row above holds the corner too.
+    pub let document_settings: DocumentSettings
+    pub let top_ruler: Ruler
+    pub let left_ruler: Ruler
+    let ruler_row: HStack
+    let left_ruler_menu: ContextMenu
     pub let workspace: Workspace
     pub let status: Text
     pub let prompt: TextPrompt
@@ -158,6 +167,8 @@ pub class Panels:
         self.texture_menu = Menu("None ▾", self.texture_commands(), font = font)
         self.brush_dialog = self.build_brush_dialog(font)
         self.palette = Palette(workspace)
+        self.document_settings = DocumentSettings(workspace, font)
+        self.document_settings.applied = self.refresh
         self.crash_text = TextEditor("", read_only = true, line_numbers = false, font = font)
         self.crash_text.layout().set_limits(Size(600.0, 260.0), Size(600.0, 260.0))
         self.crash_copy = self.button("Copy", self.copy_crash)
@@ -169,7 +180,7 @@ pub class Panels:
         self.picker.closed = self.refresh
         self.picker.committed = self.settings_dialog.remember
         # On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
-        self.mask_prompt = Dialog([Text("Mask colour", font = font), HStack([self.button("Black · Hide", self.choose_mask_black), self.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
+        self.mask_prompt = Dialog([Text("Mask color", font = font), HStack([self.button("Black · Hide", self.choose_mask_black), self.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
         self.brush_controls = HStack([self.preset_menu, self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field),
                                       self.labelled("Flow", self.flow_field), self.labelled("Spacing", self.spacing_field), self.button("Brush…", self.open_brush)], spacing = 12.0)
         self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
@@ -238,12 +249,12 @@ pub class Panels:
         let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as, Command("", divider = true), actions.close_document], font = font),
                              Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.fill_background, actions.clear, actions.swap_colors, actions.reset_colors, Command("", divider = true), actions.settings], font = font),
                              Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
-                             Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
+                             Menu("Image", [actions.document_settings, Command("", divider = true), actions.crop, actions.canvas_size, actions.image_size], font = font),
                              Menu("Adjust", actions.adjustments, font = font),
                              Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
                                             actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.rename_layer, actions.layer_style], font = font),
                              Menu("Filter", [actions.blur], font = font),
-                             Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, Command("", divider = true), actions.next_document, actions.previous_document], font = font),
+                             Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, Command("", divider = true), actions.show_rulers, actions.show_grid] + actions.units + [Command("", divider = true), actions.next_document, actions.previous_document], font = font),
                              Spacer()], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active tool selected.
@@ -300,7 +311,17 @@ pub class Panels:
         self.properties_panel = Panel("Properties", properties, minimum = Size(220.0, 100.0), closable = false)
         # The viewport: the tool rail beside the canvas.
         # A one-point backdrop rule separates the rail from the canvas, as eleusis's viewport does.
-        let canvas_row = HStack([rail, Rule(structural = true, vertical = true), self.view], spacing = 0.0)
+        # Rulers around the canvas; right-click either for its units.
+        self.top_ruler = Ruler(workspace, self.view, font, true)
+        self.left_ruler = Ruler(workspace, self.view, font, false)
+        self.ruler_row = HStack([RulerCorner(), ContextMenu(self.top_ruler, actions.units, font = font)], spacing = 0.0)
+        self.left_ruler_menu = ContextMenu(self.left_ruler, actions.units, font = font)
+        self.view.linked = [self.top_ruler.layout(), self.left_ruler.layout()]
+        let view_row = HStack([self.left_ruler_menu, self.view], spacing = 0.0)
+        view_row.layout().set_flex()
+        let canvas_area = VStack([self.ruler_row, view_row], spacing = 0.0)
+        canvas_area.layout().set_flex()
+        let canvas_row = HStack([rail, Rule(structural = true, vertical = true), canvas_area], spacing = 0.0)
         canvas_row.layout().set_flex()
         let viewport = VStack([self.tabs, canvas_row], spacing = 0.0)
         viewport.layout().set_flex()
@@ -312,7 +333,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.brush_dialog, self.settings_dialog.dialog, self.crash_dialog], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.brush_dialog, self.settings_dialog.dialog, self.document_settings.dialog, self.crash_dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -531,6 +552,20 @@ pub class Panels:
         self.bind(actions.undo, self.undo)
         self.bind(actions.redo, self.redo)
         self.bind(actions.fill, self.fill_selection)
+        self.bind(actions.document_settings, self.open_document_settings)
+        self.bind(actions.show_rulers, func () -> unit!:
+            self.workspace.show_rulers = not self.workspace.show_rulers
+            self.view_changed())
+        self.bind(actions.show_grid, func () -> unit!:
+            self.workspace.show_grid = not self.workspace.show_grid
+            self.view_changed())
+        var unit_index = 0
+        for unit_name in ["px", "mm", "in"]:
+            let chosen = unit_name
+            self.bind(actions.units[unit_index], func () -> unit!:
+                self.workspace.units = chosen
+                self.view_changed())
+            unit_index += 1
         self.bind(actions.close_document, self.close_document)
         self.bind(actions.next_document, func () -> unit!:
             self.workspace.next_document(1)
@@ -597,7 +632,7 @@ pub class Panels:
     pub func rename_layer(self) -> unit!:
         self.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename")
 
-    ## A palette swatch clicked: the picker opens for that colour — or, on a
+    ## A palette swatch clicked: the picker opens for that color — or, on a
     ## mask, the black/white choice.
     pub func pick_color(self, background: bool) -> unit!:
         self.mask_background = background
@@ -624,7 +659,7 @@ pub class Panels:
 
     ## The text tool clicked: ask for the text to set there.
     func place_text(self) -> unit!:
-        self.ask("text", "Text to set at the click, in the foreground colour", "", "Set")
+        self.ask("text", "Text to set at the click, in the foreground color", "", "Set")
 
     func toggle_contiguous(self) -> unit!:
         self.workspace.contiguous = not self.workspace.contiguous
@@ -650,7 +685,7 @@ pub class Panels:
         return button
 
     ## Brush Settings…: Photoshop's sections — Tip Shape, Shape Dynamics,
-    ## Scattering, Texture, Colour Dynamics, Transfer — as an accordion, one
+    ## Scattering, Texture, Color Dynamics, Transfer — as an accordion, one
     ## open at a time, each rows of a slider and a number field. Edits go
     ## straight to the workspace; the next stroke paints with them.
     func build_brush_dialog(self, font: Font) -> Dialog!:
@@ -682,12 +717,12 @@ pub class Panels:
             self.workspace.texture_scale = value / 100.0))
         texture.append(self.brush_row("Depth", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.texture_depth = value / 100.0))
-        var colour: list[Widget] = []
-        colour.append(self.brush_row("Hue Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        var color_rows: list[Widget] = []
+        color_rows.append(self.brush_row("Hue Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.hue_jitter = value / 100.0))
-        colour.append(self.brush_row("Saturation Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        color_rows.append(self.brush_row("Saturation Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.saturation_jitter = value / 100.0))
-        colour.append(self.brush_row("Brightness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
+        color_rows.append(self.brush_row("Brightness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
             self.workspace.brightness_jitter = value / 100.0))
         var transfer: list[Widget] = []
         transfer.append(self.brush_row("Flow Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
@@ -695,9 +730,9 @@ pub class Panels:
         transfer.append(self.brush_check("Pen pressure controls flow", func () -> unit!:
             self.workspace.pressure_flow = not self.workspace.pressure_flow))
         var sections: list[Widget] = []
-        for rows in [tip, shape, scattering, texture, colour, transfer]:
+        for rows in [tip, shape, scattering, texture, color_rows, transfer]:
             sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
-        let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Colour Dynamics", "Transfer"], sections, font = font, open = 0)
+        let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = font, open = 0)
         return Dialog([Text("Brush Settings", font = font), stack, HStack([Spacer(), self.button("Done", self.close_brush)], spacing = 8.0)], width = 480.0, spacing = 8.0)
 
     ## The texture menu's entries: picking one sets the pattern.
@@ -888,6 +923,15 @@ pub class Panels:
             self.workspace.place_file(path, float(self.workspace.width()) * 0.5, float(self.workspace.height()) * 0.5) catch failure:
                 self.ask("", f"Could not place {path}: {failure.message}", "", "OK")
                 continue
+        self.refresh()
+
+    ## Image › Document Settings…
+    pub func open_document_settings(self) -> unit!:
+        self.document_settings.open()
+
+    ## A view aid changed: keep it and redraw.
+    func view_changed(self) -> unit!:
+        self.settings_dialog.remember_view()
         self.refresh()
 
     pub func switch_document(self, index: int) -> unit!:
@@ -1174,25 +1218,26 @@ pub class Panels:
             self.show_brush()
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
         if self.picker.is_open():
-            hint = "Click the canvas to sample a colour · X swaps · D resets"
+            hint = "Click the canvas to sample a color · X swaps · D resets"
         elif workspace.tool == "move":
             hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
         elif workspace.tool == "marquee" or workspace.tool == "ellipse" or workspace.tool == "lasso":
             hint = "Drag to select · shift adds · alt subtracts · cmd-A all · cmd-D deselect · Delete clears"
         elif workspace.tool == "wand":
-            hint = "Click a colour to select it · shift adds · alt subtracts"
+            hint = "Click a color to select it · shift adds · alt subtracts"
         elif workspace.tool == "text":
             hint = "Click where the text starts, then type it"
         elif workspace.tool == "eyedropper":
-            hint = "Click a colour to make it the foreground colour"
+            hint = "Click a color to make it the foreground color"
         elif workspace.tool == "gradient":
-            hint = "Drag from the foreground colour to the background colour · fills the selection"
+            hint = "Drag from the foreground color to the background color · fills the selection"
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":
             hint = "Click to zoom in · alt-click to zoom out"
         self.header_hint.set_text(hint)
-        self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  sRGB · Transparent  |  {name}")
+        let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
+        self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
         self.layer_count.set_text(f"{workspace.layer_count()}")
         self.layers_panel.set_text(f"Layers · {workspace.layer_count()}")
         if not self.layer_name.layout().is_focused():
@@ -1219,12 +1264,25 @@ pub class Panels:
         self.layer_opacity_field.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
         self.layers.layout().invalidate()
         self.tabs.layout().invalidate()
+        # The view aids, with their state in the View menu.
+        self.ruler_row.layout().set_visible(workspace.show_rulers)
+        self.left_ruler_menu.layout().set_visible(workspace.show_rulers)
+        self.top_ruler.layout().invalidate()
+        self.left_ruler.layout().invalidate()
+        self.actions.show_rulers.set_text("Show Rulers ✓" if workspace.show_rulers else "Show Rulers")
+        self.actions.show_grid.set_text("Show Grid ✓" if workspace.show_grid else "Show Grid")
+        var shown = 0
+        for unit_name in ["px", "mm", "in"]:
+            let label = ["Pixels", "Millimeters", "Inches"][shown]
+            self.actions.units[shown].set_text(label + " ✓" if workspace.units == unit_name else label)
+            shown += 1
         self.view.layout().invalidate()
 
     pub func close(self):
         self.cancel_prompt()
         self.settings_dialog.close()
         self.picker.close()
+        self.document_settings.close()
         if self.workspace.previewing():
             self.workspace.end_preview(false) catch failure:
                 discard(failure)

@@ -8,7 +8,7 @@ from theme import Look
 import theme
 
 ## The Settings dialog after eleusis-layout's: a section list at the left
-## (General, Colour Management, Shortcuts, Theme), the section's rows at the
+## (General, Color Management, Shortcuts, Theme), the section's rows at the
 ## right, and Save/Cancel below. Edits go into a draft, not the live settings:
 ## Cancel forgets them all, Save writes the file and applies everything at once.
 ## Shortcuts are the application's commands themselves: pick a row, then record
@@ -65,7 +65,7 @@ pub class SettingsDialog:
         self.connections.append(self.height_field.on_change(func (value: float) -> unit!:
             self.draft.canvas_height = int(value)))
         let general = VStack([self.row("New canvas", HStack([self.width_field, Text("×", font = font, muted = true), self.height_field], spacing = 6.0)), Spacer()], spacing = 8.0)
-        # Colour management: which display the viewport targets.
+        # Color management: which display the viewport targets.
         let srgb = Command("sRGB", id = "display_srgb")
         let p3 = Command("Display P3", id = "display_p3")
         self.display_menu = Menu("sRGB ▾", [srgb, p3], font = font)
@@ -101,7 +101,7 @@ pub class SettingsDialog:
             page.layout().set_limits(Size(400.0, 300.0), Size(16384.0, 300.0))
             page.layout().set_visible(false)
         self.pages[0].layout().set_visible(true)
-        self.sections = ListView([ListItem(text = "General"), ListItem(text = "Colour Management"), ListItem(text = "Shortcuts"), ListItem(text = "Theme")], font = font)
+        self.sections = ListView([ListItem(text = "General"), ListItem(text = "Color Management"), ListItem(text = "Shortcuts"), ListItem(text = "Theme")], font = font)
         self.sections.layout().set_limits(Size(170.0, 300.0), Size(170.0, 300.0))
         self.connections.append(self.sections.on_activate(func (index: int) -> unit!:
             self.show_page(index)))
@@ -260,8 +260,18 @@ pub class SettingsDialog:
         self.settings.recent = joined
         self.store.save(self.settings)
 
+    ## The view aids changed: keep them for the next launch.
+    pub func remember_view(self) -> unit!:
+        self.settings.rulers = self.workspace.show_rulers
+        self.settings.grid = self.workspace.show_grid
+        self.settings.units = self.workspace.units
+        self.store.save(self.settings)
+
     ## Apply the live settings: the look, the window theme, every shortcut, the picker's history.
     pub func apply(self) -> unit!:
+        self.workspace.show_rulers = self.settings.rulers
+        self.workspace.show_grid = self.settings.grid
+        self.workspace.units = self.settings.units
         let look = Look(self.settings.accent, self.settings.control_radius)
         self.workspace.look = look
         var recent: list[str] = []

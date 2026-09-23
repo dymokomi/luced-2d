@@ -27,6 +27,8 @@ pub class Palette: Widget:
         self.workspace = workspace
         self.box = Layout()
         self.box.set_cursor(Cursor.pointer)
+        # Clickable: a box only gets pointer events once it says so.
+        self.box.set_interactive(true)
 
     pub func layout(self) -> Layout:
         return self.box
@@ -34,7 +36,7 @@ pub class Palette: Widget:
     pub func measure(self, available: Constraints) -> Size!:
         return Size(self.swatch + self.offset + 2.0, self.swatch + self.offset + 2.0)
 
-    ## A swatch: the colour inside a black line inside a white line, corners rounded.
+    ## A swatch: the color inside a black line inside a white line, corners rounded.
     func draw_swatch(self, painter: Painter, rect: Rect, color: Color) -> unit!:
         painter.rounded_rectangle(rect, Color(0.0, 0.0, 0.0), 6.0)
         painter.rounded_rectangle(Rect(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, rect.height - 2.0), Color(1.0, 1.0, 1.0), 5.0)
@@ -77,7 +79,7 @@ pub class Palette: Widget:
                 pick(true)
         self.box.invalidate()
 
-## A colour shown in a rounded well.
+## A color shown in a rounded well.
 pub class Swatch: Widget:
     let box: Layout
     pub var color: Color = Color(0.0, 0.0, 0.0)
@@ -102,7 +104,7 @@ pub class Swatch: Widget:
     pub func event(self, event: Event) -> unit!:
         discard(event)
 
-## Photoshop's new-over-current preview: the colour being chosen above the one
+## Photoshop's new-over-current preview: the color being chosen above the one
 ## the picker opened with. Clicking the lower half goes back to it.
 pub class PreviewPair: Widget:
     let box: Layout
@@ -115,6 +117,8 @@ pub class PreviewPair: Widget:
         self.side = side
         self.box = Layout()
         self.box.set_cursor(Cursor.pointer)
+        # Clickable: a box only gets pointer events once it says so.
+        self.box.set_interactive(true)
 
     pub func layout(self) -> Layout:
         return self.box
@@ -135,7 +139,7 @@ pub class PreviewPair: Widget:
             if let revert = self.on_revert:
                 revert()
 
-## The history: the colours committed most recently, newest first, one row of
+## The history: the colors committed most recently, newest first, one row of
 ## small swatches. Clicking one picks it.
 pub class RecentColors: Widget:
     let box: Layout
@@ -148,6 +152,8 @@ pub class RecentColors: Widget:
         self.workspace = workspace
         self.box = Layout()
         self.box.set_cursor(Cursor.pointer)
+        # Clickable: a box only gets pointer events once it says so.
+        self.box.set_interactive(true)
 
     pub func layout(self) -> Layout:
         return self.box
@@ -176,14 +182,14 @@ pub class RecentColors: Widget:
             if let pick = self.on_pick:
                 pick(self.workspace.recent[index])
 
-## The colour picker after Photoshop's: a 256-point field and a strip, the
+## The color picker after Photoshop's: a 256-point field and a strip, the
 ## strip's channel chosen by the radio beside each field (H, S, B, R, G, B, L,
 ## a, b, and OkLCh's L, C, h — the field plots the other two of that model,
 ## OkLCh planes gamut-mapped by chroma so they stay displayable), a new-over-current
 ## preview, HSB / RGB / Lab / hex fields, the history, OK and Cancel; a canvas
-## click samples while it is open. Colour maths is luce-color's: HSB through
+## click samples while it is open. Color maths is luce-color's: HSB through
 ## `hsl`, Lab through `space`/`lab` against sRGB's white. Changes apply to the
-## palette at once; Cancel puts the colour back.
+## palette at once; Cancel puts the color back.
 pub class ColorPicker:
     pub let dialog: Dialog
     let workspace: Workspace
@@ -199,7 +205,7 @@ pub class ColorPicker:
     let connections: list[Connection]
     var background: bool = false
     var before: str = ""
-    ## The colour being edited, sRGB encoded 0..1.
+    ## The color being edited, sRGB encoded 0..1.
     var red: float = 0.0
     var green: float = 0.0
     var blue: float = 0.0
@@ -219,7 +225,7 @@ pub class ColorPicker:
         self.preview.on_revert = self.revert
         self.recent = RecentColors(workspace)
         self.recent.on_pick = self.pick_recent
-        self.title = Text("Foreground Colour", font = font)
+        self.title = Text("Foreground Color", font = font)
         self.channels = []
         self.radios = []
         let names = ["H", "S", "B", "R", "G", "B", "L", "a", "b", "oL", "oC", "oh"]
@@ -268,11 +274,11 @@ pub class ColorPicker:
     pub func is_open(self) -> bool:
         return self.dialog.is_open()
 
-    ## Open for the foreground or the background colour, seeded from the palette.
+    ## Open for the foreground or the background color, seeded from the palette.
     pub func open(self, background: bool) -> unit!:
         self.background = background
         self.before = self.workspace.color_hex(background)
-        self.title.set_text("Background Colour" if background else "Foreground Colour")
+        self.title.set_text("Background Color" if background else "Foreground Color")
         self.workspace.sampling = true
         self.workspace.sampling_background = background
         let original = srgb_of(self.before)
@@ -302,7 +308,7 @@ pub class ColorPicker:
     func pick_recent(self, hex: str) -> unit!:
         self.take(srgb_of(hex))
 
-    # -- The model: an sRGB colour seen through three channel triples.
+    # -- The model: an sRGB color seen through three channel triples.
 
     func hsv(self) -> hsl.HSV:
         return hsl.to_hsv(science.Color(self.red, self.green, self.blue))
@@ -310,12 +316,12 @@ pub class ColorPicker:
     func lab_of(self) -> lab.Lab:
         return space.to_lab(science.Color(self.red, self.green, self.blue), space.srgb)
 
-    ## OkLCh of the colour, lightness and chroma scaled by 100 for the fields.
+    ## OkLCh of the color, lightness and chroma scaled by 100 for the fields.
     func oklch_of(self) -> lab.LCh:
         let polar = lab.oklab_to_oklch(science.to_oklab(space.decode(science.Color(self.red, self.green, self.blue), space.srgb)))
         return lab.LCh(polar.l * 100.0, polar.c * 100.0, polar.h)
 
-    ## Channel `index` of the colour, in the units the fields show.
+    ## Channel `index` of the color, in the units the fields show.
     func channel_value(self, index: int) -> float:
         if index < 3:
             let h = self.hsv()
@@ -328,7 +334,7 @@ pub class ColorPicker:
         let o = self.oklch_of()
         return [o.l, o.c, o.h][index - 9]
 
-    ## The colour with channel `index` set to `value` (field units), in gamut.
+    ## The color with channel `index` set to `value` (field units), in gamut.
     func with_channel(self, index: int, value: float) -> science.Color:
         return self.with_both(index, value, index, value)
 
@@ -343,14 +349,14 @@ pub class ColorPicker:
     func high(self, index: int) -> float:
         return channel_high(index)
 
-    ## The colour at field position (u, v) for the current strip channel.
+    ## The color at field position (u, v) for the current strip channel.
     func at(self, u: float, v: float) -> science.Color:
         let pair = self.axes()
         let x = self.low(pair[0]) + (self.high(pair[0]) - self.low(pair[0])) * u
         let y = self.high(pair[1]) - (self.high(pair[1]) - self.low(pair[1])) * v
         return self.with_both(pair[0], x, pair[1], y)
 
-    ## The colour with two channels of one model replaced at once (the same
+    ## The color with two channels of one model replaced at once (the same
     ## channel twice replaces one), clamped into sRGB.
     func with_both(self, first_index: int, first_value: float, second_index: int, second_value: float) -> science.Color:
         if first_index < 3:
@@ -393,7 +399,7 @@ pub class ColorPicker:
         self.shade()
         self.syncing = false
 
-    ## Recompute the field's and strip's colours and markers for the strip channel.
+    ## Recompute the field's and strip's colors and markers for the strip channel.
     func shade(self) -> unit!:
         let pair = self.axes()
         var grid: list[Color] = []
@@ -501,7 +507,7 @@ func set_lab(l: lab.Lab, index: int, value: float) -> lab.Lab:
         out.b = value
     return out
 
-## The linear colour the GPU draws for an sRGB-encoded one.
+## The linear color the GPU draws for an sRGB-encoded one.
 pub func linear_of(color: science.Color) -> Color:
     return Color(transfer.srgb_decode(color.red), transfer.srgb_decode(color.green), transfer.srgb_decode(color.blue))
 

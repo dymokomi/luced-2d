@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -149,6 +149,24 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.drag_left))
             editor.app.set_drop_paths(["''' + str(ROOT / 'docs/sample.png') + '''"])
             editor.app.dispatch(Event(kind = EventKind.drag_entered, x = canvas.x + 300.0, y = canvas.y + 300.0))
+            editor.panels.refresh()''',
+    'swatch': '''            editor.workspace.choose_tool("brush")
+            editor.panels.refresh()
+            let swatch = editor.panels.palette.layout().bounds()
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = swatch.x + 5.0, y = swatch.y + 5.0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = swatch.x + 5.0, y = swatch.y + 5.0, button = 0))
+            print(f"SWATCH picker open {editor.panels.picker.is_open()}")
+            editor.panels.refresh()''',
+    'rulers': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.show_rulers = true
+            editor.workspace.show_grid = true
+            editor.workspace.units = "mm"
+            editor.workspace.canvas.set_resolution(150.0)
+            editor.panels.refresh()''',
+    'document': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.units = "mm"
+            editor.workspace.canvas.set_resolution(300.0)
+            editor.panels.document_settings.open()
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)

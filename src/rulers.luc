@@ -1,0 +1,139 @@
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from gpu import RenderTarget, Rect
+from workspace import Workspace
+from view import CanvasView
+import theme
+import math
+
+## A ruler along the top or the left of the canvas, as Photoshop's: ticks in the
+## chosen unit from the document's origin, following zoom and pan, labelled at
+## the majors. Majors step 1-2-5 so they stay at least 60 points apart; each
+## major carries ten minor ticks when they fit. The pointer's place is marked.
+pub class Ruler: Widget:
+    let box: Layout
+    let workspace: Workspace
+    let font: Font
+    let horizontal: bool
+    let view: CanvasView
+    ## Where the view's origin sits along this ruler, in its own points.
+    pub var origin: float = 0.0
+
+    pub func init(self, workspace: Workspace, view: CanvasView, font: Font, horizontal: bool) -> unit!:
+        self.workspace = workspace
+        self.view = view
+        self.font = font
+        self.horizontal = horizontal
+        self.box = Layout()
+        # Right-clicks reach the ruler's unit menu.
+        self.box.set_interactive(true)
+        if horizontal:
+            self.box.set_limits(Size(0.0, thickness), Size(16384.0, thickness))
+            self.box.set_flex(horizontal = 1.0, vertical = 0.0)
+        else:
+            self.box.set_limits(Size(thickness, 0.0), Size(thickness, 16384.0))
+            self.box.set_flex(horizontal = 0.0, vertical = 1.0)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(thickness, thickness)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        let workspace = self.workspace
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.tab_strip())
+        let length = size.width if self.horizontal else size.height
+        # The document's origin along this ruler, and points per unit.
+        let start = (workspace.offset_x if self.horizontal else workspace.offset_y) + self.origin
+        let per_unit = workspace.pixels_per_unit() * workspace.zoom
+        let step = major_step(per_unit)
+        let major = step * per_unit
+        let minor = major / 10.0 if major / 10.0 >= 4.0 else (major / 5.0 if major / 5.0 >= 4.0 else major / 2.0)
+        let ink = theme.text_muted()
+        var position = start + math.floor((0.0 - start) / minor) * minor
+        while position < length:
+            if position >= 0.0:
+                let from_origin = (position - start) / major
+                let at_major = math.abs(from_origin - math.floor(from_origin + 0.5)) < 0.001
+                let tick = thickness if at_major else (thickness * 0.35)
+                if self.horizontal:
+                    painter.rectangle(Rect(math.floor(position), thickness - tick, 1.0, tick), ink)
+                else:
+                    painter.rectangle(Rect(thickness - tick, math.floor(position), tick, 1.0), ink)
+                if at_major:
+                    let value = math.floor(from_origin + 0.5) * step
+                    let label = number_label(value)
+                    if self.horizontal:
+                        painter.text(label, math.floor(position) + 3.0, 1.0, ink, self.font)
+                    else:
+                        # Down the left ruler the label runs one character per line.
+                        var line = 0
+                        while line < label.length:
+                            painter.text(label[line..<line + 1], 2.0, math.floor(position) + 2.0 + float(line) * self.font.height() * 0.8, ink, self.font)
+                            line += 1
+            position += minor
+        # The pointer's place over the canvas, in the accent.
+        if self.view.pointer_inside:
+            let at = (self.view.pointer_x if self.horizontal else self.view.pointer_y) + self.origin
+            if self.horizontal:
+                painter.rectangle(Rect(math.floor(at), 0.0, 1.0, thickness), workspace.look.accent)
+            else:
+                painter.rectangle(Rect(0.0, math.floor(at), thickness, 1.0), workspace.look.accent)
+        # The edge toward the canvas.
+        if self.horizontal:
+            painter.rectangle(Rect(0.0, thickness - 1.0, size.width, 1.0), theme.backdrop())
+        else:
+            painter.rectangle(Rect(thickness - 1.0, 0.0, 1.0, size.height), theme.backdrop())
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        discard(event)
+
+## The corner where the rulers meet.
+pub class RulerCorner: Widget:
+    let box: Layout
+
+    pub func init(self) -> unit!:
+        self.box = Layout()
+        self.box.set_limits(Size(thickness, thickness), Size(thickness, thickness))
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(thickness, thickness)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        painter.rectangle(Rect(0.0, 0.0, thickness, thickness), theme.tab_strip())
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        discard(event)
+
+## Rulers are 18 points thick, as Compositor's.
+pub let thickness: float = 18.0
+
+## The unit step between labelled ticks: 1, 2 or 5 times a power of ten, the
+## smallest that keeps majors 60 points apart at `per_unit` points per unit.
+pub func major_step(per_unit: float) -> float:
+    var step = 0.001
+    while step * per_unit < 60.0 and step < 1000000.0:
+        if step * 2.0 * per_unit >= 60.0:
+            return step * 2.0
+        if step * 5.0 * per_unit >= 60.0:
+            return step * 5.0
+        step *= 10.0
+    return step
+
+## A tick label: whole numbers plainly, fractions to two places.
+pub func number_label(value: float) -> str:
+    if math.abs(value - math.floor(value + 0.5)) < 0.0001:
+        return f"{int(math.floor(value + 0.5))}"
+    let hundredths = int(math.floor(math.abs(value) * 100.0 + 0.5))
+    let sign = "-" if value < 0.0 else ""
+    let fraction = hundredths % 100
+    let padding = "0" if fraction < 10 else ""
+    return f"{sign}{hundredths // 100}.{padding}{fraction}"

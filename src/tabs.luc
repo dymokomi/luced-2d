@@ -25,6 +25,8 @@ pub class DocumentTabs: Widget:
         self.font = font
         self.box = Layout()
         self.box.set_cursor(Cursor.pointer)
+        # Clickable: a box only gets pointer events once it says so.
+        self.box.set_interactive(true)
         self.box.set_shrink(vertical = 0.0)
 
     pub func layout(self) -> Layout:

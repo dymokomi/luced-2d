@@ -3,7 +3,7 @@
 How eleusis-frameworks (`/Users/sedov/Dev/eleusis-frameworks`, Zig) and
 eleusis-layout.2 (`/Users/sedov/Dev/eleusis-layout.2`) build their UI, as read
 from the sources on 2026-09-22, so luce-ui and luced-2d can reproduce it. All
-numbers are UI units (points); double at 2×. Colours are the authored sRGB
+numbers are UI units (points); double at 2×. Colors are the authored sRGB
 values (the app rotates them to Display-P3 and blends linear-premultiplied).
 
 ## Theme

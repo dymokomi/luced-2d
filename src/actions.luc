@@ -55,6 +55,11 @@ pub class Actions:
     pub let blends: list[Command]
     # View
     pub let fit: Command
+    pub let show_rulers: Command
+    pub let show_grid: Command
+    ## Rulers and sizes in pixels, millimeters or inches.
+    pub let units: list[Command]
+    pub let document_settings: Command
     pub let actual_size: Command
     pub let zoom_in: Command
     pub let zoom_out: Command
@@ -76,11 +81,11 @@ pub class Actions:
         self.previous_document = Command("Previous Document", Shortcut(Key.left_bracket, primary = true, alt = true), id = "previous_document")
         self.undo = Command("Undo", Shortcut(Key.z, primary = true), id = "undo")
         self.redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
-        self.fill = Command("Fill Selection with Colour", Shortcut(Key.backspace, alt = true), id = "fill")
+        self.fill = Command("Fill Selection with Color", Shortcut(Key.backspace, alt = true), id = "fill")
         self.clear = Command("Clear Selection", Shortcut(Key.backspace), id = "clear")
         self.fill_background = Command("Fill Selection with Background", Shortcut(Key.backspace, primary = true), id = "fill_background")
-        self.swap_colors = Command("Swap Colours", Shortcut(Key.x), id = "swap_colors")
-        self.reset_colors = Command("Default Colours", Shortcut(Key.d), id = "reset_colors")
+        self.swap_colors = Command("Swap Colors", Shortcut(Key.x), id = "swap_colors")
+        self.reset_colors = Command("Default Colors", Shortcut(Key.d), id = "reset_colors")
         self.free_transform = Command("Free Transform…", Shortcut(Key.t, primary = true), id = "free_transform")
         self.settings = Command("Settings…", Shortcut(Key.comma, primary = true), id = "settings")
         self.select_all = Command("All", Shortcut(Key.a, primary = true), id = "select_all")
@@ -116,6 +121,10 @@ pub class Actions:
             self.blends.append(Command(Canvas.blend_mode_name(mode), id = f"blend_{mode}"))
             mode += 1
         self.fit = Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit")
+        self.show_rulers = Command("Show Rulers", Shortcut(Key.r, primary = true), id = "show_rulers")
+        self.show_grid = Command("Show Grid", Shortcut(Key.apostrophe, primary = true), id = "show_grid")
+        self.units = [Command("Pixels", id = "units_px"), Command("Millimeters", id = "units_mm"), Command("Inches", id = "units_in")]
+        self.document_settings = Command("Document Settings…", Shortcut(Key.i, primary = true, alt = true), id = "document_settings")
         self.actual_size = Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size")
         self.zoom_in = Command("Zoom In", Shortcut(Key.equal, primary = true), id = "zoom_in")
         self.zoom_out = Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out")
@@ -134,7 +143,7 @@ pub class Actions:
                     self.crop, self.canvas_size, self.image_size, self.blur,
                     self.add_layer, self.duplicate_layer, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.bigger, self.smaller] + self.adjustments + self.blends + self.tools
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.document_settings, self.bigger, self.smaller] + self.adjustments + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:

@@ -30,12 +30,12 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   shift adds and alt subtracts, Select › All, Deselect, Inverse,
   Expand, Contract and Feather (cmd-A, cmd-D, cmd-shift-I); marching ants;
   painting and fills stay inside; Fill (alt-Delete) and Clear (Delete).
-- Gradient tool (`G`): drag to lay the foreground colour fading to transparent
+- Gradient tool (`G`): drag to lay the foreground color fading to transparent
   across the selection, at the brush opacity.
-- Eyedropper (`I`): click to pick the flattened colour as the foreground.
+- Eyedropper (`I`): click to pick the flattened color as the foreground.
 - Text tool (`T`): click, type, and the text is set into the layer's pixels
-  in the foreground colour at the chosen size.
-- A foreground colour swatch in the tool header opens a colour editor (RGB
+  in the foreground color at the chosen size.
+- A foreground color swatch in the tool header opens a color editor (RGB
   sliders and hex), beside quick swatches.
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
   edges and no dab artefacts; undo and redo of strokes.
@@ -78,23 +78,23 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 - `src/settings.luc`, `src/settings_panel.luc`: `~/.luced-2d/settings.toml`
   (new-canvas size, display, theme accent and radius, shortcut overrides by
   command id) and the Settings dialog after eleusis-layout's: a section list
-  (General, Colour Management, Shortcuts, Theme), a draft edited at the right,
+  (General, Color Management, Shortcuts, Theme), a draft edited at the right,
   Save/Cancel. Shortcuts are the application's own `Command`s: pick a row,
   record a chord in the field beneath; a conflict names the other holder.
 - `src/tabs.luc`: the open documents as tabs across the viewport (Photoshop's):
   `Workspace` keeps a `Document` per tab and swaps the live canvas and view
   state on switch; New/Open make tabs, ⌘W closes, ⌥⌘] / ⌥⌘[ step.
 - `src/colors.luc`: the palette below the tool rail (foreground over
-  background, swap X, reset D) and the colour editor after Photoshop's: a
+  background, swap X, reset D) and the color editor after Photoshop's: a
   field and a strip whose channel a radio picks (H, S, B, R, G, B, L, a, b —
   the field plots the other two; plus OkLCh L, C, h, gamut-mapped by chroma), new-over-current preview, HSB / RGB / Lab / OkLCh /
-  hex fields, a history of committed colours (saved in settings), live on the
-  palette, canvas click samples while it is open. The colour maths is
+  hex fields, a history of committed colors (saved in settings), live on the
+  palette, canvas click samples while it is open. The color maths is
   luce-color's (`hsl`, `lab`, `space`, `transfer`).
 - `src/panels.luc`: the window: menu bar, contextual tool header (preset
   menu, Size/Hardness/Opacity/Flow/Spacing scrubbers and Brush…, which opens
   the Brush Settings dialog — an accordion of Tip Shape, Shape Dynamics,
-  Scattering, Texture, Colour Dynamics and Transfer, one section open at a
+  Scattering, Texture, Color Dynamics and Transfer, one section open at a
   time), then a dock of panes after
   eleusis-layout (see `docs/ELEUSIS_UI.md`): the Viewport with its tool rail,
   Layers with its actions on a shelf at the bottom, Properties for the

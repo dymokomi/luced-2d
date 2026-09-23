@@ -113,7 +113,7 @@ kind     = Raster(tiles) | Group(children, pass_through) | Adjustment(kind, para
 ```
 
 Pixels are **tiles**: 256×256, `rgba16_float`, premultiplied, in the document's
-colour space, resident on the GPU with a CPU shadow only for save. A layer's
+color space, resident on the GPU with a CPU shadow only for save. A layer's
 `Tiles` is immutable and structurally shared: an edit produces a new `Tiles`
 that reuses every untouched tile (Compositor's `RasterSnapshot`, tiled down to
 the base). That sharing is what makes destructive editing cheap: a stroke or a
@@ -185,7 +185,7 @@ PSD import (8/16-bit RGB, groups,
 masks, blend modes, editable fills; text rasterized) with a conversion report
 before anything is applied; PSD export flattened + layers later.
 
-**Colour**: 16-bit, sRGB or Display-P3 documents, compositing in the document's
+**Color**: 16-bit, sRGB or Display-P3 documents, compositing in the document's
 space to match Photoshop; ICC embedded on export. Scene-linear/OCIO is out of
 scope for now.
 
@@ -194,7 +194,7 @@ scope for now.
 Mirrors luced's structure: `main.luc` parses options; `editor/` composes
 `Actions` (one `Command` per action, shared by menu bar, tool rail, palette and
 keymap), `Views` (`DStack` with tool rail, tool-options bar, rulers + canvas,
-Layers / Properties / History / Colour / Swatches / Navigator panels, status
+Layers / Properties / History / Color / Swatches / Navigator panels, status
 bar), a `Workspace` controller with document tabs, and `tools/` — one module
 per tool: move/transform, marquee, lasso, wand, crop, brush, eraser, clone,
 heal, blur/smudge, gradient, fill, shape, type, eyedropper, hand, zoom.
@@ -213,7 +213,7 @@ that run headless. Nothing is deleted until the replacement agrees pixel for
 pixel where that applies.
 
 1. **std.gpu v2** — textures, targets, readback, client pipelines, shader tool,
-   alpha colour, boundary test; Metal first, Vulkan parity. `Painter.image`;
+   alpha color, boundary test; Metal first, Vulkan parity. `Painter.image`;
    `luce_ui.Raster` deleted; luced-2d and wolf3d moved to textures.
 2. **luce-image document core** — tiles, document tree, cached over chain with masks
    and clipping, canvas request with pyramid levels, zoom/pan camera,

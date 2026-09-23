@@ -1,5 +1,5 @@
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point
-from gpu import RenderTarget, Rect, Region, Filter
+from gpu import RenderTarget, Rect, Region, Filter, Color
 from input import EventKind, Cursor, Key, ScrollUnit
 from workspace import Workspace
 import theme
@@ -24,9 +24,11 @@ pub class CanvasView: Widget:
     var gradient_y: float = 0.0
     var last_x: float = 0.0
     var last_y: float = 0.0
-    var pointer_x: float = 0.0
-    var pointer_y: float = 0.0
-    var pointer_inside: bool = false
+    pub var pointer_x: float = 0.0
+    pub var pointer_y: float = 0.0
+    pub var pointer_inside: bool = false
+    ## Layouts that show the pointer (the rulers), redrawn with the view.
+    pub var linked: list[Layout]
     var space_held: bool = false
     var selecting: bool = false
     var select_mode: int = 0
@@ -59,6 +61,7 @@ pub class CanvasView: Widget:
         self.box.set_limits(Size(200.0, 160.0), Size(16384.0, 16384.0))
         # Pictures and documents dropped on the canvas open, each in its own tab.
         self.box.set_drop_target(true)
+        self.linked = []
 
     pub func layout(self) -> Layout:
         return self.box
@@ -110,6 +113,8 @@ pub class CanvasView: Widget:
                 workspace.canvas.draw_moving(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top, workspace.selected_id(), dx, dy)
             else:
                 workspace.canvas.draw(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top)
+            if workspace.show_grid:
+                self.draw_grid(painter, x0, y0, x1, y1)
             painter.rectangle(Rect(x0, y0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y1 - 1.0, x1 - x0, 1.0), theme.border())
             painter.rectangle(Rect(x0, y0, 1.0, y1 - y0), theme.border())
@@ -141,6 +146,30 @@ pub class CanvasView: Widget:
                 painter.line(a, b, 1.0, theme.text())
                 index += 1
         painter.close()
+
+    ## The grid over the document: majors every grid_major document pixels, their
+    ## subdivisions fainter; a level whose lines would crowd closer than a few
+    ## points on screen is left out.
+    func draw_grid(self, painter: Painter, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let workspace = self.workspace
+        let major = workspace.grid_major() * workspace.zoom
+        let minor = major / float(workspace.grid_divisions())
+        if minor >= 6.0:
+            self.grid_lines(painter, minor, x0, y0, x1, y1, Color(1.0, 1.0, 1.0), 0.10)
+        if major >= 8.0:
+            self.grid_lines(painter, major, x0, y0, x1, y1, Color(1.0, 1.0, 1.0), 0.32)
+
+    func grid_lines(self, painter: Painter, step: float, x0: float, y0: float, x1: float, y1: float, ink: Color, opacity: float) -> unit!:
+        let left = self.workspace.offset_x
+        let top = self.workspace.offset_y
+        var x = left + math.ceil((x0 - left) / step) * step
+        while x <= x1:
+            painter.rectangle(Rect(math.floor(x), y0, 1.0, y1 - y0), ink, opacity)
+            x += step
+        var y = top + math.ceil((y0 - top) / step) * step
+        while y <= y1:
+            painter.rectangle(Rect(x0, math.floor(y), x1 - x0, 1.0), ink, opacity)
+            y += step
 
     ## Advance the marching ants; called from the frame timer.
     pub func march(self):
@@ -306,6 +335,8 @@ pub class CanvasView: Widget:
         elif event.kind == EventKind.pointer_left:
             self.pointer_inside = false
         self.box.invalidate()
+        for linked in self.linked:
+            linked.invalidate()
 
 ## A texel index kept inside a 256-texel checker tile, leaving room for one texel.
 pub func clamp_texel(value: int) -> int:
