@@ -5,6 +5,10 @@ from panels import Panels
 from actions import Actions
 from settings import Store
 import theme
+import crash
+
+## The version crash reports carry; keep it equal to package.prisma's.
+pub let version: str = "0.1.16"
 
 pub class Luce2D:
     pub let app: Application
@@ -13,6 +17,10 @@ pub class Luce2D:
     let connections: list[Connection]
 
     pub func init(self) -> unit!:
+        # Crash reports first, so anything below that traps leaves one; then the
+        # report the last run left, if it crashed, to show once the window is up.
+        crash.enable("luced-2d", version)
+        let previous_crash = crash.take_report("luced-2d")
         let font = Font()
         # Settings come first: a new canvas takes their size, the window their theme.
         let store = Store()
@@ -31,6 +39,8 @@ pub class Luce2D:
         panels.settings_dialog.apply()
         if store.warning != "":
             panels.status.set_text(store.warning)
+        if previous_crash != "":
+            panels.show_crash(previous_crash)
         self.app = app
         self.workspace = workspace
         self.panels = panels

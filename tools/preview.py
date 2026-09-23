@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -92,12 +92,46 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx, y = cy, button = 0))
             print(f"ZOOM after zoom tool click {editor.workspace.zoom}")
             editor.panels.refresh()''',
+    'pan': '''            editor.workspace.choose_tool("brush")
+            editor.panels.refresh()
+            let bounds = editor.panels.view.layout().bounds()
+            editor.workspace.fit(bounds.width, bounds.height)
+            let cx = bounds.x + bounds.width * 0.5
+            let cy = bounds.y + bounds.height * 0.5
+            print(f"PAN start {editor.workspace.offset_x},{editor.workspace.offset_y}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = cx, y = cy))
+            # A click on the canvas first, as a person would: it paints a dot and takes focus.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = cx, y = cy, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx, y = cy, button = 0))
+            print("PAN clicked")
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.space))
+            print("PAN space down")
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.space, repeated = true))
+            print("PAN space repeat")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = cx, y = cy, button = 0))
+            print("PAN pointer down")
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = cx + 120.0, y = cy + 60.0))
+            print(f"PAN moved {editor.workspace.offset_x},{editor.workspace.offset_y}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx + 120.0, y = cy + 60.0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.key_up, key = Key.space))
+            print(f"PAN done {editor.workspace.offset_x},{editor.workspace.offset_y} painting {editor.workspace.canvas.painting()}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = cx, y = cy, button = 2))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = cx - 50.0, y = cy))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx - 50.0, y = cy, button = 2))
+            print(f"PAN middle {editor.workspace.offset_x},{editor.workspace.offset_y}")
+            editor.workspace.zoom_about(6.0, cx, cy)
+            editor.workspace.pan(0.5, 0.5)
+            print(f"PAN far {editor.workspace.offset_x},{editor.workspace.offset_y} zoom {editor.workspace.zoom}")
+            editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
             editor.panels.pick_color(false)
             editor.panels.refresh()''',
 }
 SCENE = SCENES[arguments.scene]
+# Only what the scene uses: Luce rejects an unused import.
+_input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
+SCENE_IMPORTS = ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
@@ -145,9 +179,7 @@ pub func save(path: str) -> !:
     ppm = work / 'preview.ppm'
     (work / 'src/main.luc').write_text('''import probe
 from app import Luce2D
-from ui import Event
-from input import EventKind, ScrollUnit, Key
-pub func main(arguments: list[str]) -> int!:
+''' + SCENE_IMPORTS + '''pub func main(arguments: list[str]) -> int!:
     discard(arguments)
     let editor = Luce2D()
     editor.workspace.open("''' + str(ROOT / 'docs/sample.png') + '''")

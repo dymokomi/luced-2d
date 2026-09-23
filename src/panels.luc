@@ -1,4 +1,4 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion
+from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion, TextEditor
 from interop import Connection
 from workspace import Workspace
 from canvas import Canvas
@@ -59,6 +59,9 @@ pub class Panels:
     pub let text_controls: HStack
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
     pub let palette: Palette
+    ## The report of a crash the last run left, shown once on the next launch.
+    pub let crash_dialog: Dialog
+    let crash_text: TextEditor
     pub let settings_dialog: SettingsDialog
     pub let picker: ColorPicker
     pub let mask_prompt: Dialog
@@ -150,6 +153,11 @@ pub class Panels:
         self.texture_menu = Menu("None ▾", self.texture_commands(), font = font)
         self.brush_dialog = self.build_brush_dialog(font)
         self.palette = Palette(workspace)
+        self.crash_text = TextEditor("", read_only = true, line_numbers = false, font = font)
+        self.crash_text.layout().set_limits(Size(600.0, 260.0), Size(600.0, 260.0))
+        self.crash_dialog = Dialog([Text("luced-2d quit unexpectedly last time", font = font),
+                                    Text("From ~/.luce/crashes. Copy it (cmd-A, cmd-C) to report it.", font = font, muted = true),
+                                    self.crash_text, HStack([Spacer(), self.button("Close", self.close_crash)], spacing = 8.0)], width = 640.0)
         self.palette.on_pick = self.pick_color
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
@@ -298,7 +306,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.brush_dialog, self.settings_dialog.dialog], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.brush_dialog, self.settings_dialog.dialog, self.crash_dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -844,6 +852,14 @@ pub class Panels:
     func ask(self, mode: str, title: str, value: str, accept: str) -> unit!:
         self.prompt.open(title, value, accept = accept)
         self.prompt_mode = mode
+
+    ## Show a crash report the last run left.
+    pub func show_crash(self, report: str) -> unit!:
+        self.crash_text.set_text(report)
+        self.crash_dialog.open()
+
+    func close_crash(self) -> unit!:
+        self.crash_dialog.hide()
 
     pub func switch_document(self, index: int) -> unit!:
         self.workspace.switch_document(index)
