@@ -89,7 +89,15 @@ pub class CanvasView: Widget:
                     let cy = math.max(y, y0)
                     let cw = math.min(x + block, x1) - cx
                     let ch = math.min(y + block, y1) - cy
-                    painter.image(self.checker, Rect(cx, cy, cw, ch), Region(int(cx - x), int(cy - y), int(cw), int(ch)), 1.0, Filter.nearest)
+                    # The block's texels this piece covers: whole texels, inside the
+                    # 256-texel tile, at least one wide. Fractional offsets (a pan, a
+                    # zoom) otherwise round a sliver to nothing or past the tile.
+                    let sx = clamp_texel(int(math.floor(cx - x)))
+                    let sy = clamp_texel(int(math.floor(cy - y)))
+                    let sw = texel_span(sx, int(math.ceil(cx + cw - x)))
+                    let sh = texel_span(sy, int(math.ceil(cy + ch - y)))
+                    if cw > 0.0 and ch > 0.0:
+                        painter.image(self.checker, Rect(cx, cy, cw, ch), Region(sx, sy, sw, sh), 1.0, Filter.nearest)
                     x += block
                 y += block
             if self.moving:
@@ -273,3 +281,14 @@ pub class CanvasView: Widget:
         elif event.kind == EventKind.pointer_left:
             self.pointer_inside = false
         self.box.invalidate()
+
+## A texel index kept inside a 256-texel checker tile, leaving room for one texel.
+pub func clamp_texel(value: int) -> int:
+    return value if value >= 0 and value <= 255 else (0 if value < 0 else 255)
+
+## Texels from `start` to `end`, at least one and not past the tile.
+pub func texel_span(start: int, end: int) -> int:
+    let span = end - start
+    if span < 1:
+        return 1
+    return span if span <= 256 - start else 256 - start

@@ -3,7 +3,7 @@ from gpu import Frame
 from workspace import Workspace
 from panels import Panels
 from actions import Actions
-from view import CanvasView
+from view import CanvasView, clamp_texel, texel_span
 from settings import Settings
 import window
 
@@ -15,6 +15,7 @@ pub func main(arguments: list[str]) -> int!:
     viewing()
     contents()
     settings_round_trip()
+    checker_regions()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -100,3 +101,18 @@ func settings_round_trip() -> unit!:
         rejected = true
         return)
     assert(rejected)
+
+## A checker piece of any fractional size and place maps to a source region of
+## whole texels inside the 256-texel tile; a pan once rounded a sliver to zero width
+## ("an image source region must lie inside its texture").
+func checker_regions() -> unit!:
+    assert(clamp_texel(-3) == 0 and clamp_texel(300) == 255 and clamp_texel(12) == 12)
+    assert(texel_span(0, 0) == 1 and texel_span(255, 400) == 1 and texel_span(10, 20) == 10 and texel_span(0, 256) == 256)
+    var start = 0
+    while start < 256:
+        var end = start - 2
+        while end < 260:
+            let span = texel_span(clamp_texel(start), end)
+            assert(span >= 1 and clamp_texel(start) + span <= 256)
+            end += 7
+        start += 5

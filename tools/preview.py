@@ -119,8 +119,10 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = cx - 50.0, y = cy))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx - 50.0, y = cy, button = 2))
             print(f"PAN middle {editor.workspace.offset_x},{editor.workspace.offset_y}")
-            editor.workspace.zoom_about(6.0, cx, cy)
-            editor.workspace.pan(0.5, 0.5)
+            # Leave the last checker block 0.5 points wide at the view's right edge.
+            editor.workspace.zoom = 1.0
+            editor.workspace.offset_x = bounds.width - 768.0 - 0.5
+            editor.workspace.offset_y = 10.0
             print(f"PAN far {editor.workspace.offset_x},{editor.workspace.offset_y} zoom {editor.workspace.zoom}")
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
