@@ -16,6 +16,7 @@ pub class Document:
     pub var offset_x: float = 0.0
     pub var offset_y: float = 0.0
     pub var selected: int = 0
+    ## Whether the view has had its first fit; the view fits a document that has not.
     pub var fitted: bool = false
     pub var next_name: int = 1
 
@@ -636,13 +637,11 @@ pub class Workspace:
         self.offset_x = x - (x - self.offset_x) * applied
         self.offset_y = y - (y - self.offset_y) * applied
         self.zoom = next
-        self.fitted = false
         self.touch()
 
     pub func pan(self, dx: float, dy: float):
         self.offset_x += dx
         self.offset_y += dy
-        self.fitted = false
         self.touch()
 
     ## Fit the document into a `width` by `height` view with a margin.

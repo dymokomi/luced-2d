@@ -40,6 +40,11 @@ func viewing() -> unit!:
     assert(workspace.zoom == 4.6 and workspace.offset_x == 40.0 and workspace.offset_y == 70.0)
     workspace.zoom_about(2.0, 40.0, 70.0)
     assert(workspace.zoom == 9.2 and workspace.offset_x == 40.0 and workspace.offset_y == 70.0)
+    # Zooming and panning keep the first fit done, so the view does not fit again over them.
+    assert(workspace.fitted)
+    workspace.pan(5.0, 5.0)
+    assert(workspace.fitted and workspace.zoom == 9.2)
+    workspace.pan(-5.0, -5.0)
     workspace.zoom_about(0.5, 0.0, 0.0)
     assert(workspace.zoom == 4.6 and workspace.offset_x == 20.0 and workspace.offset_y == 35.0)
     workspace.pan(5.0, -5.0)

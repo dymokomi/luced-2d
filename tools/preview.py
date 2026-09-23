@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -72,6 +72,26 @@ SCENES = {
             editor.workspace.open("''' + str(ROOT / 'docs/sample.png') + '''")
             editor.workspace.switch_document(0)
             editor.panels.refresh()''',
+    'zoom': '''            editor.workspace.choose_tool("brush")
+            editor.panels.refresh()
+            let bounds = editor.panels.view.layout().bounds()
+            let cx = bounds.x + bounds.width * 0.5
+            let cy = bounds.y + bounds.height * 0.5
+            # The crop and resize above queued a refit; do it now, as a frame would.
+            editor.workspace.fit(bounds.width, bounds.height)
+            print(f"ZOOM start {editor.workspace.zoom} view {bounds.x},{bounds.y} {bounds.width}x{bounds.height}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = cx, y = cy))
+            editor.app.dispatch(Event(kind = EventKind.scroll, x = cx, y = cy, scroll_y = 40.0, scroll_unit = ScrollUnit.points, meta = true))
+            print(f"ZOOM after cmd-scroll {editor.workspace.zoom}")
+            editor.app.dispatch(Event(kind = EventKind.scroll, x = cx, y = cy, scroll_y = 3.0, scroll_unit = ScrollUnit.lines))
+            print(f"ZOOM after wheel {editor.workspace.zoom}")
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.equal, meta = true))
+            print(f"ZOOM after cmd-= {editor.workspace.zoom}")
+            editor.workspace.choose_tool("zoom")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = cx, y = cy, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx, y = cy, button = 0))
+            print(f"ZOOM after zoom tool click {editor.workspace.zoom}")
+            editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
             editor.panels.pick_color(false)
@@ -125,6 +145,8 @@ pub func save(path: str) -> !:
     ppm = work / 'preview.ppm'
     (work / 'src/main.luc').write_text('''import probe
 from app import Luce2D
+from ui import Event
+from input import EventKind, ScrollUnit, Key
 pub func main(arguments: list[str]) -> int!:
     discard(arguments)
     let editor = Luce2D()
