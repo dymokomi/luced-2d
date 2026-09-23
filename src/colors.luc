@@ -6,6 +6,7 @@ from workspace import Workspace
 import color as science
 import hsl
 import lab
+import oklab
 import space
 import transfer
 import theme
@@ -177,7 +178,8 @@ pub class RecentColors: Widget:
 
 ## The colour picker after Photoshop's: a 256-point field and a strip, the
 ## strip's channel chosen by the radio beside each field (H, S, B, R, G, B, L,
-## a, b — the field plots the other two of that model), a new-over-current
+## a, b, and OkLCh's L, C, h — the field plots the other two of that model,
+## OkLCh planes gamut-mapped by chroma so they stay displayable), a new-over-current
 ## preview, HSB / RGB / Lab / hex fields, the history, OK and Cancel; a canvas
 ## click samples while it is open. Colour maths is luce-color's: HSB through
 ## `hsl`, Lab through `space`/`lab` against sRGB's white. Changes apply to the
@@ -190,7 +192,7 @@ pub class ColorPicker:
     let preview: PreviewPair
     let recent: RecentColors
     let title: Text
-    ## The nine channel fields in the order H, S, B, R, G, B, L, a, b, and their radios.
+    ## The twelve channel fields in the order H, S, B, R, G, B, L, a, b, oL, oC, oh, and their radios.
     let channels: list[NumberField]
     let radios: list[Button]
     let hex: TextField
@@ -201,7 +203,7 @@ pub class ColorPicker:
     var red: float = 0.0
     var green: float = 0.0
     var blue: float = 0.0
-    ## Which channel the strip runs along, 0..8 as `channels`.
+    ## Which channel the strip runs along, 0..11 as `channels`.
     var mode: int = 0
     var syncing: bool = false
     pub var closed: func() -> unit!? = none
@@ -220,19 +222,17 @@ pub class ColorPicker:
         self.title = Text("Foreground Colour", font = font)
         self.channels = []
         self.radios = []
-        let names = ["H", "S", "B", "R", "G", "B", "L", "a", "b"]
-        let lows = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -128.0, -128.0]
-        let highs = [360.0, 100.0, 100.0, 255.0, 255.0, 255.0, 100.0, 127.0, 127.0]
-        let suffixes = ["°", "%", "%", "", "", "", "", "", ""]
+        let names = ["H", "S", "B", "R", "G", "B", "L", "a", "b", "oL", "oC", "oh"]
+        let suffixes = ["°", "%", "%", "", "", "", "", "", "", "", "", "°"]
         var index = 0
-        while index < 9:
+        while index < 12:
             let chosen = index
             let radio = Button(names[index], font = font)
             radio.layout().set_size(24.0, 22.0)
             self.connections.append(radio.on_click(func () -> unit!:
                 self.choose_mode(chosen)))
             self.radios.append(radio)
-            let channel = NumberField(0.0, lows[index], highs[index], 1.0, suffix = suffixes[index], font = font, cells = 6.0)
+            let channel = NumberField(0.0, channel_low(index), channel_high(index), 1.0 if index != 10 else 0.5, decimals = 0 if index != 10 else 1, suffix = suffixes[index], font = font, cells = 6.0)
             self.connections.append(channel.on_change(func (value: float) -> unit!:
                 discard(value)
                 self.channel_changed(chosen)))
@@ -255,7 +255,7 @@ pub class ColorPicker:
         let left = VStack([self.channel_row(0), self.channel_row(1), self.channel_row(2), Rule(), self.channel_row(3), self.channel_row(4), self.channel_row(5)], spacing = 4.0)
         let hash_label = Text("#", font = font, muted = true)
         hash_label.layout().set_limits(Size(24.0, 0.0), Size(24.0, 16384.0))
-        let right = VStack([self.channel_row(6), self.channel_row(7), self.channel_row(8), Rule(), HStack([hash_label, self.hex], spacing = 6.0)], spacing = 4.0)
+        let right = VStack([self.channel_row(6), self.channel_row(7), self.channel_row(8), Rule(), self.channel_row(9), self.channel_row(10), self.channel_row(11), Rule(), HStack([hash_label, self.hex], spacing = 6.0)], spacing = 4.0)
         let side = VStack([HStack([self.preview, buttons], spacing = 16.0), HStack([left, right], spacing = 14.0),
                            Text("Click canvas to sample", font = font, muted = true), Spacer()], spacing = 12.0)
         side.layout().set_limits(Size(300.0, 256.0), Size(300.0, 16384.0))
@@ -310,6 +310,11 @@ pub class ColorPicker:
     func lab_of(self) -> lab.Lab:
         return space.to_lab(science.Color(self.red, self.green, self.blue), space.srgb)
 
+    ## OkLCh of the colour, lightness and chroma scaled by 100 for the fields.
+    func oklch_of(self) -> lab.LCh:
+        let polar = lab.oklab_to_oklch(science.to_oklab(space.decode(science.Color(self.red, self.green, self.blue), space.srgb)))
+        return lab.LCh(polar.l * 100.0, polar.c * 100.0, polar.h)
+
     ## Channel `index` of the colour, in the units the fields show.
     func channel_value(self, index: int) -> float:
         if index < 3:
@@ -317,8 +322,11 @@ pub class ColorPicker:
             return [h.h, h.s * 100.0, h.v * 100.0][index]
         if index < 6:
             return [self.red, self.green, self.blue][index - 3] * 255.0
-        let l = self.lab_of()
-        return [l.l, l.a, l.b][index - 6]
+        if index < 9:
+            let l = self.lab_of()
+            return [l.l, l.a, l.b][index - 6]
+        let o = self.oklch_of()
+        return [o.l, o.c, o.h][index - 9]
 
     ## The colour with channel `index` set to `value` (field units), in gamut.
     func with_channel(self, index: int, value: float) -> science.Color:
@@ -327,13 +335,13 @@ pub class ColorPicker:
     ## The channels a field's axes carry for the strip channel `mode`: (x, y),
     ## y running downwards from the channel's high end.
     func axes(self) -> list[int]:
-        return [[1, 2], [0, 2], [0, 1], [5, 4], [5, 3], [3, 4], [7, 8], [8, 6], [7, 6]][self.mode]
+        return [[1, 2], [0, 2], [0, 1], [5, 4], [5, 3], [3, 4], [7, 8], [8, 6], [7, 6], [11, 10], [11, 9], [10, 9]][self.mode]
 
     func low(self, index: int) -> float:
-        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -128.0, -128.0][index]
+        return channel_low(index)
 
     func high(self, index: int) -> float:
-        return [360.0, 100.0, 100.0, 255.0, 255.0, 255.0, 100.0, 127.0, 127.0][index]
+        return channel_high(index)
 
     ## The colour at field position (u, v) for the current strip channel.
     func at(self, u: float, v: float) -> science.Color:
@@ -355,10 +363,16 @@ pub class ColorPicker:
             c = set_rgb(c, first_index, first_value)
             c = set_rgb(c, second_index, second_value)
             return c
-        var l = self.lab_of()
-        l = set_lab(l, first_index, first_value)
-        l = set_lab(l, second_index, second_value)
-        return space.clamp(space.from_lab(l, space.srgb))
+        if first_index < 9:
+            var l = self.lab_of()
+            l = set_lab(l, first_index, first_value)
+            l = set_lab(l, second_index, second_value)
+            return space.clamp(space.from_lab(l, space.srgb))
+        var o = self.oklch_of()
+        o = set_oklch(o, first_index, first_value)
+        o = set_oklch(o, second_index, second_value)
+        # OkLCh edits leave the gamut easily; give up chroma, keep lightness and hue.
+        return space.encode(oklab.to_srgb(lab.LCh(o.l / 100.0, o.c / 100.0, o.h)), space.srgb)
 
     # -- Showing the model.
 
@@ -369,7 +383,7 @@ pub class ColorPicker:
         self.blue = math.max(0.0, math.min(1.0, color.blue))
         self.syncing = true
         var index = 0
-        while index < 9:
+        while index < 12:
             self.channels[index].set_value(self.channel_value(index))
             self.radios[index].set_style(ButtonStyle.selected if index == self.mode else ButtonStyle.sunken)
             index += 1
@@ -459,6 +473,23 @@ func set_rgb(c: science.Color, index: int, value: float) -> science.Color:
     else:
         out.blue = value / 255.0
     return out
+
+func set_oklch(o: lab.LCh, index: int, value: float) -> lab.LCh:
+    var out = o
+    if index == 9:
+        out.l = value
+    elif index == 10:
+        out.c = value
+    else:
+        out.h = value
+    return out
+
+## The fields' ranges: H°, S %, B %, R, G, B (0..255), L*, a*, b*, Ok L×100, Ok C×100, Ok h°.
+func channel_low(index: int) -> float:
+    return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -128.0, -128.0, 0.0, 0.0, 0.0][index]
+
+func channel_high(index: int) -> float:
+    return [360.0, 100.0, 100.0, 255.0, 255.0, 255.0, 100.0, 127.0, 127.0, 100.0, 40.0, 360.0][index]
 
 func set_lab(l: lab.Lab, index: int, value: float) -> lab.Lab:
     var out = l

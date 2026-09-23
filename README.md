@@ -84,7 +84,7 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 - `src/colors.luc`: the palette below the tool rail (foreground over
   background, swap X, reset D) and the colour editor after Photoshop's: a
   field and a strip whose channel a radio picks (H, S, B, R, G, B, L, a, b —
-  the field plots the other two), new-over-current preview, HSB / RGB / Lab /
+  the field plots the other two; plus OkLCh L, C, h, gamut-mapped by chroma), new-over-current preview, HSB / RGB / Lab / OkLCh /
   hex fields, a history of committed colours (saved in settings), live on the
   palette, canvas click samples while it is open. The colour maths is
   luce-color's (`hsl`, `lab`, `space`, `transfer`).
