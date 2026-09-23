@@ -8,6 +8,7 @@ from layers import LayerList
 from tabs import DocumentTabs
 from colors import Palette, ColorPicker
 from settings import Store
+import clipboard
 from settings_panel import SettingsDialog
 
 ## The window's contents, after Compositor's: a contextual tool header, a tool
@@ -62,6 +63,8 @@ pub class Panels:
     ## The report of a crash the last run left, shown once on the next launch.
     pub let crash_dialog: Dialog
     let crash_text: TextEditor
+    pub let crash_copy: Button
+    var crash_report: str = ""
     pub let settings_dialog: SettingsDialog
     pub let picker: ColorPicker
     pub let mask_prompt: Dialog
@@ -155,9 +158,10 @@ pub class Panels:
         self.palette = Palette(workspace)
         self.crash_text = TextEditor("", read_only = true, line_numbers = false, font = font)
         self.crash_text.layout().set_limits(Size(600.0, 260.0), Size(600.0, 260.0))
+        self.crash_copy = self.button("Copy", self.copy_crash)
         self.crash_dialog = Dialog([Text("luced-2d quit unexpectedly last time", font = font),
-                                    Text("From ~/.luce/crashes. Copy it (cmd-A, cmd-C) to report it.", font = font, muted = true),
-                                    self.crash_text, HStack([Spacer(), self.button("Close", self.close_crash)], spacing = 8.0)], width = 640.0)
+                                    Text("The report is kept in ~/.luce/crashes; nothing is sent anywhere.", font = font, muted = true),
+                                    self.crash_text, HStack([Spacer(), self.crash_copy, self.button("Close", self.close_crash)], spacing = 8.0)], width = 640.0)
         self.palette.on_pick = self.pick_color
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
@@ -855,8 +859,15 @@ pub class Panels:
 
     ## Show a crash report the last run left.
     pub func show_crash(self, report: str) -> unit!:
+        self.crash_report = report
         self.crash_text.set_text(report)
+        self.crash_copy.set_text("Copy")
         self.crash_dialog.open()
+
+    ## Copy: the whole report to the clipboard, and the button says so.
+    func copy_crash(self) -> unit!:
+        clipboard.write_text(self.crash_report)
+        self.crash_copy.set_text("Copied")
 
     func close_crash(self) -> unit!:
         self.crash_dialog.hide()

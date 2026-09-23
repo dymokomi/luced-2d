@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -124,6 +124,11 @@ SCENES = {
             editor.workspace.offset_x = bounds.width - 768.0 - 0.5
             editor.workspace.offset_y = 10.0
             print(f"PAN far {editor.workspace.offset_x},{editor.workspace.offset_y} zoom {editor.workspace.zoom}")
+            editor.panels.refresh()''',
+    'crash': '''            editor.panels.refresh()
+            let copy = editor.panels.crash_copy.layout().bounds()
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = copy.x + 4.0, y = copy.y + 4.0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = copy.x + 4.0, y = copy.y + 4.0, button = 0))
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
