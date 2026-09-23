@@ -81,6 +81,9 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   (General, Colour Management, Shortcuts, Theme), a draft edited at the right,
   Save/Cancel. Shortcuts are the application's own `Command`s: pick a row,
   record a chord in the field beneath; a conflict names the other holder.
+- `src/tabs.luc`: the open documents as tabs across the viewport (Photoshop's):
+  `Workspace` keeps a `Document` per tab and swaps the live canvas and view
+  state on switch; New/Open make tabs, ⌘W closes, ⌥⌘] / ⌥⌘[ step.
 - `src/colors.luc`: the palette below the tool rail (foreground over
   background, swap X, reset D) and the colour editor after Photoshop's: a
   field and a strip whose channel a radio picks (H, S, B, R, G, B, L, a, b —
@@ -88,8 +91,10 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   hex fields, a history of committed colours (saved in settings), live on the
   palette, canvas click samples while it is open. The colour maths is
   luce-color's (`hsl`, `lab`, `space`, `transfer`).
-- `src/panels.luc`: the window: menu bar, contextual tool header (its
-  settings are scrubbable number fields), then a dock of panes after
+- `src/panels.luc`: the window: menu bar, contextual tool header (preset
+  menu, Size/Hardness/Opacity/Flow/Spacing scrubbers and Brush…, which opens
+  the Brush Settings dialog: Tip Shape, Shape Dynamics, Scattering, Texture,
+  Colour Dynamics, Transfer), then a dock of panes after
   eleusis-layout (see `docs/ELEUSIS_UI.md`): the Viewport with its tool rail,
   Layers with its actions on a shelf at the bottom, Properties for the
   selected layer (name field, blend menu, opacity slider and field, flag

@@ -1,12 +1,41 @@
 from canvas import Canvas
 import math
+import paths
 from theme import Look
 
 ## One open document and how it is shown: the luce-image canvas, its file,
 ## the view's zoom and offset, and which layer is selected. Every change bumps
 ## `revision` so views know to redraw.
+## One open document: its canvas, where it lives, and the view state that
+## belongs to it. The workspace holds one of these per tab and keeps the
+## current one's fields live on itself, so the tools never look past it.
+pub class Document:
+    pub var canvas: Canvas
+    pub var path: str = ""
+    pub var zoom: float = 1.0
+    pub var offset_x: float = 0.0
+    pub var offset_y: float = 0.0
+    pub var selected: int = 0
+    pub var fitted: bool = false
+    pub var next_name: int = 1
+
+    pub func init(self, canvas: Canvas, path: str) -> unit!:
+        self.canvas = canvas
+        self.path = path
+
+    ## The tab's name: the file's, or Untitled.
+    pub func title(self) -> str:
+        return paths.base(self.path) if self.path != "" else "Untitled"
+
+    ## Whether it has work its file does not.
+    pub func dirty(self) -> bool:
+        return self.canvas.can_undo()
+
 pub class Workspace:
     pub var canvas: Canvas
+    ## Every open document, and which one the live fields belong to.
+    pub var documents: list[Document]
+    pub var current: int = 0
     ## The configurable look (accent, radius), set from Settings.
     pub var look: Look
     pub var path: str = ""
@@ -72,7 +101,103 @@ pub class Workspace:
         self.look = Look()
         self.recent = []
         discard(self.canvas.add_layer("Background"))
+        self.documents = [Document(self.canvas, "")]
         self.touch()
+
+    # -- Documents: the live fields are the current document's; switching stashes and restores them.
+
+    ## Copy the live fields into the current document's record.
+    func stash(self):
+        if self.current < 0 or self.current >= self.documents.length:
+            return
+        let document = self.documents[self.current]
+        document.canvas = self.canvas
+        document.path = self.path
+        document.zoom = self.zoom
+        document.offset_x = self.offset_x
+        document.offset_y = self.offset_y
+        document.selected = self.selected
+        document.fitted = self.fitted
+        document.next_name = self.next_name
+
+    ## Make document `index` the live one.
+    func restore(self, index: int):
+        let document = self.documents[index]
+        self.current = index
+        self.canvas = document.canvas
+        self.path = document.path
+        self.zoom = document.zoom
+        self.offset_x = document.offset_x
+        self.offset_y = document.offset_y
+        self.selected = document.selected
+        self.fitted = document.fitted
+        self.next_name = document.next_name
+        self.touch()
+
+    ## Add `document` as a new tab and switch to it — or, when the only open
+    ## document is the untouched untitled one, take its place, as Photoshop does.
+    func adopt(self, document: Document) -> unit!:
+        self.stash()
+        if self.documents.length == 1 and self.path == "" and not self.canvas.can_undo() and self.layer_count() == 1:
+            self.canvas.close()
+            self.documents = [document]
+            self.restore(0)
+            return
+        self.documents.append(document)
+        self.restore(self.documents.length - 1)
+
+    pub func switch_document(self, index: int) -> unit!:
+        if index < 0 or index >= self.documents.length or index == self.current:
+            return
+        self.stash()
+        self.restore(index)
+
+    ## Step to the next (or previous) tab, wrapping.
+    pub func next_document(self, step: int) -> unit!:
+        let count = self.documents.length
+        self.switch_document(((self.current + step) % count + count) % count)
+
+    ## Close document `index`. The last one closing leaves a fresh untitled canvas.
+    pub func close_document(self, index: int) -> unit!:
+        if index < 0 or index >= self.documents.length:
+            return
+        self.stash()
+        let closing = self.documents[index]
+        var kept: list[Document] = []
+        var at = 0
+        for document in self.documents:
+            if at != index:
+                kept.append(document)
+            at += 1
+        if kept.length == 0:
+            let fresh = Canvas(closing.canvas.width(), closing.canvas.height())
+            discard(fresh.add_layer("Background"))
+            kept.append(Document(fresh, ""))
+        closing.canvas.close()
+        self.documents = kept
+        # The tab that was current stays current, unless it was the one closed: then its neighbour.
+        var next = self.current
+        if index < self.current:
+            next = self.current - 1
+        if next >= kept.length:
+            next = kept.length - 1
+        if next < 0:
+            next = 0
+        self.restore(next)
+
+    pub func document_count(self) -> int:
+        return self.documents.length
+
+    ## The name and dirtiness of document `index`, the live one read live.
+    pub func document_title(self, index: int) -> str:
+        if index == self.current:
+            return paths.base(self.path) if self.path != "" else "Untitled"
+        return self.documents[index].title()
+
+    pub func document_dirty(self, index: int) -> bool:
+        if index == self.current:
+            return self.canvas.can_undo()
+        return self.documents[index].dirty()
 
     pub func touch(self):
         self.revision += 1
@@ -83,22 +208,16 @@ pub class Workspace:
     pub func height(self) -> int:
         return self.canvas.height()
 
-    ## Replace the document with a new empty one.
+    ## Open a new empty document in its own tab.
     pub func create(self, width: int, height: int) -> unit!:
-        self.canvas = Canvas(width, height)
-        discard(self.canvas.add_layer("Background"))
-        self.path = ""
-        self.selected = 0
-        self.fitted = false
-        self.touch()
+        let canvas = Canvas(width, height)
+        discard(canvas.add_layer("Background"))
+        self.adopt(Document(canvas, ""))
 
-    ## Replace the document with the picture at `path`.
+    ## Open the picture at `path` in its own tab.
     pub func open(self, path: str) -> unit!:
-        self.canvas = Canvas.open(path)
-        self.path = path
-        self.selected = 0
-        self.fitted = false
-        self.touch()
+        let canvas = Canvas.open(path)
+        self.adopt(Document(canvas, path))
 
     ## Save to `path`: an `.l2d` package keeps every layer; any other extension
     ## writes the flattened picture in that format.

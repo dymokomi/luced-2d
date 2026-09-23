@@ -1,0 +1,91 @@
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point
+from gpu import RenderTarget, Rect
+from input import EventKind, Cursor
+from workspace import Workspace
+import theme
+import math
+
+## The open documents as tabs across the top of the viewport, after Photoshop's:
+## the current one on the surface with its top corners rounded, the others on
+## the strip, each with its name (a dot when it has unsaved work) and a close
+## cross; a + past the last opens a new document.
+pub class DocumentTabs: Widget:
+    let box: Layout
+    let workspace: Workspace
+    let font: Font
+    pub var on_switch: func(int) -> unit!? = none
+    pub var on_close: func(int) -> unit!? = none
+    pub var on_new: func() -> unit!? = none
+    let height: float = 30.0
+    let padding: float = 12.0
+    let cross: float = 22.0
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.font = font
+        self.box = Layout()
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_shrink(vertical = 0.0)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(200.0, self.height)
+
+    func tab_width(self, index: int) -> float!:
+        let dot = self.font.advance() * 2.0 if self.workspace.document_dirty(index) else 0.0
+        return self.font.measure(self.workspace.document_title(index)) + dot + self.padding * 2.0 + self.cross
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.tab_strip())
+        var x = 0.0
+        var index = 0
+        let text_y = math.max(0.0, (self.height - self.font.height()) * 0.5)
+        while index < self.workspace.document_count():
+            let width = self.tab_width(index)
+            let current = index == self.workspace.current
+            if current:
+                painter.rounded_rectangle(Rect(x, 2.0, width, self.height - 2.0), theme.surface(), 6.0, 1.0, 3)
+            let ink = theme.text() if current else theme.text_muted()
+            var title = self.workspace.document_title(index)
+            if self.workspace.document_dirty(index):
+                title = title + " •"
+            painter.text(title, x + self.padding, text_y, ink, self.font)
+            # The close cross, right of the name.
+            let cx = x + width - self.cross * 0.5 - 4.0
+            let cy = self.height * 0.5 + 1.0
+            painter.line(Point(cx - 3.5, cy - 3.5), Point(cx + 3.5, cy + 3.5), 1.2, theme.text_muted())
+            painter.line(Point(cx + 3.5, cy - 3.5), Point(cx - 3.5, cy + 3.5), 1.2, theme.text_muted())
+            x += width + 2.0
+            index += 1
+        # The + for a new document.
+        let px = x + 12.0
+        let py = self.height * 0.5 + 1.0
+        painter.line(Point(px - 5.0, py), Point(px + 5.0, py), 1.4, theme.text_muted())
+        painter.line(Point(px, py - 5.0), Point(px, py + 5.0), 1.4, theme.text_muted())
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
+            return
+        var x = 0.0
+        var index = 0
+        while index < self.workspace.document_count():
+            let width = self.tab_width(index)
+            if event.x >= x and event.x < x + width:
+                if event.x >= x + width - self.cross - 4.0:
+                    if let close = self.on_close:
+                        close(index)
+                elif let switch = self.on_switch:
+                    switch(index)
+                self.box.invalidate()
+                return
+            x += width + 2.0
+            index += 1
+        if event.x >= x and event.x < x + 24.0:
+            if let add = self.on_new:
+                add()
+        self.box.invalidate()

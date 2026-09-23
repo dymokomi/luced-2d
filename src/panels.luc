@@ -5,6 +5,7 @@ from canvas import Canvas
 from actions import Actions
 from view import CanvasView
 from layers import LayerList
+from tabs import DocumentTabs
 from colors import Palette, ColorPicker
 from settings import Store
 from settings_panel import SettingsDialog
@@ -15,6 +16,8 @@ from settings_panel import SettingsDialog
 pub class Panels:
     pub let body: VStack
     pub let view: CanvasView
+    ## The open documents' tabs across the top of the viewport.
+    pub let tabs: DocumentTabs
     pub let workspace: Workspace
     pub let status: Text
     pub let prompt: TextPrompt
@@ -99,6 +102,10 @@ pub class Panels:
         self.font = font
         self.connections = []
         self.view = CanvasView(workspace)
+        self.tabs = DocumentTabs(workspace, font)
+        self.tabs.on_switch = self.switch_document
+        self.tabs.on_close = self.close_document_at
+        self.tabs.on_new = self.new_document
         self.prompt = TextPrompt(font = font)
         self.layers = LayerList(workspace, font)
         self.status = Text("", font = font)
@@ -214,7 +221,7 @@ pub class Panels:
         dialog_items.append(HStack([Spacer(), self.button("Cancel", self.cancel_preview), self.button("Apply", self.apply_preview)], spacing = 8.0))
         self.adjust_dialog = Dialog(dialog_items, width = 420.0)
         # The menus present the shared commands, shortcuts and all.
-        let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as], font = font),
+        let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as, Command("", divider = true), actions.close_document], font = font),
                              Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.fill_background, actions.clear, actions.swap_colors, actions.reset_colors, Command("", divider = true), actions.settings], font = font),
                              Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
                              Menu("Image", [actions.crop, actions.canvas_size, actions.image_size], font = font),
@@ -222,7 +229,7 @@ pub class Panels:
                              Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
                                             actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.rename_layer, actions.layer_style], font = font),
                              Menu("Filter", [actions.blur], font = font),
-                             Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out], font = font),
+                             Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, Command("", divider = true), actions.next_document, actions.previous_document], font = font),
                              Spacer()], font = font)
         let header = Toolbar([self.header_title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active tool selected.
@@ -279,7 +286,9 @@ pub class Panels:
         self.properties_panel = Panel("Properties", properties, minimum = Size(220.0, 100.0), closable = false)
         # The viewport: the tool rail beside the canvas.
         # A one-point backdrop rule separates the rail from the canvas, as eleusis's viewport does.
-        let viewport = HStack([rail, Rule(structural = true, vertical = true), self.view], spacing = 0.0)
+        let canvas_row = HStack([rail, Rule(structural = true, vertical = true), self.view], spacing = 0.0)
+        canvas_row.layout().set_flex()
+        let viewport = VStack([self.tabs, canvas_row], spacing = 0.0)
         viewport.layout().set_flex()
         self.viewport_panel = Panel("Viewport", viewport, minimum = Size(320.0, 200.0), closable = false)
         self.dock = DStack([self.viewport_panel, self.layers_panel, self.properties_panel], font = font)
@@ -508,6 +517,13 @@ pub class Panels:
         self.bind(actions.undo, self.undo)
         self.bind(actions.redo, self.redo)
         self.bind(actions.fill, self.fill_selection)
+        self.bind(actions.close_document, self.close_document)
+        self.bind(actions.next_document, func () -> unit!:
+            self.workspace.next_document(1)
+            self.refresh())
+        self.bind(actions.previous_document, func () -> unit!:
+            self.workspace.next_document(-1)
+            self.refresh())
         self.bind(actions.settings, self.settings_dialog.open)
         self.bind(actions.fill_background, self.fill_background)
         self.bind(actions.clear, self.clear_selection)
@@ -832,6 +848,19 @@ pub class Panels:
         self.prompt.open(title, value, accept = accept)
         self.prompt_mode = mode
 
+    pub func switch_document(self, index: int) -> unit!:
+        self.workspace.switch_document(index)
+        self.refresh()
+
+    pub func close_document_at(self, index: int) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        self.workspace.close_document(index)
+        self.refresh()
+
+    pub func close_document(self) -> unit!:
+        self.close_document_at(self.workspace.current)
+
     pub func new_document(self) -> unit!:
         self.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
 
@@ -1147,6 +1176,7 @@ pub class Panels:
         self.layer_opacity.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
         self.layer_opacity_field.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
         self.layers.layout().invalidate()
+        self.tabs.layout().invalidate()
         self.view.layout().invalidate()
 
     pub func close(self):

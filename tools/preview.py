@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -66,6 +66,11 @@ SCENES = {
             editor.workspace.apply_preset("Hard Round")
             editor.workspace.choose_tool("brush")
             editor.panels.open_brush()
+            editor.panels.refresh()''',
+    'documents': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.create(900, 600)
+            editor.workspace.open("''' + str(ROOT / 'docs/sample.png') + '''")
+            editor.workspace.switch_document(0)
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
