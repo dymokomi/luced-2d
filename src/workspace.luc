@@ -565,6 +565,15 @@ pub class Workspace:
         self.fitted = false
         self.touch()
 
+    ## Image › Reveal All: the canvas grown to hold every layer's pixels,
+    ## those moved past it included; false when nothing lies past it.
+    pub func reveal_all(self) -> bool!:
+        if not self.canvas.reveal_all():
+            return false
+        self.fitted = false
+        self.touch()
+        return true
+
     ## Every layer resampled to `width` by `height`.
     pub func resize_image(self, width: int, height: int) -> unit!:
         self.canvas.resize_image(width, height)

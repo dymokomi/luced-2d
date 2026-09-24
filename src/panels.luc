@@ -221,6 +221,10 @@ pub class Panels:
         kit.bind(actions.canvas_size, func () -> unit!:
             self.prompts.ask("canvas", "Canvas size: width x height, then the old canvas's offset x y (e.g. 1920 x 1080 0 0)",
                              f"{self.workspace.width()} x {self.workspace.height()} 0 0", "Resize"))
+        kit.bind(actions.reveal_all, func () -> unit!:
+            if not self.workspace.reveal_all():
+                self.status.set_text("Nothing lies past the canvas")
+            self.refresh())
         kit.bind(actions.image_size, func () -> unit!:
             self.prompts.ask("image", "Image size: width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Resize"))
         kit.bind(actions.blur, self.adjust.blur)

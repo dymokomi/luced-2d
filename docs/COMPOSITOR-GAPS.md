@@ -23,7 +23,9 @@ Found beyond the old list, and first because they lose work:
    size / crop / image size / merge undoable; step names ("Undo Brush Stroke").
 2. [x] Unsaved-changes prompt on close and quit; Save keeps .l2d; File › Export
    PNG (Shift-Cmd-E) and Export JPEG with quality and matte (0.1.31).
-3. [ ] Layers that survive going off-canvas: signed origin and grown extent.
+3. [x] Layers that survive going off-canvas (0.1.32): moved, transformed, cropped
+   or canvas-sized pixels stay past the canvas and come back; Image › Reveal All.
+   Merge Down still flattens to the canvas.
 4. [ ] Transform: box on the Move tool (Show Transform Controls, Cmd-H); Cmd-T
    with a selection floats the pixels; numeric W/H/Scale/angle and sampling;
    several layers or a folder at once; free distort (Cmd-drag a corner); Alt

@@ -387,4 +387,6 @@ func unsaved_changes(arguments: list[str]) -> unit!:
     assert(workspace.export_name(".jpg") == "unsaved.jpg")
     workspace.export(folder + "/unsaved.png")
     assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0) and panels.files.can_quit())
+    # Nothing past the canvas: Reveal All has nothing to do.
+    assert(not workspace.reveal_all())
     panels.close()

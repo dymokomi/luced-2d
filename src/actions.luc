@@ -50,6 +50,7 @@ pub class Actions:
     pub let flip_canvas_horizontal: Command
     pub let flip_canvas_vertical: Command
     pub let canvas_size: Command
+    pub let reveal_all: Command
     pub let image_size: Command
     # Adjust, one per luce-image adjustment kind, and Filter
     pub let adjustments: list[Command]
@@ -136,6 +137,7 @@ pub class Actions:
         self.flip_canvas_horizontal = Command("Flip Canvas Horizontal", id = "flip_canvas_horizontal")
         self.flip_canvas_vertical = Command("Flip Canvas Vertical", id = "flip_canvas_vertical")
         self.canvas_size = Command("Canvas Size…", id = "canvas_size")
+        self.reveal_all = Command("Reveal All", id = "reveal_all")
         self.image_size = Command("Image Size…", id = "image_size")
         # The Adjust menu's upper half changes the pixels; the lower adds adjustment layers.
         self.adjustments = []
@@ -192,7 +194,7 @@ pub class Actions:
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
         self.all = [self.new_document, self.open_document, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
-                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.image_size, self.blur, self.add_noise,
+                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
