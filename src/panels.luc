@@ -1,5 +1,6 @@
 from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion, TextEditor, ContextMenu
 from interop import Connection
+from input import Key
 from workspace import Workspace
 from canvas import Canvas
 from actions import Actions
@@ -120,6 +121,7 @@ pub class Panels:
         self.view = CanvasView(workspace)
         self.tabs = DocumentTabs(workspace, font)
         self.view.on_open_files = self.open_files
+        self.view.on_key_up = self.spring_back
         self.tabs.on_switch = self.switch_document
         self.tabs.on_close = self.close_document_at
         self.tabs.on_new = self.new_document
@@ -846,6 +848,18 @@ pub class Panels:
         self.connections.append(button.on_click(callback))
         return button
 
+    ## A key let go over the canvas: if it is the current tool's key and the
+    ## tool was used while it was held, return to the tool before, as
+    ## Photoshop's spring-loaded tools do. A tap keeps the new tool.
+    pub func spring_back(self, key: Key) -> unit!:
+        let workspace = self.workspace
+        if not workspace.tool_used or workspace.tool_before == workspace.tool:
+            return
+        for command in self.actions.tools:
+            if command.id() == workspace.tool and command.shortcut().key == key:
+                self.choose_tool(workspace.tool_before)
+                return
+
     pub func choose_tool(self, tool: str) -> unit!:
         self.workspace.choose_tool(tool)
         self.refresh()
@@ -1224,8 +1238,10 @@ pub class Panels:
             hint = "Click the canvas to sample a color · X swaps · D resets"
         elif workspace.tool == "move":
             hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
-        elif workspace.tool == "marquee" or workspace.tool == "ellipse" or workspace.tool == "lasso":
-            hint = "Drag to select · shift adds · alt subtracts · cmd-A all · cmd-D deselect · Delete clears"
+        elif workspace.tool == "lasso":
+            hint = "Drag around the area to select · shift adds · alt subtracts · cmd-D deselect"
+        elif workspace.tool == "marquee" or workspace.tool == "ellipse":
+            hint = "Drag to select · shift adds, alt subtracts · shift while dragging squares, alt centers · cmd-A all · cmd-D deselect"
         elif workspace.tool == "wand":
             hint = "Click a color to select it · shift adds · alt subtracts"
         elif workspace.tool == "text":
@@ -1237,7 +1253,7 @@ pub class Panels:
         elif workspace.tool == "hand":
             hint = "Drag to pan"
         elif workspace.tool == "zoom":
-            hint = "Click to zoom in · alt-click to zoom out"
+            hint = "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool"
         self.header_hint.set_text(hint)
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
         self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")

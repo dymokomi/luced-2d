@@ -49,6 +49,11 @@ pub class Workspace:
     pub var erasing: bool = false
     ## The active tool: "move", "marquee", "ellipse", "lasso", "wand", "brush", "eraser", "hand" or "zoom".
     pub var tool: str = "brush"
+    ## Spring-loaded tools, as in Photoshop: the tool before the last switch,
+    ## and whether the current one has been used on the canvas since. Holding a
+    ## tool's key while using it returns to the previous tool on release.
+    pub var tool_before: str = "brush"
+    pub var tool_used: bool = false
     ## The text tool's size in pixels and where the next text goes.
     pub var text_size: float = 48.0
     pub var text_x: float = 0.0
@@ -562,6 +567,9 @@ pub class Workspace:
         self.touch()
 
     pub func choose_tool(self, tool: str):
+        if tool != self.tool:
+            self.tool_before = self.tool
+        self.tool_used = false
         self.tool = tool
         self.erasing = tool == "eraser"
         self.touch()

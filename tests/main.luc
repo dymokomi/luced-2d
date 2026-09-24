@@ -5,6 +5,9 @@ from panels import Panels
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
 from settings import Settings
+from ui import Event
+from input import EventKind, Key
+import math
 import window
 
 ## Headless checks of the workspace and the window contents, without a device:
@@ -16,6 +19,7 @@ pub func main(arguments: list[str]) -> int!:
     contents()
     settings_round_trip()
     checker_regions()
+    tool_gestures()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -124,3 +128,70 @@ func checker_regions() -> unit!:
             assert(span >= 1 and clamp_texel(start) + span <= 256)
             end += 7
         start += 5
+
+func press(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
+    view.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = 0, inside = true, shift = shift, alt = alt))
+
+func drag_to(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
+    view.event(Event(kind = EventKind.pointer_moved, x = x, y = y, inside = true, shift = shift, alt = alt))
+
+func release(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
+    view.event(Event(kind = EventKind.pointer_up, x = x, y = y, button = 0, inside = true, shift = shift, alt = alt))
+
+## Photoshop's gestures: Z held while using the zoom tool springs back to the
+## tool before, a zoom drag scrubs, and shift or alt pressed mid-drag square or
+## center the marquee while held at the press they add or subtract.
+func tool_gestures() -> unit!:
+    let workspace = Workspace(300, 200)
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    # Z down picks the zoom tool (its shortcut); a drag right 100 points doubles.
+    panels.choose_tool("zoom")
+    press(view, 100.0, 100.0)
+    drag_to(view, 200.0, 100.0)
+    release(view, 200.0, 100.0)
+    assert(math.abs(workspace.zoom - 2.0) < 0.001)
+    view.event(Event(kind = EventKind.key_up, key = Key.z))
+    assert(workspace.tool == "brush")
+    # A tap of Z keeps the zoom tool; a click zooms in, alt-click out.
+    panels.choose_tool("zoom")
+    view.event(Event(kind = EventKind.key_up, key = Key.z))
+    assert(workspace.tool == "zoom")
+    press(view, 50.0, 50.0)
+    release(view, 50.0, 50.0)
+    assert(math.abs(workspace.zoom - 4.0) < 0.001)
+    press(view, 50.0, 50.0, alt = true)
+    release(view, 50.0, 50.0, alt = true)
+    assert(math.abs(workspace.zoom - 2.0) < 0.001)
+    # Another key let go does not spring back.
+    view.event(Event(kind = EventKind.key_up, key = Key.b))
+    assert(workspace.tool == "zoom")
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    # Shift pressed mid-drag squares the marquee to its longer side.
+    panels.choose_tool("marquee")
+    press(view, 10.0, 10.0)
+    drag_to(view, 50.0, 20.0)
+    drag_to(view, 50.0, 30.0, shift = true)
+    release(view, 50.0, 30.0, shift = true)
+    assert(workspace.canvas.selection_left() == 10 and workspace.canvas.selection_top() == 10)
+    assert(workspace.canvas.selection_width() == 40 and workspace.canvas.selection_height() == 40)
+    # Alt mid-drag centers it on the press.
+    press(view, 100.0, 100.0)
+    drag_to(view, 120.0, 110.0, alt = true)
+    release(view, 120.0, 110.0, alt = true)
+    assert(workspace.canvas.selection_left() == 80 and workspace.canvas.selection_top() == 90)
+    assert(workspace.canvas.selection_width() == 40 and workspace.canvas.selection_height() == 20)
+    # Shift held at the press adds, unconstrained: a tall 20 x 130 strip joins
+    # the centered rectangle (squared, it would reach x = 300).
+    press(view, 200.0, 20.0, shift = true)
+    drag_to(view, 220.0, 150.0, shift = true)
+    release(view, 220.0, 150.0, shift = true)
+    assert(workspace.canvas.selection_left() == 80 and workspace.canvas.selection_top() == 20)
+    assert(workspace.canvas.selection_width() == 140 and workspace.canvas.selection_height() == 130)
+    panels.close()

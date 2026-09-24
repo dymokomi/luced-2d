@@ -16,6 +16,8 @@ pub class CanvasView: Widget:
     pub var on_text: func() -> unit!? = none
     ## Files dropped on the canvas: the ones luced-2d can open.
     pub var on_open_files: func(list[str]) -> unit!? = none
+    ## A key let go over the canvas, for spring-loaded tools.
+    pub var on_key_up: func(Key) -> unit!? = none
     var dragging: bool = false
     var painting: bool = false
     ## A gradient drag in progress, from a document point.
@@ -45,6 +47,23 @@ pub class CanvasView: Widget:
     var select_y: float = 0.0
     var select_now_x: float = 0.0
     var select_now_y: float = 0.0
+    ## The marquee's shape as dragged, in document pixels: square or circular
+    ## with shift, about its starting point with alt. As in Photoshop, a
+    ## modifier held at the press picks the mode (add, subtract) instead, and
+    ## constrains only once let go and pressed again.
+    var shape_x0: float = 0.0
+    var shape_y0: float = 0.0
+    var shape_x1: float = 0.0
+    var shape_y1: float = 0.0
+    var shift_free: bool = false
+    var alt_free: bool = false
+    ## A zoom tool drag: right zooms in, left out, about where it started.
+    var zooming: bool = false
+    var zoom_moved: bool = false
+    var zoom_out: bool = false
+    var zoom_x: float = 0.0
+    var zoom_y: float = 0.0
+    var zoom_start: float = 1.0
     var ants: float = 0.0
     let checker: Image
 
@@ -124,10 +143,10 @@ pub class CanvasView: Widget:
         if workspace.canvas.has_selection():
             workspace.canvas.draw_selection(target, Rect(0.0, 0.0, size.width, size.height), workspace.zoom, left, top, self.ants)
         if self.selecting and not self.lasso:
-            let sx0 = math.min(self.select_x, self.select_now_x) * workspace.zoom + left
-            let sy0 = math.min(self.select_y, self.select_now_y) * workspace.zoom + top
-            let sx1 = math.max(self.select_x, self.select_now_x) * workspace.zoom + left
-            let sy1 = math.max(self.select_y, self.select_now_y) * workspace.zoom + top
+            let sx0 = math.min(self.shape_x0, self.shape_x1) * workspace.zoom + left
+            let sy0 = math.min(self.shape_y0, self.shape_y1) * workspace.zoom + top
+            let sx1 = math.max(self.shape_x0, self.shape_x1) * workspace.zoom + left
+            let sy1 = math.max(self.shape_y0, self.shape_y1) * workspace.zoom + top
             painter.rectangle(Rect(sx0, sy0, sx1 - sx0, 1.0), theme.text())
             painter.rectangle(Rect(sx0, sy1 - 1.0, sx1 - sx0, 1.0), theme.text())
             painter.rectangle(Rect(sx0, sy0, 1.0, sy1 - sy0), theme.text())
@@ -184,6 +203,30 @@ pub class CanvasView: Widget:
     func document_y(self, y: float) -> float:
         return (y - self.workspace.offset_y) / self.workspace.zoom
 
+    ## The marquee from its start to the document point `x`, `y`: shift makes it
+    ## square, alt centers it on the start, each once free of the press's mode.
+    func shape_to(self, x: float, y: float, shift: bool, alt: bool):
+        if not shift:
+            self.shift_free = true
+        if not alt:
+            self.alt_free = true
+        var dx = x - self.select_x
+        var dy = y - self.select_y
+        if not self.lasso:
+            dx = math.floor(dx + 0.5)
+            dy = math.floor(dy + 0.5)
+        if shift and self.shift_free:
+            let side = math.max(math.abs(dx), math.abs(dy))
+            dx = side if dx >= 0.0 else -side
+            dy = side if dy >= 0.0 else -side
+        let centered = alt and self.alt_free
+        self.shape_x0 = self.select_x - dx if centered else self.select_x
+        self.shape_y0 = self.select_y - dy if centered else self.select_y
+        self.shape_x1 = self.select_x + dx
+        self.shape_y1 = self.select_y + dy
+        self.select_now_x = x
+        self.select_now_y = y
+
     ## The dragged files luced-2d can open.
     func openable(self) -> list[str]!:
         var found: list[str] = []
@@ -214,6 +257,9 @@ pub class CanvasView: Widget:
             self.pointer_inside = false
             self.box.invalidate()
             return
+        if event.kind == EventKind.pointer_down and event.inside and event.button == 0 and not self.space_held:
+            # A tool used while its key is held springs back when the key is let go.
+            self.workspace.tool_used = true
         if event.kind == EventKind.key_down and self.workspace.tool == "move" and (event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down):
             let step = 10 if event.shift else 1
             let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
@@ -224,6 +270,12 @@ pub class CanvasView: Widget:
         elif event.kind == EventKind.key_up and event.key == Key.space:
             self.space_held = false
             self.dragging = false
+        elif event.kind == EventKind.key_up:
+            if let released = self.on_key_up:
+                released(event.key)
+        elif event.kind == EventKind.modifiers_changed and self.selecting and not self.lasso:
+            # Shift or alt pressed or let go mid-drag reshapes the marquee at once.
+            self.shape_to(self.select_now_x, self.select_now_y, event.shift, event.alt)
         elif event.kind == EventKind.magnify:
             # A touchpad pinch: the magnification change, about the pointer.
             self.workspace.zoom_about(1.0 + event.scroll_y, event.x, event.y)
@@ -241,7 +293,12 @@ pub class CanvasView: Widget:
             self.last_x = event.x
             self.last_y = event.y
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "zoom":
-            self.workspace.zoom_about(0.5 if event.alt else 2.0, event.x, event.y)
+            self.zooming = true
+            self.zoom_moved = false
+            self.zoom_out = event.alt
+            self.zoom_x = event.x
+            self.zoom_y = event.y
+            self.zoom_start = self.workspace.zoom
         elif event.kind == EventKind.pointer_down and event.inside and event.button == 0 and self.workspace.tool == "move":
             self.moving = true
             self.move_x = event.x
@@ -273,8 +330,13 @@ pub class CanvasView: Widget:
             self.select_mode = 1 if event.shift else (2 if event.alt else 0)
             self.select_x = self.document_x(event.x)
             self.select_y = self.document_y(event.y)
-            self.select_now_x = self.select_x
-            self.select_now_y = self.select_y
+            if not self.lasso:
+                # The marquee snaps to whole pixels, so a square stays square.
+                self.select_x = math.floor(self.select_x + 0.5)
+                self.select_y = math.floor(self.select_y + 0.5)
+            self.shift_free = not event.shift
+            self.alt_free = not event.alt
+            self.shape_to(self.select_x, self.select_y, event.shift, event.alt)
             if self.lasso:
                 self.workspace.canvas.clear_points()
                 self.workspace.canvas.add_point(self.select_x, self.select_y)
@@ -296,9 +358,15 @@ pub class CanvasView: Widget:
                 self.last_y = event.y
             elif self.painting:
                 self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y), event.pressure)
+            elif self.zooming:
+                # Scrubby zoom: every 100 points right doubles, left halves.
+                let dx = event.x - self.zoom_x
+                if math.abs(dx) >= 3.0:
+                    self.zoom_moved = true
+                if self.zoom_moved:
+                    self.workspace.zoom_about(self.zoom_start * math.pow(2.0, dx / 100.0) / self.workspace.zoom, self.zoom_x, self.zoom_y)
             elif self.selecting:
-                self.select_now_x = self.document_x(event.x)
-                self.select_now_y = self.document_y(event.y)
+                self.shape_to(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
                 if self.lasso:
                     let dx = self.select_now_x - self.lasso_last_x
                     let dy = self.select_now_y - self.lasso_last_y
@@ -312,6 +380,10 @@ pub class CanvasView: Widget:
                 self.move_now_y = event.y
         elif event.kind == EventKind.pointer_up:
             self.dragging = false
+            if self.zooming:
+                self.zooming = false
+                if not self.zoom_moved:
+                    self.workspace.zoom_about(0.5 if self.zoom_out else 2.0, self.zoom_x, self.zoom_y)
             if self.moving:
                 # The move previews while dragging and commits once, on release.
                 self.moving = false
@@ -327,7 +399,8 @@ pub class CanvasView: Widget:
                     else:
                         self.workspace.canvas.clear_points()
                 else:
-                    self.workspace.select_shape(self.select_x, self.select_y, self.document_x(event.x), self.document_y(event.y), self.workspace.tool == "ellipse", self.select_mode)
+                    self.shape_to(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
+                    self.workspace.select_shape(self.shape_x0, self.shape_y0, self.shape_x1, self.shape_y1, self.workspace.tool == "ellipse", self.select_mode)
             if self.painting:
                 self.painting = false
                 self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y), event.pressure)

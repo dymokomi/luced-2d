@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -193,6 +193,24 @@ SCENES = {
             editor.panels.dock.move(editor.panels.brush_panel, editor.panels.properties_panel, DockPosition.tab)
             editor.panels.refresh()
             print(f"BRUSHDOCK floating {editor.panels.dock.is_floating(editor.panels.brush_panel)}")
+            editor.panels.refresh()''',
+    'zoomhold': '''            editor.workspace.choose_tool("marquee")
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let cx = area.x + area.width * 0.5
+            let cy = area.y + area.height * 0.5
+            # A click on the canvas focuses it, as a person's would.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = cx, y = cy, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx, y = cy, button = 0))
+            let before = editor.workspace.zoom
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.z))
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.z, repeated = true))
+            print(f"ZOOMHOLD tool while held {editor.workspace.tool}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = cx, y = cy, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = cx + 60.0, y = cy))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx + 60.0, y = cy, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.key_up, key = Key.z))
+            print(f"ZOOMHOLD zoom {before} -> {editor.workspace.zoom} tool after {editor.workspace.tool}")
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
