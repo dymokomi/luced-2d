@@ -7,6 +7,7 @@ from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
 from transform_box import TransformBox, grab_move, grab_turn
 from crop_box import CropBox, crop_new
+from adjustments import adjustments
 from settings import Settings
 from ui import Event
 from input import EventKind, Key
@@ -25,6 +26,7 @@ pub func main(arguments: list[str]) -> int!:
     checker_regions()
     tool_gestures()
     boxes()
+    adjustment_table()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -328,3 +330,20 @@ func picking() -> unit!:
     workspace.pick_range(2)
     workspace.delete_layer()
     assert(workspace.layer_count() == 1)
+
+## The adjustments' table: every kind at its engine number, its values laid
+## out page by page then toggles, and the engine's numbers read back as shown.
+func adjustment_table() -> unit!:
+    let table = adjustments()
+    var index = 0
+    for adjustment in table:
+        assert(adjustment.kind == index and adjustment.defaults().length == adjustment.value_count())
+        index += 1
+    let levels = table[3]
+    assert(levels.value_count() == 20 and levels.defaults()[1] == 255.0 and levels.defaults()[6] == 255.0)
+    let numbers = levels.engine(levels.defaults())
+    assert(near(numbers[1], 1.0) and near(numbers[2], 1.0) and near(numbers[7], 1.0))
+    let back = levels.shown_of(numbers)
+    assert(near(back[1], 255.0) and near(back[2], 1.0))
+    # Hue/Saturation: seven ranges of three, then Colorize; Color Balance keeps luminosity by default.
+    assert(table[1].value_count() == 22 and table[10].defaults()[9] == 1.0 and not table[7].layerable)

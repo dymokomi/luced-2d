@@ -1,0 +1,115 @@
+## Layer › Layer Style…: the selected layer's effects — Drop Shadow, Stroke,
+## Outer Glow — each a checkbox heading over its sliders, as Compositor's
+## Effects panel. Styles never touch the pixels: the controls write straight
+## to the layer and the compositor draws them live; Cancel puts back what the
+## layer had when the dialog opened.
+from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox
+from workspace import Workspace
+from kit import Kit, SliderField
+
+pub class StyleDialog:
+    pub let dialog: Dialog
+    ## The sliders in order: shadow x, y, blur, opacity; stroke size, opacity;
+    ## glow size, opacity.
+    pub let controls: list[SliderField]
+    let toggles: list[Checkbox]
+    var on: list[bool]
+    ## The layer's 20 style values when the dialog opened, for Cancel.
+    var before: list[float]
+    pub var changed: func() -> unit!? = none
+    pub var refreshed: func() -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.controls = []
+        self.toggles = []
+        self.on = [false, false, false]
+        self.before = []
+        var items: list[Widget] = [Text("Layer Style", font = kit.font)]
+        self.section(items, 0, "Drop Shadow", [self.control("X", -100.0, 100.0, 4.0, " px"), self.control("Y", -100.0, 100.0, 4.0, " px"),
+                                               self.control("Blur", 0.0, 100.0, 4.0, " px"), self.control("Opacity", 0.0, 100.0, 75.0, "%")])
+        self.section(items, 1, "Stroke", [self.control("Size", 0.0, 100.0, 3.0, " px"), self.control("Opacity", 0.0, 100.0, 100.0, "%")])
+        self.section(items, 2, "Outer Glow", [self.control("Size", 0.0, 100.0, 8.0, " px"), self.control("Opacity", 0.0, 100.0, 75.0, "%")])
+        items.append(HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
+        self.dialog = Dialog(items, width = 420.0)
+
+    ## One slider row; every change writes the styles.
+    func control(self, label: str, minimum: float, maximum: float, value: float, suffix: str) -> Widget!:
+        let pair = self.kit.slider_field(minimum, maximum, value, 0, suffix, func (moved: float) -> unit!:
+            discard(moved)
+            self.write())
+        self.controls.append(pair)
+        return self.kit.dialog_row(label, pair.row, 64.0)
+
+    ## One effect: its checkbox heading, then its rows.
+    func section(self, items: list[Widget], effect: int, name: str, controls: list[Widget]) -> unit!:
+        let box = Checkbox(name, font = self.kit.font)
+        self.kit.keep(box.on_change(func (value: bool) -> unit!:
+            discard(value)
+            self.toggle(effect)))
+        self.toggles.append(box)
+        items.append(box)
+        for control in controls:
+            items.append(control)
+
+    ## Open on the selected layer's styles.
+    pub func open(self) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        self.before = []
+        var field = 0
+        while field < 20:
+            self.before.append(self.workspace.style_value(field))
+            field += 1
+        let b = self.before
+        self.on = [b[0] != 0.0, b[8] != 0.0, b[14] != 0.0]
+        let shown = [b[1], b[2], b[3], b[7] * 100.0, b[9], b[13] * 100.0, b[15], b[19] * 100.0]
+        var index = 0
+        for value in shown:
+            self.controls[index].set_value(value)
+            index += 1
+        self.show_toggles()
+        self.dialog.open()
+        self.refresh()
+
+    pub func toggle(self, effect: int) -> unit!:
+        self.on[effect] = not self.on[effect]
+        self.show_toggles()
+        self.write()
+
+    ## The controls as the layer's styles.
+    pub func write(self) -> unit!:
+        let s = self.controls
+        self.workspace.set_styles(self.on[0], s[0].value(), s[1].value(), s[2].value(), s[3].value() / 100.0,
+                                  self.on[1], s[4].value(), s[5].value() / 100.0, self.on[2], s[6].value(), s[7].value() / 100.0)
+        if let changed = self.changed:
+            changed()
+
+    func show_toggles(self) -> unit!:
+        var effect = 0
+        while effect < 3:
+            self.toggles[effect].set_checked(self.on[effect])
+            effect += 1
+
+    pub func apply(self) -> unit!:
+        self.dialog.hide()
+        self.refresh()
+
+    ## Put the styles back as they were when the dialog opened.
+    pub func cancel(self) -> unit!:
+        if self.before.length == 20:
+            let b = self.before
+            let id = self.workspace.selected_id()
+            self.workspace.canvas.set_shadow(id, b[0] != 0.0, b[1], b[2], b[3], b[4], b[5], b[6], b[7])
+            self.workspace.canvas.set_stroke(id, b[8] != 0.0, b[9], b[10], b[11], b[12], b[13])
+            self.workspace.canvas.set_glow(id, b[14] != 0.0, b[15], b[16], b[17], b[18], b[19])
+            self.workspace.touch()
+        self.dialog.hide()
+        self.refresh()
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

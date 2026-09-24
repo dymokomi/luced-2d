@@ -1,0 +1,142 @@
+## Every color adjustment in one table, which the adjust dialog builds its
+## rows from: the sliders in the units Photoshop shows, the pages some show one
+## at a time (Levels' channels, Hue/Saturation's ranges, Color Balance's
+## tones), the checkboxes, and how each shown value becomes the number
+## luce-image's adjust pass takes (adjust.frag lists them). The same settings
+## serve the destructive path (Adjust menu: the pixels change once) and
+## adjustment layers (live, editable) — Compositor's model, with a table where
+## Compositor has a sheet per kind.
+
+## One slider: its label, range, starting value, decimals and suffix, and the
+## factor the engine's number is the shown value times.
+pub class Knob:
+    pub let label: str
+    pub let minimum: float
+    pub let maximum: float
+    pub let value: float
+    pub let scale: float
+    pub let decimals: int
+    pub let suffix: str
+
+    pub func init(self, label: str, minimum: float, maximum: float, value: float, scale: float = 1.0, decimals: int = 0, suffix: str = ""):
+        self.label = label
+        self.minimum = minimum
+        self.maximum = maximum
+        self.value = value
+        self.scale = scale
+        self.decimals = decimals
+        self.suffix = suffix
+
+## One checkbox and whether it starts checked; the engine takes 1 or 0.
+pub class Toggle:
+    pub let label: str
+    pub let on: bool
+
+    pub func init(self, label: str, on: bool = false):
+        self.label = label
+        self.on = on
+
+## One adjustment. Its engine numbers run page by page — every knob of the
+## first page, then of the next — then one per toggle.
+pub class Adjustment:
+    pub let kind: int
+    pub let name: str
+    pub let knobs: list[Knob]
+    pub let pages: list[str]
+    pub let toggles: list[Toggle]
+    ## Whether it can be an adjustment layer: all but Curves, whose table a
+    ## layer does not keep yet.
+    pub let layerable: bool
+
+    pub func init(self, kind: int, name: str, knobs: list[Knob], pages: list[str]? = none, toggles: list[Toggle]? = none, layerable: bool = true):
+        self.kind = kind
+        self.name = name
+        self.knobs = knobs
+        self.pages = []
+        self.toggles = []
+        if let given = pages:
+            self.pages = given
+        if let given = toggles:
+            self.toggles = given
+        self.layerable = layerable
+
+    ## How many pages of knobs it has: 1 when it shows all at once.
+    pub func page_count(self) -> int:
+        return self.pages.length if self.pages.length > 0 else 1
+
+    ## How many shown values it keeps: every page's knobs, then the toggles.
+    pub func value_count(self) -> int:
+        return self.page_count() * self.knobs.length + self.toggles.length
+
+    ## The shown values it starts from.
+    pub func defaults(self) -> list[float]:
+        var values: list[float] = []
+        var page = 0
+        while page < self.page_count():
+            for knob in self.knobs:
+                values.append(knob.value)
+            page += 1
+        for toggle in self.toggles:
+            values.append(1.0 if toggle.on else 0.0)
+        return values
+
+    ## The engine's numbers for shown `values`: each knob's times its scale,
+    ## the toggles as they are.
+    pub func engine(self, values: list[float]) -> list[float]:
+        var numbers: list[float] = []
+        var index = 0
+        for value in values:
+            let knob = index % self.knobs.length if self.knobs.length > 0 else 0
+            let is_knob = index < self.page_count() * self.knobs.length
+            numbers.append(value * self.knobs[knob].scale if is_knob else value)
+            index += 1
+        return numbers
+
+    ## The shown values for the engine's `numbers` (an adjustment layer's,
+    ## to edit it): `engine` undone; numbers past its own are left out.
+    pub func shown_of(self, numbers: list[float]) -> list[float]:
+        var values: list[float] = []
+        var index = 0
+        while index < self.value_count():
+            let knob = index % self.knobs.length if self.knobs.length > 0 else 0
+            let is_knob = index < self.page_count() * self.knobs.length
+            let number = numbers[index] if index < numbers.length else 0.0
+            values.append(number / self.knobs[knob].scale if is_knob else number)
+            index += 1
+        return values
+
+## The adjustments, each at its engine kind's index.
+pub func adjustments() -> list[Adjustment]:
+    let percent = 0.01
+    let level = 1.0 / 255.0
+    let turn = 1.0 / 360.0
+    return [Adjustment(0, "Brightness / Contrast", [Knob("Brightness", -100.0, 100.0, 0.0, percent), Knob("Contrast", -100.0, 100.0, 0.0, percent)]),
+            Adjustment(1, "Hue / Saturation", [Knob("Hue", -180.0, 180.0, 0.0, turn, 0, "°"), Knob("Saturation", -100.0, 100.0, 0.0, percent),
+                                               Knob("Lightness", -100.0, 100.0, 0.0, percent)],
+                       pages = ["Master", "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"], toggles = [Toggle("Colorize")]),
+            Adjustment(2, "Invert", []),
+            Adjustment(3, "Levels", [Knob("In Black", 0.0, 255.0, 0.0, level), Knob("In White", 0.0, 255.0, 255.0, level),
+                                     Knob("Gamma", 0.1, 9.99, 1.0, 1.0, 2), Knob("Out Black", 0.0, 255.0, 0.0, level),
+                                     Knob("Out White", 0.0, 255.0, 255.0, level)],
+                       pages = ["RGB", "Red", "Green", "Blue"]),
+            Adjustment(4, "Desaturate", []),
+            Adjustment(5, "Threshold", [Knob("Level", 0.0, 255.0, 128.0, level)]),
+            Adjustment(6, "Posterize", [Knob("Levels", 2.0, 32.0, 4.0)]),
+            Adjustment(7, "Curves", [], layerable = false),
+            Adjustment(8, "Exposure", [Knob("Exposure", -20.0, 20.0, 0.0, 1.0, 2), Knob("Offset", -0.5, 0.5, 0.0, 1.0, 2),
+                                       Knob("Gamma", 0.01, 9.99, 1.0, 1.0, 2)]),
+            Adjustment(9, "Black & White", [Knob("Reds", -200.0, 300.0, 40.0, percent, 0, "%"), Knob("Yellows", -200.0, 300.0, 60.0, percent, 0, "%"),
+                                            Knob("Greens", -200.0, 300.0, 40.0, percent, 0, "%"), Knob("Cyans", -200.0, 300.0, 60.0, percent, 0, "%"),
+                                            Knob("Blues", -200.0, 300.0, 20.0, percent, 0, "%"), Knob("Magentas", -200.0, 300.0, 80.0, percent, 0, "%"),
+                                            Knob("Tint Hue", 0.0, 360.0, 40.0, turn, 0, "°"), Knob("Tint Sat.", 0.0, 100.0, 20.0, percent, 0, "%")],
+                       toggles = [Toggle("Tint")]),
+            Adjustment(10, "Color Balance", [Knob("Cyan–Red", -100.0, 100.0, 0.0, percent), Knob("Magenta–Green", -100.0, 100.0, 0.0, percent),
+                                             Knob("Yellow–Blue", -100.0, 100.0, 0.0, percent)],
+                       pages = ["Shadows", "Midtones", "Highlights"], toggles = [Toggle("Preserve Luminosity", true)]),
+            Adjustment(11, "Gradient Map", [], toggles = [Toggle("Reverse")])]
+
+## The Gradient Map's kind: its colors, the foreground to the background, go after its toggle.
+pub let gradient_map: int = 11
+## The kinds the dialog shows no knobs for and the Adjust menu applies at once.
+pub func applies_at_once(kind: int) -> bool:
+    return kind == 2 or kind == 4

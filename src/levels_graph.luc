@@ -1,0 +1,182 @@
+## Levels' histogram with its handles, as Photoshop's: the counts of the
+## channel shown as bars, the input black, gray and white handles under them,
+## and the output black and white handles under a black-to-white ramp. The
+## gray handle marks the input that comes out mid-grey: it sits at 0.5^gamma
+## of the way from black to white. Dragging a handle changes that value and
+## says so through `on_change`; the values are in Levels' shown units (0..255,
+## gamma 0.1..9.99).
+from ui import Widget, Layout, Size, Constraints, Event, Painter
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+import theme
+import math
+
+## Which handle a press took.
+let no_handle: int = -1
+let input_black: int = 0
+let input_gamma: int = 1
+let input_white: int = 2
+let output_black: int = 3
+let output_white: int = 4
+
+pub class LevelsGraph: Widget:
+    let box: Layout
+    ## The 256 counts of the channel shown, and the values the handles show.
+    var counts: list[int]
+    pub var black: float = 0.0
+    pub var gamma: float = 1.0
+    pub var white: float = 255.0
+    pub var out_black: float = 0.0
+    pub var out_white: float = 255.0
+    var grabbed: int = -1
+    ## A handle moved: the five values, in order.
+    pub var on_change: func() -> unit!? = none
+    let graph_height: float = 96.0
+    let handle: float = 9.0
+
+    pub func init(self) -> unit!:
+        self.box = Layout()
+        self.box.set_interactive(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_flex(vertical = 0.0)
+        self.counts = []
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(256.0, self.graph_height + self.handle * 2.0 + 30.0)
+
+    ## Show `counts` (256 of them) as the histogram.
+    pub func set_counts(self, counts: list[int]):
+        self.counts = counts
+        self.box.invalidate()
+
+    ## Show a set of values, as a Levels page has them.
+    pub func set_values(self, black: float, gamma: float, white: float, out_black: float, out_white: float):
+        self.black = black
+        self.gamma = gamma
+        self.white = white
+        self.out_black = out_black
+        self.out_white = out_white
+        self.box.invalidate()
+
+    ## The graph's left edge and width, inset for the handles to overhang.
+    func span(self) -> Rect:
+        let size = self.box.bounds()
+        let inset = self.handle * 0.5 + 1.0
+        return Rect(inset, 0.0, math.max(1.0, size.width - inset * 2.0), size.height)
+
+    func x_of(self, value: float) -> float:
+        let span = self.span()
+        return span.x + value / 255.0 * span.width
+
+    func value_of(self, x: float) -> float:
+        let span = self.span()
+        return math.clamp((x - span.x) / span.width * 255.0, 0.0, 255.0)
+
+    ## The gray handle's input value: 0.5^gamma of the way from black to white.
+    func gamma_value(self) -> float:
+        return self.black + (self.white - self.black) * math.pow(0.5, self.gamma)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let span = self.span()
+        let ink = theme.text()
+        let muted = theme.text_muted()
+        # The histogram: each column the tallest bin under it, against the largest count.
+        painter.rectangle(Rect(span.x, 0.0, span.width, self.graph_height), theme.backdrop())
+        var largest = 1
+        for count in self.counts:
+            if count > largest:
+                largest = count
+        if self.counts.length == 256:
+            var column = 0
+            while float(column) < span.width:
+                let first = int(math.floor(float(column) / span.width * 256.0))
+                let last = int(math.floor(float(column + 1) / span.width * 256.0))
+                var tallest = 0
+                var at = first
+                while at <= last and at < 256:
+                    tallest = tallest if tallest > self.counts[at] else self.counts[at]
+                    at += 1
+                # A square root keeps small counts visible beside a tall peak.
+                let height = math.sqrt(float(tallest) / float(largest)) * (self.graph_height - 4.0)
+                painter.rectangle(Rect(span.x + float(column), self.graph_height - height, 1.0, height), muted)
+                column += 1
+        # The input handles under the graph.
+        let handles_y = self.graph_height + 2.0
+        self.draw_handle(painter, self.x_of(self.black), handles_y, Color(0.0, 0.0, 0.0), ink)
+        self.draw_handle(painter, self.x_of(self.gamma_value()), handles_y, Color(0.5, 0.5, 0.5), ink)
+        self.draw_handle(painter, self.x_of(self.white), handles_y, Color(1.0, 1.0, 1.0), ink)
+        # The output ramp and its handles.
+        let ramp_y = handles_y + self.handle + 8.0
+        let steps = 64
+        var step = 0
+        while step < steps:
+            let shade = float(step) / float(steps - 1)
+            let x0 = span.x + span.width * float(step) / float(steps)
+            painter.rectangle(Rect(x0, ramp_y, span.width / float(steps) + 1.0, 8.0), Color(shade * shade, shade * shade, shade * shade))
+            step += 1
+        let out_y = ramp_y + 10.0
+        self.draw_handle(painter, self.x_of(self.out_black), out_y, Color(0.0, 0.0, 0.0), ink)
+        self.draw_handle(painter, self.x_of(self.out_white), out_y, Color(1.0, 1.0, 1.0), ink)
+        painter.close()
+
+    ## One handle: a square outlined in `ink`, filled with its value's shade.
+    func draw_handle(self, painter: Painter, x: float, y: float, fill: Color, ink: Color) -> unit!:
+        let half = self.handle * 0.5
+        painter.rectangle(Rect(math.floor(x - half), y, self.handle, self.handle), ink)
+        painter.rectangle(Rect(math.floor(x - half) + 1.0, y + 1.0, self.handle - 2.0, self.handle - 2.0), fill)
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            self.grabbed = self.handle_at(event.x, event.y)
+            self.box.request_focus()
+        elif event.kind == EventKind.pointer_moved and self.grabbed >= 0:
+            self.drag(event.x)
+        elif event.kind == EventKind.pointer_up or event.cancelled:
+            self.grabbed = no_handle
+
+    ## The handle nearest a press: the input row or the output row by height.
+    func handle_at(self, x: float, y: float) -> int:
+        let output = y > self.graph_height + self.handle + 6.0
+        var choices: list[int] = [output_black, output_white] if output else [input_black, input_gamma, input_white]
+        var best = no_handle
+        var nearest = 1000000.0
+        for choice in choices:
+            let distance = math.abs(x - self.x_of(self.value_for(choice)))
+            if distance < nearest:
+                nearest = distance
+                best = choice
+        return best if nearest <= 12.0 else no_handle
+
+    func value_for(self, which: int) -> float:
+        if which == input_black:
+            return self.black
+        if which == input_gamma:
+            return self.gamma_value()
+        if which == input_white:
+            return self.white
+        if which == output_black:
+            return self.out_black
+        return self.out_white
+
+    ## The grabbed handle dragged to `x`; black stays below white, gray between.
+    func drag(self, x: float) -> unit!:
+        let value = math.round(self.value_of(x))
+        let grabbed = self.grabbed
+        if grabbed == input_black:
+            self.black = math.min(value, self.white - 2.0)
+        elif grabbed == input_white:
+            self.white = math.max(value, self.black + 2.0)
+        elif grabbed == input_gamma:
+            let t = math.clamp((self.value_of(x) - self.black) / math.max(self.white - self.black, 1.0), 0.001, 0.999)
+            self.gamma = math.round(math.clamp(math.log(t) / math.log(0.5), 0.1, 9.99) * 100.0) / 100.0
+        elif grabbed == output_black:
+            self.out_black = value
+        elif grabbed == output_white:
+            self.out_white = value
+        self.box.invalidate()
+        if let changed = self.on_change:
+            changed()

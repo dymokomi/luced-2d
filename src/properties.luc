@@ -1,11 +1,14 @@
 ## The Properties pane, after eleusis: what the selected layer is, one row
 ## each — its name (edited in place), blend mode, opacity, flags and styles.
 ## The flags and the style editor are the window's commands; opacity and the
-## name write to the workspace directly.
-from ui import Text, HStack, VStack, Size, Spacer, Menu, Command, Slider, NumberField, TextField, Checkbox, Panel
+## name write to the workspace directly. An adjustment layer shows its
+## settings below, as Photoshop's Properties panel does — Levels with its
+## histogram — and every change adjusts the picture live.
+from ui import Text, HStack, VStack, Size, Spacer, Menu, Command, Slider, NumberField, TextField, Checkbox, Panel, Widget, ScrollView
 from workspace import Workspace
 from canvas import Canvas
 from kit import Kit
+from adjustment_controls import AdjustmentControls
 
 pub class Properties:
     pub let panel: Panel
@@ -17,6 +20,12 @@ pub class Properties:
     pub let clipped_box: Checkbox
     pub let mask_box: Checkbox
     pub let styles_text: Text
+    let styles_row: Widget
+    ## The selected adjustment layer's settings, and which layer they show (by id, or -1).
+    pub let adjustment: AdjustmentControls
+    let adjustment_title: Text
+    let adjustment_section: VStack
+    var adjustment_layer: int = -1
     ## The layer's pixels changed in a way the layer list shows (its opacity).
     pub var changed: func() -> unit!? = none
     pub var refreshed: func() -> unit!? = none
@@ -50,12 +59,18 @@ pub class Properties:
         self.mask_box = kit.checkbox("Mask", toggle_mask)
         self.styles_text = Text("None", font = font)
         self.blend_menu = Menu("Normal ▾", blends, font = font)
+        self.styles_row = kit.property_row("Styles", HStack([self.styles_text, kit.button("Edit…", layer_style)], spacing = 8.0))
+        self.adjustment = AdjustmentControls(workspace, kit)
+        self.adjustment.changed = self.adjustment_changed
+        self.adjustment_title = Text("", font = font)
+        self.adjustment_section = VStack([self.adjustment_title, self.adjustment.view], spacing = 10.0, padding = 10.0)
+        self.adjustment_section.layout().set_visible(false)
         let rows = VStack([kit.property_row("Layer", self.layer_name), kit.property_row("Blend", self.blend_menu),
                            kit.property_row("Opacity", HStack([self.opacity, self.opacity_field], spacing = 6.0)),
                            kit.property_row("Flags", HStack([self.visible_box, self.clipped_box, self.mask_box], spacing = 10.0)),
-                           kit.property_row("Styles", HStack([self.styles_text, kit.button("Edit…", layer_style)], spacing = 8.0)),
-                           Spacer()], spacing = 0.0, padding = 0.0)
-        self.panel = Panel("Properties", rows, minimum = Size(220.0, 100.0), closable = false)
+                           self.styles_row, self.adjustment_section, Spacer()], spacing = 0.0, padding = 0.0)
+        # An adjustment layer's settings can be taller than the pane: it scrolls.
+        self.panel = Panel("Properties", ScrollView(rows), minimum = Size(220.0, 100.0), closable = false)
 
     ## Show the selected layer.
     pub func show(self) -> unit!:
@@ -79,6 +94,38 @@ pub class Properties:
         self.styles_text.set_text(styled.join(" ") if styled.length > 0 else "None")
         self.opacity.set_value(canvas.layer_opacity(selected) * 100.0)
         self.opacity_field.set_value(canvas.layer_opacity(selected) * 100.0)
+        self.show_adjustment(selected)
+
+    ## The selected adjustment layer's settings, loaded when the selection
+    ## moves to it; hidden for a layer with pixels or a group.
+    func show_adjustment(self, selected: int) -> unit!:
+        let canvas = self.workspace.canvas
+        let kind = canvas.layer_adjustment(selected)
+        self.adjustment_section.layout().set_visible(kind >= 0)
+        self.styles_row.layout().set_visible(kind < 0)
+        if kind < 0:
+            self.adjustment_layer = -1
+            return
+        let id = canvas.layer_id(selected)
+        if id == self.adjustment_layer and kind == self.adjustment.kind:
+            return
+        self.adjustment_layer = id
+        let spec = self.adjustment.spec(kind)
+        var numbers: list[float] = []
+        var parameter = 0
+        while parameter < spec.value_count():
+            numbers.append(canvas.adjustment_value(selected, parameter))
+            parameter += 1
+        self.adjustment.below = id
+        self.adjustment.show(kind, spec.shown_of(numbers))
+        self.adjustment_title.set_text(spec.name)
+
+    ## A setting changed: the layer takes it at once.
+    func adjustment_changed(self) -> unit!:
+        if self.adjustment_layer < 0:
+            return
+        self.workspace.update_adjustment_layer(self.adjustment_layer, self.adjustment.numbers(self.adjustment.kind))
+        self.notify()
 
     func notify(self) -> unit!:
         if let changed = self.changed:

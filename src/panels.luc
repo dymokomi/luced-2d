@@ -21,6 +21,8 @@ from kit import Kit
 from tool_header import ToolHeader
 from brush_settings import BrushSettings
 from adjust_dialog import AdjustDialog
+from style_dialog import StyleDialog
+from adjustments import adjustments, applies_at_once, gradient_map
 from properties import Properties
 from prompts import Prompts
 from crash_dialog import CrashDialog
@@ -46,6 +48,7 @@ pub class Panels:
     pub let header: ToolHeader
     pub let brush: BrushSettings
     pub let adjust: AdjustDialog
+    pub let style: StyleDialog
     pub let properties: Properties
     pub let prompts: Prompts
     pub let crash: CrashDialog
@@ -98,7 +101,10 @@ pub class Panels:
         self.adjust.changed = self.document_changed
         self.adjust.refreshed = self.refresh
         self.adjust.failed = self.prompts.tell
-        self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.adjust.layer_style)
+        self.style = StyleDialog(workspace, kit)
+        self.style.changed = self.document_changed
+        self.style.refreshed = self.refresh
+        self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.style.open)
         self.properties.changed = self.document_changed
         self.properties.refreshed = self.refresh
         self.crash = CrashDialog(kit)
@@ -132,7 +138,9 @@ pub class Panels:
                                   kit.shelf_button("layer-mask", self.toggle_mask), kit.shelf_button("send-backward", self.toggle_clipped),
                                   Spacer(), kit.shelf_button("trash", self.delete_layer)])
         self.layers.layout().set_flex()
-        self.layers_panel = Panel("Layers", self.layers, minimum = Size(220.0, 120.0), closable = false, footer = layers_shelf)
+        # A right click in the list adds an adjustment layer, as Photoshop's half-filled circle.
+        self.layers_panel = Panel("Layers", ContextMenu(self.layers, actions.adjustment_layers, font = font), minimum = Size(220.0, 120.0),
+                                  closable = false, footer = layers_shelf)
         # The viewport: the tool rail beside the canvas, a one-point backdrop rule
         # between them as eleusis's viewport has, and rulers around the canvas;
         # right-click either ruler for its units.
@@ -158,7 +166,7 @@ pub class Panels:
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
-                            self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.settings_dialog.dialog,
+                            self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
@@ -218,7 +226,18 @@ pub class Panels:
             self.workspace.flip_canvas(true)))
         kit.bind(actions.flip_canvas_vertical, self.then_refresh(func () -> unit!:
             self.workspace.flip_canvas(false)))
-        kit.bind(actions.layer_style, self.adjust.layer_style)
+        kit.bind(actions.layer_style, self.style.open)
+        kit.bind(actions.add_noise, self.adjust.add_noise)
+        var layer_kinds: list[int] = []
+        for adjustment in adjustments():
+            if adjustment.layerable:
+                layer_kinds.append(adjustment.kind)
+        var at = 0
+        for command in actions.adjustment_layers:
+            let kind = layer_kinds[at]
+            at += 1
+            kit.bind(command, self.attempting("Adjustment Layer", func () -> unit!:
+                self.new_adjustment_layer(kind)))
         kit.bind(actions.rename_layer, func () -> unit!:
             self.prompts.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename"))
         kit.bind(actions.cut, func () -> unit!:
@@ -380,12 +399,20 @@ pub class Panels:
     ## Open the adjustment's sliders with a live preview, or apply the ones
     ## that take no parameters (invert, desaturate) at once.
     pub func adjust_kind(self, kind: int) -> unit!:
-        if kind == 2 or kind == 4:
-            self.workspace.adjust(kind, [])
-            self.refresh()
+        if applies_at_once(kind):
+            self.attempt("Adjust", func () -> unit!:
+                self.workspace.adjust(kind, []))
             return
-        let titles = ["Brightness / Contrast", "Hue / Saturation / Lightness", "", "Levels", "", "Threshold", "Posterize", "Curves"]
-        self.adjust.open(kind, titles[kind])
+        self.adjust.open(kind)
+
+    ## A new adjustment layer of `kind` at its defaults, above the selected
+    ## layer and selected: its settings show in Properties.
+    func new_adjustment_layer(self, kind: int) -> unit!:
+        let spec = adjustments()[kind]
+        var numbers = spec.engine(spec.defaults())
+        if kind == gradient_map:
+            numbers = numbers + self.workspace.colors_encoded()
+        discard(self.workspace.add_adjustment_layer(kind, spec.name, numbers))
 
     ## Edit › Free Transform: the box goes up around the layer's pixels on the canvas.
     pub func free_transform(self) -> unit!:

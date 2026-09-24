@@ -1,6 +1,7 @@
 ## One Command instance per action, as in luced: the menus, the tool rail and
 ## the keyboard all present the same command, so a shortcut shows beside its
 ## menu item and disabling an action disables it everywhere at once.
+from adjustments import adjustments, applies_at_once
 from ui import Command, Shortcut
 from input import Key
 from workspace import Workspace
@@ -50,7 +51,10 @@ pub class Actions:
     pub let image_size: Command
     # Adjust, one per luce-image adjustment kind, and Filter
     pub let adjustments: list[Command]
+    ## One per adjustment an adjustment layer can hold: a new one of that kind.
+    pub let adjustment_layers: list[Command]
     pub let blur: Command
+    pub let add_noise: Command
     # Layer
     pub let add_layer: Command
     pub let duplicate_layer: Command
@@ -129,11 +133,15 @@ pub class Actions:
         self.flip_canvas_vertical = Command("Flip Canvas Vertical", id = "flip_canvas_vertical")
         self.canvas_size = Command("Canvas Size…", id = "canvas_size")
         self.image_size = Command("Image Size…", id = "image_size")
-        self.adjustments = [Command("Brightness / Contrast…", id = "adjust_0"), Command("Hue / Saturation / Lightness…", Shortcut(Key.u, primary = true), id = "adjust_1"),
-                            Command("Invert", Shortcut(Key.i, primary = true), id = "adjust_2"), Command("Levels…", Shortcut(Key.l, primary = true), id = "adjust_3"),
-                            Command("Desaturate", Shortcut(Key.u, primary = true, shift = true), id = "adjust_4"),
-                            Command("Threshold…", id = "adjust_5"), Command("Posterize…", id = "adjust_6"),
-                            Command("Curves…", Shortcut(Key.m, primary = true), id = "adjust_7")]
+        # The Adjust menu's upper half changes the pixels; the lower adds adjustment layers.
+        self.adjustments = []
+        self.adjustment_layers = []
+        for adjustment in adjustments():
+            let dots = "" if applies_at_once(adjustment.kind) else "…"
+            self.adjustments.append(Command(adjustment.name + dots, adjustment_shortcut(adjustment.kind), id = f"adjust_{adjustment.kind}"))
+            if adjustment.layerable:
+                self.adjustment_layers.append(Command(f"New {adjustment.name} Layer", id = f"adjust_layer_{adjustment.kind}"))
+        self.add_noise = Command("Add Noise…", id = "add_noise")
         self.blur = Command("Gaussian Blur…", id = "blur")
         self.add_layer = Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer")
         self.duplicate_layer = Command("Duplicate Layer", id = "duplicate_layer")
@@ -180,11 +188,11 @@ pub class Actions:
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
         self.all = [self.new_document, self.open_document, self.save, self.save_as, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
-                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.image_size, self.blur,
+                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.image_size, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.blends + self.tools + self.units
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.adjustment_layers + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:
@@ -217,10 +225,31 @@ pub class Actions:
         self.toggle_clipped.set_enabled(workspace.selected > 0)
         for command in self.adjustments:
             command.set_enabled(not previewing)
-        self.blur.set_enabled(not previewing)
+        self.blur.set_enabled(not previewing and not group)
+        self.add_noise.set_enabled(not previewing and not group)
+        for command in self.adjustment_layers:
+            command.set_enabled(not previewing)
         self.free_transform.set_enabled(not previewing)
         self.flip_horizontal.set_enabled(not previewing)
         self.flip_vertical.set_enabled(not previewing)
         self.flip_canvas_horizontal.set_enabled(not previewing)
         self.flip_canvas_vertical.set_enabled(not previewing)
         self.layer_style.set_enabled(not previewing)
+
+## Photoshop's keys for the adjustments that have one; none for the rest.
+func adjustment_shortcut(kind: int) -> Shortcut:
+    if kind == 1:
+        return Shortcut(Key.u, primary = true)
+    if kind == 2:
+        return Shortcut(Key.i, primary = true)
+    if kind == 3:
+        return Shortcut(Key.l, primary = true)
+    if kind == 4:
+        return Shortcut(Key.u, primary = true, shift = true)
+    if kind == 7:
+        return Shortcut(Key.m, primary = true)
+    if kind == 9:
+        return Shortcut(Key.b, primary = true, shift = true, alt = true)
+    if kind == 10:
+        return Shortcut(Key.b, primary = true)
+    return Shortcut()

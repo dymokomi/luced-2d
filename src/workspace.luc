@@ -9,6 +9,7 @@ from brush import Brush, preset
 from documents import Document, title_of, blank_canvas
 from hex_color import hex_of_linear, linear_of_hex
 import math
+import transfer
 import paths
 from units import pixels_per
 from transform_box import TransformBox
@@ -617,11 +618,51 @@ pub class Workspace:
     pub func previewing(self) -> bool:
         return self.canvas.previewing()
 
-    ## Preview adjustment `kind` (as `adjust`) with `values`, zeros for the rest.
-    pub func preview_adjust(self, kind: int, values: list[float]) -> unit!:
-        let params = pad(values)
-        self.canvas.preview_adjust(kind, params[0], params[1], params[2], params[3], params[4])
+    ## Preview adjustment `kind` (as `adjust`) with the engine's `numbers`.
+    pub func preview_adjust(self, kind: int, numbers: list[float]) -> unit!:
+        self.stage(numbers)
+        self.canvas.preview_adjust(kind)
         self.touch()
+
+    ## Preview Add Noise: grain of deviation `amount` (0..1), `seed` fixing it.
+    pub func preview_noise(self, amount: float, monochrome: bool, seed: int) -> unit!:
+        self.canvas.preview_noise(amount, monochrome, seed)
+        self.touch()
+
+    ## A new adjustment layer of `kind` named `name`, with the engine's
+    ## `numbers`, just above the selected layer and selected; its id.
+    pub func add_adjustment_layer(self, kind: int, name: str, numbers: list[float]) -> int!:
+        self.stage(numbers)
+        let id = self.canvas.add_adjustment_layer(name, kind)
+        self.place_above_selected(id)
+        return id
+
+    ## Adjustment layer `id`'s settings, live.
+    pub func update_adjustment_layer(self, id: int, numbers: list[float]) -> unit!:
+        self.stage(numbers)
+        self.canvas.update_adjustment_layer(id)
+        self.touch()
+
+    ## Take layer `id` away (a group with all it holds), keeping a selection.
+    pub func remove_layer_id(self, id: int) -> unit!:
+        self.canvas.remove_layer(id)
+        self.picked = []
+        if self.selected >= self.layer_count():
+            self.selected = self.layer_count() - 1
+        self.touch()
+
+    ## The foreground then the background color, sRGB-encoded 0..1: the Gradient Map's ends.
+    pub func colors_encoded(self) -> list[float]:
+        return [transfer.srgb_encode(self.red), transfer.srgb_encode(self.green), transfer.srgb_encode(self.blue),
+                transfer.srgb_encode(self.back_red), transfer.srgb_encode(self.back_green), transfer.srgb_encode(self.back_blue)]
+
+    ## The engine's `numbers` staged for the next adjustment, the rest 0.
+    func stage(self, numbers: list[float]) -> unit!:
+        self.canvas.clear_adjustments()
+        var index = 0
+        for number in numbers:
+            self.canvas.set_adjustment(index, number)
+            index += 1
 
     ## Preview a Gaussian blur of `radius` pixels.
     pub func preview_blur(self, radius: float) -> unit!:
@@ -673,13 +714,14 @@ pub class Workspace:
         self.canvas.end_preview(keep)
         self.touch()
 
-    ## Apply adjustment `kind` to the selected layer at once, with `values`
-    ## (zeros for the rest). Kinds are luce-image's: 0 brightness/contrast,
-    ## 1 hue/saturation/lightness, 2 invert, 3 levels, 4 desaturate,
-    ## 5 threshold, 6 posterize, 7 curves.
-    pub func adjust(self, kind: int, values: list[float]) -> unit!:
-        let params = pad(values)
-        self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
+    ## Apply adjustment `kind` to the selected layer's pixels at once, with the
+    ## engine's `numbers` (the rest 0; adjust.frag lists them). Kinds are
+    ## luce-image's: 0 brightness/contrast, 1 hue/saturation/lightness,
+    ## 2 invert, 3 levels, 4 desaturate, 5 threshold, 6 posterize, 7 curves,
+    ## 8 exposure, 9 black & white, 10 color balance, 11 gradient map.
+    pub func adjust(self, kind: int, numbers: list[float]) -> unit!:
+        self.stage(numbers)
+        self.canvas.adjust_layer(self.selected_id(), kind)
         self.touch()
 
     ## A Gaussian blur of `radius` pixels on the selected layer at once.
@@ -883,11 +925,3 @@ pub class Workspace:
         self.offset_x = math.floor((width - float(self.width()) * self.zoom) * 0.5)
         self.offset_y = math.floor((height - float(self.height()) * self.zoom) * 0.5)
 
-## `values` padded with zeros to the five parameters every adjustment takes.
-func pad(values: list[float]) -> list[float]:
-    var params: list[float] = []
-    for value in values:
-        params.append(value)
-    while params.length < 5:
-        params.append(0.0)
-    return params

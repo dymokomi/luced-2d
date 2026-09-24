@@ -13,7 +13,8 @@ from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_
 ## The layer list: one 52-point row per shown layer, top layer first, each with
 ## an eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it
 ## has one, the name and a subtitle, indented when clipped and for each group
-## holding it. A group shows a folder instead, which folds it shut or open.
+## holding it. A group shows a folder instead, which folds it shut or open;
+## an adjustment layer its icon (its settings show in Properties).
 ##
 ## As in Photoshop: a click selects a row, Cmd-click adds it to the selection
 ## or takes it out, Shift-click selects a run; the eye toggles visibility; the
@@ -91,10 +92,15 @@ pub class LayerList: Widget:
             draw_icon(target, "visible" if visible else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), ink)
             var x = self.thumb_left(index)
             let aspect = float(workspace.width()) / float(workspace.height())
+            let adjustment = canvas.layer_adjustment(index)
             if group:
                 # A group: its folder, open or shut, where a layer has its thumbnail.
                 let shut = is_folded(workspace, canvas.layer_id(index))
                 draw_icon(target, "folder" if shut else "folder-open", Rect(x + 8.0, top + (self.row_height - 20.0) * 0.5, 20.0, 20.0), ink)
+                x += thumb + 8.0
+            elif adjustment >= 0:
+                # An adjustment layer: no pixels, its icon instead.
+                draw_icon(target, "color-correction", Rect(x + 8.0, top + (self.row_height - 20.0) * 0.5, 20.0, 20.0), ink)
                 x += thumb + 8.0
             else:
                 # The layer thumbnail: a checker-grey slot with the layer's own pixels in
@@ -135,6 +141,8 @@ pub class LayerList: Widget:
             var subtitle = f"{workspace.blend_name(index)} · {opacity}%"
             if group:
                 subtitle = f"Group · {opacity}%"
+            elif adjustment >= 0:
+                subtitle = f"Adjustment · {opacity}%"
             elif clipped:
                 subtitle = f"Clipped · {workspace.blend_name(index)} · {opacity}%"
             painter.text(subtitle, x, top + 30.0, soft, self.font)

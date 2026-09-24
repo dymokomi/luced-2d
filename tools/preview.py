@@ -17,21 +17,57 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
 SCENES = {
-    'style': '''            editor.panels.adjust.layer_style()
+    'style': '''            editor.panels.style.open()
             editor.workspace.choose_tool("brush")
             editor.panels.refresh()
-            editor.panels.adjust.toggle_style(0)
-            editor.panels.adjust.set_control(10, 0, 14.0)
-            editor.panels.adjust.set_control(10, 1, 14.0)
-            editor.panels.adjust.set_control(10, 2, 10.0)
-            editor.panels.adjust.toggle_style(1)
-            editor.panels.adjust.set_control(10, 4, 6.0)
-            editor.panels.adjust.preview()
+            editor.panels.style.toggle(0)
+            editor.panels.style.controls[0].set_value(14.0)
+            editor.panels.style.controls[1].set_value(14.0)
+            editor.panels.style.controls[2].set_value(10.0)
+            editor.panels.style.toggle(1)
+            editor.panels.style.controls[4].set_value(6.0)
+            editor.panels.style.write()
+            editor.panels.refresh()''',
+    # A Black & White adjustment layer over the picture, a Levels layer clipped
+    # and masked above it; the layers panel shows their icons.
+    'adjustlayer': '''            editor.workspace.select(1)
+            editor.panels.actions.adjustment_layers[8].trigger()
+            editor.panels.refresh()
+            editor.panels.properties.adjustment.set_control(9, 0, 120.0)
+            editor.panels.actions.adjustment_layers[3].trigger()
+            editor.panels.refresh()
+            editor.panels.properties.adjustment.set_control(3, 1, 180.0)
+            editor.workspace.canvas.measure_histogram_below(editor.workspace.canvas.layer_id(3))
+            var total = 0
+            var nonzero = 0
+            var slot = 0
+            while slot < 256:
+                let n = editor.workspace.canvas.histogram(0, slot)
+                total += n
+                if n > 0:
+                    nonzero += 1
+                slot += 1
+            print(f"ADJUST histogram total {total} bins {nonzero} at128 {editor.workspace.canvas.histogram(0, 128)} at255 {editor.workspace.canvas.histogram(0, 255)}")
+            var index = editor.workspace.layer_count() - 1
+            while index >= 0:
+                print(f"ADJUST {index} {editor.workspace.canvas.layer_name(index)} kind {editor.workspace.canvas.layer_adjustment(index)}")
+                index -= 1
+            editor.panels.refresh()''',
+    # Hue/Saturation on the pixels, the Reds page showing its own sliders.
+    'huesat': '''            editor.workspace.select(0)
+            editor.panels.adjust.open(1)
+            editor.panels.adjust.show_page(1, 1)
+            editor.panels.adjust.set_control(1, 0, 120.0)
+            editor.panels.adjust.set_control(1, 1, 40.0)
+            editor.panels.refresh()''',
+    'noise': '''            editor.workspace.select(0)
+            editor.panels.adjust.add_noise()
+            editor.panels.adjust.set_control(13, 0, 30.0)
             editor.panels.refresh()''',
     'settings': '''            editor.workspace.choose_tool("brush")
             editor.panels.settings_dialog.open()

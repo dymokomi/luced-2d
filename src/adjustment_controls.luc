@@ -1,0 +1,329 @@
+## The controls for every adjustment, built from their table (adjustments.luc)
+## once and shown one kind at a time: a menu for the pages when an adjustment
+## shows one set of sliders at a time, the sliders, the checkboxes; Levels its
+## histogram with handles and Auto, Curves its editor. Two places use them:
+## the adjust dialog, on a layer's pixels (destructive), and the Properties
+## panel, on the selected adjustment layer (live). Whoever owns them hears of
+## every change through `changed` and asks `numbers` for the engine's values.
+from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor
+from workspace import Workspace
+from kit import Kit, SliderField
+from adjustments import Adjustment, Knob, Toggle, adjustments, gradient_map
+from levels_graph import LevelsGraph
+
+## The rows past the adjustments' (0..11): the filters, in the dialog.
+pub let blur_kind: int = 12
+pub let noise_kind: int = 13
+## Levels: its kind, and five values per page.
+let levels_kind: int = 3
+let curves_kind: int = 7
+
+pub class AdjustmentControls:
+    ## Every kind's rows in one column; only the shown kind's are visible.
+    pub let view: VStack
+    let table: list[Adjustment]
+    let filters: list[Adjustment]
+    let rows: list[VStack]
+    pub let controls: list[list[SliderField]]
+    let checkboxes: list[list[Checkbox]]
+    let page_labels: list[Text]
+    ## Every kind's shown values — all pages', then the checkboxes' — and its page showing.
+    var shown: list[list[float]]
+    var pages: list[int]
+    pub let levels: LevelsGraph
+    pub let curve_editor: CurveEditor
+    let curve_label: Text
+    var curve_channel: int = 0
+    ## The kind showing, or -1.
+    pub var kind: int = -1
+    ## Where Levels' histogram comes from: what shows below adjustment layer
+    ## `below`, or the selected layer's pixels when -1.
+    pub var below: int = -1
+    ## The user changed something.
+    pub var changed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.table = adjustments()
+        self.filters = [Adjustment(blur_kind, "Gaussian Blur", [Knob("Radius", 0.5, 250.0, 8.0, 1.0, 1, " px")], layerable = false),
+                        # Photoshop's Add Noise amount: at 300% the grain's deviation is full scale.
+                        Adjustment(noise_kind, "Add Noise", [Knob("Amount", 0.0, 300.0, 12.0, 1.0 / 300.0, 1, "%")], toggles = [Toggle("Monochromatic")], layerable = false)]
+        self.rows = []
+        self.controls = []
+        self.checkboxes = []
+        self.page_labels = []
+        self.shown = []
+        self.pages = []
+        self.levels = LevelsGraph()
+        self.levels.on_change = self.levels_moved
+        self.curve_editor = CurveEditor()
+        kit.keep(self.curve_editor.on_change(self.curve_changed))
+        self.curve_label = Text("RGB", font = kit.font)
+        for adjustment in self.table + self.filters:
+            self.build(adjustment)
+        var items: list[Widget] = []
+        for row in self.rows:
+            items.append(row)
+        self.view = VStack(items, spacing = 0.0)
+
+    # -- Building.
+
+    ## One kind's column, hidden until shown.
+    func build(self, adjustment: Adjustment) -> unit!:
+        let kind = adjustment.kind
+        var items: list[Widget] = []
+        let page_label = Text(adjustment.pages[0] if adjustment.pages.length > 0 else "", font = self.kit.font)
+        if adjustment.pages.length > 0:
+            var choices: list[Command] = []
+            var page = 0
+            for name in adjustment.pages:
+                let chosen = page
+                let command = Command(name, id = f"adjust_{kind}_page_{page}")
+                self.kit.bind(command, func () -> unit!:
+                    self.show_page(kind, chosen))
+                choices.append(command)
+                page += 1
+            let caption = "Channel ▾" if kind == levels_kind else ("Range ▾" if kind == 1 else "Tones ▾")
+            items.append(HStack([Menu(caption, choices, font = self.kit.font), page_label], spacing = 8.0))
+        if kind == levels_kind:
+            items.append(self.levels)
+        var sliders: list[SliderField] = []
+        var slot = 0
+        for knob in adjustment.knobs:
+            let at = slot
+            let pair = self.kit.slider_field(knob.minimum, knob.maximum, knob.value, knob.decimals, knob.suffix, func (moved: float) -> unit!:
+                self.moved(kind, at, moved))
+            sliders.append(pair)
+            items.append(self.kit.dialog_row(knob.label, pair.row, 96.0))
+            slot += 1
+        var boxes: list[Checkbox] = []
+        slot = 0
+        for toggle in adjustment.toggles:
+            let at = slot
+            let box = self.kit.checkbox(toggle.label, func () -> unit!:
+                self.toggled(kind, at))
+            boxes.append(box)
+            items.append(box)
+            slot += 1
+        if kind == levels_kind:
+            items.append(HStack([self.kit.button("Auto", self.auto_levels), Spacer()], spacing = 8.0))
+        if kind == curves_kind:
+            items.append(self.curves_header())
+            items.append(self.curve_editor)
+        if kind == gradient_map:
+            items.append(Text("From the foreground color to the background color", font = self.kit.font, muted = true))
+        let row = VStack(items, spacing = 10.0)
+        row.layout().set_visible(false)
+        self.rows.append(row)
+        self.controls.append(sliders)
+        self.checkboxes.append(boxes)
+        self.page_labels.append(page_label)
+        self.shown.append(adjustment.defaults())
+        self.pages.append(0)
+
+    func curves_header(self) -> Widget!:
+        var channels: list[Command] = []
+        var channel = 0
+        for name in curve_names():
+            let chosen = channel
+            let command = Command(name, id = f"curve_channel_{channel}")
+            self.kit.bind(command, func () -> unit!:
+                self.show_curve_channel(chosen))
+            channels.append(command)
+            channel += 1
+        return HStack([Menu("Channel ▾", channels, font = self.kit.font), self.curve_label, Spacer(), self.kit.button("Reset", self.reset_curve)], spacing = 8.0)
+
+    ## The adjustment or filter shown for `kind`.
+    pub func spec(self, kind: int) -> Adjustment:
+        return self.table[kind] if kind < self.table.length else self.filters[kind - blur_kind]
+
+    # -- Showing.
+
+    ## Show `kind` with `values` (shown units; its defaults when empty).
+    pub func show(self, kind: int, values: list[float]) -> unit!:
+        self.kind = kind
+        var index = 0
+        for row in self.rows:
+            row.layout().set_visible(index == kind)
+            index += 1
+        let spec = self.spec(kind)
+        self.shown[kind] = values if values.length == spec.value_count() else spec.defaults()
+        slot_boxes(self.checkboxes[kind], self.shown[kind], spec.page_count() * spec.knobs.length)
+        self.show_page(kind, 0)
+        if kind == curves_kind:
+            var channel = 0
+            while channel < 4:
+                self.workspace.canvas.reset_curve(channel)
+                channel += 1
+            self.show_curve_channel(0)
+
+    ## Show page `page` of `kind`: its values in the sliders, and for Levels
+    ## the graph and the channel's histogram.
+    pub func show_page(self, kind: int, page: int) -> unit!:
+        let spec = self.spec(kind)
+        self.pages[kind] = page
+        if spec.pages.length > 0:
+            self.page_labels[kind].set_text(spec.pages[page])
+        var slot = 0
+        for pair in self.controls[kind]:
+            pair.set_value(self.shown[kind][page * spec.knobs.length + slot])
+            slot += 1
+        if kind == levels_kind:
+            self.show_levels(page)
+            self.load_histogram(page)
+
+    ## One slider of `kind`'s showing page set from code, as if moved.
+    pub func set_control(self, kind: int, slot: int, value: float) -> unit!:
+        self.controls[kind][slot].set_value(value)
+        self.moved(kind, slot, value)
+
+    ## The engine's numbers for `kind` as shown; the Gradient Map's colors,
+    ## the foreground and background, after its checkbox.
+    pub func numbers(self, kind: int) -> list[float]:
+        var numbers = self.spec(kind).engine(self.shown[kind])
+        if kind == gradient_map:
+            numbers = numbers + self.workspace.colors_encoded()
+        return numbers
+
+    ## The shown values of `kind`, as they are.
+    pub func values(self, kind: int) -> list[float]:
+        return self.shown[kind]
+
+    # -- Changes.
+
+    func moved(self, kind: int, slot: int, value: float) -> unit!:
+        let knobs = self.spec(kind).knobs.length
+        self.shown[kind][self.pages[kind] * knobs + slot] = value
+        if kind == levels_kind:
+            self.show_levels(self.pages[kind])
+        self.tell()
+
+    func toggled(self, kind: int, slot: int) -> unit!:
+        let spec = self.spec(kind)
+        self.shown[kind][spec.page_count() * spec.knobs.length + slot] = 1.0 if self.checkboxes[kind][slot].is_checked() else 0.0
+        self.tell()
+
+    ## A Levels handle dragged: the graph's values into the page and the sliders.
+    func levels_moved(self) -> unit!:
+        let base = self.pages[levels_kind] * 5
+        let graph = self.levels
+        let values = [graph.black, graph.white, graph.gamma, graph.out_black, graph.out_white]
+        var slot = 0
+        for value in values:
+            self.shown[levels_kind][base + slot] = value
+            self.controls[levels_kind][slot].set_value(value)
+            slot += 1
+        self.tell()
+
+    func show_levels(self, page: int):
+        let v = self.shown[levels_kind]
+        let base = page * 5
+        self.levels.set_values(v[base], v[base + 2], v[base + 1], v[base + 3], v[base + 4])
+
+    ## The histogram for Levels' page `page`: RGB shows luminosity, the others their channel.
+    func load_histogram(self, page: int) -> unit!:
+        let canvas = self.workspace.canvas
+        let measured = self.measure()
+        if not measured:
+            return
+        var counts: list[int] = []
+        var slot = 0
+        while slot < 256:
+            counts.append(canvas.histogram(page, slot))
+            slot += 1
+        self.levels.set_counts(counts)
+
+    ## Count what Levels works on; false when it cannot be counted (nothing drawn yet).
+    func measure(self) -> bool!:
+        let canvas = self.workspace.canvas
+        if self.below >= 0:
+            canvas.measure_histogram_below(self.below) catch _:
+                return false
+        else:
+            canvas.measure_histogram(self.workspace.selected_id()) catch _:
+                return false
+        return true
+
+    ## Levels › Auto: each channel's black and white points where 0.1% of the
+    ## pixels fall beyond them, as Compositor's Auto Color; RGB's are reset.
+    func auto_levels(self) -> unit!:
+        let canvas = self.workspace.canvas
+        if not self.measure():
+            self.fail("Auto: nothing to count yet")
+            return
+        var values = self.spec(levels_kind).defaults()
+        var channel = 1
+        while channel <= 3:
+            var total = 0
+            var slot = 0
+            while slot < 256:
+                total += canvas.histogram(channel, slot)
+                slot += 1
+            let clip = total // 1000
+            var low = 0
+            var counted = 0
+            while low < 254 and counted + canvas.histogram(channel, low) <= clip:
+                counted += canvas.histogram(channel, low)
+                low += 1
+            var high = 255
+            counted = 0
+            while high > low + 1 and counted + canvas.histogram(channel, high) <= clip:
+                counted += canvas.histogram(channel, high)
+                high -= 1
+            values[channel * 5] = float(low)
+            values[channel * 5 + 1] = float(high)
+            channel += 1
+        self.shown[levels_kind] = values
+        self.show_page(levels_kind, self.pages[levels_kind])
+        self.tell()
+
+    # -- Curves.
+
+    ## The editor's points become the canvas's curve for the shown channel.
+    func curve_changed(self) -> unit!:
+        let canvas = self.workspace.canvas
+        canvas.reset_curve(self.curve_channel)
+        var index = 0
+        while index < self.curve_editor.point_count():
+            canvas.add_curve_point(self.curve_channel, self.curve_editor.point_x(index), self.curve_editor.point_y(index))
+            index += 1
+        self.tell()
+
+    ## Load the canvas's curve for `channel` into the editor.
+    func show_curve_channel(self, channel: int) -> unit!:
+        self.curve_channel = channel
+        let canvas = self.workspace.canvas
+        self.curve_editor.reset()
+        var index = 0
+        while index < canvas.curve_point_count(channel):
+            self.curve_editor.add_point(canvas.curve_point_x(channel, index), canvas.curve_point_y(channel, index))
+            index += 1
+        self.curve_label.set_text(curve_names()[channel])
+
+    func reset_curve(self) -> unit!:
+        self.workspace.canvas.reset_curve(self.curve_channel)
+        self.show_curve_channel(self.curve_channel)
+        self.tell()
+
+    func tell(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+## Check each box by its value, the values starting at `first`.
+func slot_boxes(boxes: list[Checkbox], values: list[float], first: int) -> unit!:
+    var slot = 0
+    for box in boxes:
+        box.set_checked(values[first + slot] != 0.0)
+        slot += 1
+
+## The curve channels, in their index order.
+func curve_names() -> list[str]:
+    return ["RGB", "Red", "Green", "Blue"]
