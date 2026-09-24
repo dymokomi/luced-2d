@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -242,6 +242,29 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_down, x = area.x + area.width - 200.0, y = area.y + 200.0, button = 0, alt = true))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = area.x + area.width - 200.0, y = area.y + 200.0, button = 0, alt = true))
             print(f"STROKES color after alt-click {editor.workspace.color_hex()}")
+            editor.panels.refresh()''',
+    'selmove': '''            editor.workspace.select(0)
+            editor.workspace.choose_tool("move")
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            # Select the top-left of the picture and drag its pixels right and down.
+            editor.workspace.canvas.select_rectangle(0, 0, 300, 250, 0)
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 100.0 * zoom, y = oy + 100.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 300.0 * zoom, y = oy + 200.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 500.0 * zoom, y = oy + 300.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 500.0 * zoom, y = oy + 300.0 * zoom, button = 0))
+            print(f"SELMOVE selection at {editor.workspace.canvas.selection_left()},{editor.workspace.canvas.selection_top()}")
+            # Cmd-Alt-drag with the brush: a copy of the moved pixels further right.
+            editor.workspace.choose_tool("brush")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 500.0 * zoom, y = oy + 300.0 * zoom, button = 0, meta = true, alt = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 850.0 * zoom, y = oy + 300.0 * zoom, meta = true, alt = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 850.0 * zoom, y = oy + 300.0 * zoom, button = 0, meta = true, alt = true))
+            # Invert only inside the selection.
+            editor.workspace.adjust(2, [])
+            print(f"SELMOVE selection at {editor.workspace.canvas.selection_left()},{editor.workspace.canvas.selection_top()} undo {editor.workspace.canvas.can_undo()}")
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)

@@ -570,6 +570,31 @@ pub class Workspace:
         self.canvas.adjust_selection(pixels, feather)
         self.touch()
 
+    ## Whether the document pixel under a point is selected at all.
+    pub func in_selection(self, x: float, y: float) -> bool:
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if not self.canvas.has_selection() or px < 0 or py < 0 or px >= self.width() or py >= self.height():
+            return false
+        return self.canvas.selected_at(px, py) > 0
+
+    ## Move the selection's outline by whole pixels, leaving the pixels.
+    pub func move_selection(self, dx: int, dy: int) -> unit!:
+        self.canvas.move_selection(dx, dy)
+        self.touch()
+
+    ## Move (or, with `copy`, copy) the selected pixels of the selected layer by
+    ## whole pixels, the outline with them. Undoable.
+    pub func move_selected_pixels(self, dx: int, dy: int, copy: bool) -> unit!:
+        self.canvas.move_selected_pixels(self.selected_id(), dx, dy, copy)
+        self.touch()
+
+    ## Show the selected pixels moved by whole pixels, within a preview begun
+    ## with `begin_preview`; `end_preview` keeps or drops it.
+    pub func preview_move_selected(self, dx: int, dy: int, copy: bool) -> unit!:
+        self.canvas.preview_move_selected(dx, dy, copy)
+        self.touch()
+
     ## A rectangle or ellipse between two document corners, combined with the
     ## selection by `mode` (0 replace, 1 add, 2 subtract, 3 intersect).
     pub func select_shape(self, x0: float, y0: float, x1: float, y1: float, ellipse: bool, mode: int) -> unit!:

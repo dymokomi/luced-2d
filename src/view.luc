@@ -55,8 +55,21 @@ pub class CanvasView: Widget:
     var gradient_dragging: bool = false
     var gradient_x: float = 0.0
     var gradient_y: float = 0.0
-    ## A move drag: it previews while dragging and commits once, on release.
+    ## A move drag: it previews while dragging and commits once, on release —
+    ## the whole layer, or with a selection its selected pixels (copied with
+    ## Alt), shown through a canvas preview.
     var moving: bool = false
+    var move_pixels: bool = false
+    var move_copy: bool = false
+    var move_shown_x: int = 0
+    var move_shown_y: int = 0
+    ## A selection tool dragging inside the selection moves its outline; the
+    ## whole pixels applied so far.
+    var outline_moving: bool = false
+    var outline_x: float = 0.0
+    var outline_y: float = 0.0
+    var outline_applied_x: int = 0
+    var outline_applied_y: int = 0
     var move_x: float = 0.0
     var move_y: float = 0.0
     var move_now_x: float = 0.0
@@ -112,7 +125,7 @@ pub class CanvasView: Widget:
         let y1 = math.min(size.height, top + float(workspace.height()) * workspace.zoom)
         if x1 > x0 and y1 > y0:
             self.draw_checker(painter, x0, y0, x1, y1)
-            if self.moving:
+            if self.moving and not self.move_pixels:
                 let dx = (self.move_now_x - self.move_x) / workspace.zoom
                 let dy = (self.move_now_y - self.move_y) / workspace.zoom
                 workspace.canvas.draw_moving(target, whole, workspace.zoom, left, top, workspace.selected_id(), dx, dy)
@@ -260,12 +273,8 @@ pub class CanvasView: Widget:
                 self.workspace.cancel_stroke()
             elif not event.meta and not event.control and not event.repeated and digit_value(event.key) >= 0:
                 self.type_digit(digit_value(event.key))
-            elif self.workspace.tool == "move" and (event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down):
-                # Arrows nudge the layer a pixel, shift ten.
-                let step = 10 if event.shift else 1
-                let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
-                let dy = -step if event.key == Key.up else (step if event.key == Key.down else 0)
-                self.workspace.move_layer(dx, dy)
+            elif event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down:
+                self.nudge(event)
         elif event.kind == EventKind.key_up:
             if event.key == Key.space:
                 self.space_held = false
@@ -304,19 +313,25 @@ pub class CanvasView: Widget:
             return
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
-        if tool == "zoom":
+        # Cmd (Ctrl) held makes most tools the Move tool for the drag, as in Photoshop.
+        let temporary_move = (event.meta or event.control) and tool != "hand" and tool != "zoom"
+        let selecting_tool = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"
+        if tool == "move" or temporary_move:
+            self.start_move(event)
+        elif selecting_tool and not event.shift and not event.alt and workspace.in_selection(x, y):
+            # Inside the selection a selection tool drags its outline.
+            self.outline_moving = true
+            self.outline_x = x
+            self.outline_y = y
+            self.outline_applied_x = 0
+            self.outline_applied_y = 0
+        elif tool == "zoom":
             self.zooming = true
             self.zoom_moved = false
             self.zoom_out = event.alt
             self.zoom_x = event.x
             self.zoom_y = event.y
             self.zoom_start = workspace.zoom
-        elif tool == "move":
-            self.moving = true
-            self.move_x = event.x
-            self.move_y = event.y
-            self.move_now_x = event.x
-            self.move_now_y = event.y
         elif (tool == "brush" or tool == "gradient") and event.alt:
             # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
             workspace.pick(x, y)
@@ -388,6 +403,44 @@ pub class CanvasView: Widget:
         if let changed = self.on_changed:
             changed()
 
+    ## A Move tool press: the selected pixels when there is a selection (Alt
+    ## copies them), else the whole layer.
+    func start_move(self, event: Event) -> unit!:
+        self.moving = true
+        self.move_x = event.x
+        self.move_y = event.y
+        self.move_now_x = event.x
+        self.move_now_y = event.y
+        self.move_shown_x = 0
+        self.move_shown_y = 0
+        self.move_copy = event.alt
+        self.move_pixels = self.workspace.canvas.has_selection()
+        if self.move_pixels:
+            self.workspace.begin_preview() catch failure:
+                discard(failure)
+                self.move_pixels = false
+
+    ## View points moved as whole document pixels.
+    func move_whole(self, points: float) -> int:
+        return int(math.floor(points / self.workspace.zoom + 0.5))
+
+    ## Arrows nudge a pixel, Shift ten: the selected pixels with the Move tool
+    ## (or the layer with no selection), the outline with a selection tool.
+    func nudge(self, event: Event) -> unit!:
+        let step = 10 if event.shift else 1
+        let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
+        let dy = -step if event.key == Key.up else (step if event.key == Key.down else 0)
+        let workspace = self.workspace
+        let tool = workspace.tool
+        let selection = workspace.canvas.has_selection()
+        if tool == "move":
+            if selection:
+                workspace.move_selected_pixels(dx, dy, false)
+            else:
+                workspace.move_layer(dx, dy)
+        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"):
+            workspace.move_selection(dx, dy)
+
     ## The pointer moved: carry on the gesture in progress.
     func drag(self, event: Event) -> unit!:
         if self.panning:
@@ -409,6 +462,20 @@ pub class CanvasView: Widget:
         elif self.moving:
             self.move_now_x = event.x
             self.move_now_y = event.y
+            if self.move_pixels:
+                let dx = self.move_whole(event.x - self.move_x)
+                let dy = self.move_whole(event.y - self.move_y)
+                if dx != self.move_shown_x or dy != self.move_shown_y:
+                    self.workspace.preview_move_selected(dx, dy, self.move_copy)
+                    self.move_shown_x = dx
+                    self.move_shown_y = dy
+        elif self.outline_moving:
+            let dx = int(math.floor(self.document_x(event.x) - self.outline_x + 0.5))
+            let dy = int(math.floor(self.document_y(event.y) - self.outline_y + 0.5))
+            if dx != self.outline_applied_x or dy != self.outline_applied_y:
+                self.workspace.move_selection(dx - self.outline_applied_x, dy - self.outline_applied_y)
+                self.outline_applied_x = dx
+                self.outline_applied_y = dy
 
     ## The button let go: finish the gesture in progress.
     func release(self, event: Event) -> unit!:
@@ -422,9 +489,26 @@ pub class CanvasView: Widget:
                 workspace.zoom_about(0.5 if self.zoom_out else 2.0, self.zoom_x, self.zoom_y)
         elif self.moving:
             self.moving = false
-            let dx = int(math.floor((event.x - self.move_x) / workspace.zoom + 0.5))
-            let dy = int(math.floor((event.y - self.move_y) / workspace.zoom + 0.5))
-            workspace.move_layer(dx, dy)
+            let dx = self.move_whole(event.x - self.move_x)
+            let dy = self.move_whole(event.y - self.move_y)
+            if self.move_pixels:
+                self.move_pixels = false
+                if dx == 0 and dy == 0:
+                    workspace.end_preview(false)
+                else:
+                    workspace.preview_move_selected(dx, dy, self.move_copy)
+                    workspace.end_preview(true)
+                    workspace.move_selection(dx, dy)
+            else:
+                workspace.move_layer(dx, dy)
+        elif self.outline_moving:
+            self.outline_moving = false
+            if self.outline_applied_x == 0 and self.outline_applied_y == 0:
+                # A click without a drag: the wand selects there, the others deselect.
+                if workspace.tool == "wand":
+                    workspace.select_wand(x, y, 0)
+                else:
+                    workspace.deselect()
         elif self.gradient_dragging:
             self.gradient_dragging = false
             if math.abs(x - self.gradient_x) + math.abs(y - self.gradient_y) >= 1.0:
