@@ -1,0 +1,176 @@
+## The Crop tool's box, as in Photoshop: it starts around the whole canvas,
+## its eight handles and edges pull in (or out, past the canvas, to grow it),
+## a drag inside moves it, and a drag outside draws a new one. Shift keeps a
+## corner's proportions. Enter crops to it; what is outside is shaded.
+## Everything is in whole document pixels.
+from ui import Painter, Point
+from gpu import Rect, Color
+import math
+
+pub let crop_none: int = -1
+## 0..7 are the handles, clockwise from the top-left corner; then these.
+pub let crop_move: int = 8
+pub let crop_new: int = 9
+
+pub class CropBox:
+    pub var left: float
+    pub var top: float
+    pub var right: float
+    pub var bottom: float
+    ## The drag under way: what was grabbed, where, and the box as it was.
+    pub var grabbed: int = -1
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+    var from_left: float = 0.0
+    var from_top: float = 0.0
+    var from_right: float = 0.0
+    var from_bottom: float = 0.0
+
+    pub func init(self, width: float, height: float):
+        self.left = 0.0
+        self.top = 0.0
+        self.right = width
+        self.bottom = height
+
+    pub func width(self) -> int:
+        return int(self.right - self.left)
+
+    pub func height(self) -> int:
+        return int(self.bottom - self.top)
+
+    func handle_x(self, index: int) -> float:
+        if index == 0 or index == 6 or index == 7:
+            return self.left
+        if index == 1 or index == 5:
+            return (self.left + self.right) * 0.5
+        return self.right
+
+    func handle_y(self, index: int) -> float:
+        if index <= 2:
+            return self.top
+        if index == 3 or index == 7:
+            return (self.top + self.bottom) * 0.5
+        return self.bottom
+
+    ## What a press at document point (`x`, `y`) grabs, with handles `reach`
+    ## document pixels about.
+    pub func hit(self, x: float, y: float, reach: float) -> int:
+        var index = 0
+        while index < 8:
+            if math.abs(x - self.handle_x(index)) <= reach and math.abs(y - self.handle_y(index)) <= reach:
+                return index
+            index += 1
+        if x >= self.left and x <= self.right and y >= self.top and y <= self.bottom:
+            return crop_move
+        return crop_new
+
+    pub func begin(self, grab: int, x: float, y: float):
+        self.grabbed = grab
+        self.start_x = math.round(x)
+        self.start_y = math.round(y)
+        self.from_left = self.left
+        self.from_top = self.top
+        self.from_right = self.right
+        self.from_bottom = self.bottom
+
+    pub func end(self):
+        self.grabbed = crop_none
+        # A box pulled inside out, or to nothing, is put right.
+        let left = math.min(self.left, self.right)
+        let right = math.max(self.left, self.right)
+        let top = math.min(self.top, self.bottom)
+        let bottom = math.max(self.top, self.bottom)
+        self.left = left
+        self.right = math.max(right, left + 1.0)
+        self.top = top
+        self.bottom = math.max(bottom, top + 1.0)
+
+    ## The pointer at document point (`x`, `y`), Shift held or not.
+    pub func drag(self, x: float, y: float, shift: bool):
+        let px = math.round(x)
+        let py = math.round(y)
+        let grab = self.grabbed
+        if grab == crop_move:
+            let dx = px - self.start_x
+            let dy = py - self.start_y
+            self.left = self.from_left + dx
+            self.right = self.from_right + dx
+            self.top = self.from_top + dy
+            self.bottom = self.from_bottom + dy
+        elif grab == crop_new:
+            var dx = px - self.start_x
+            var dy = py - self.start_y
+            if shift:
+                let side = math.max(math.abs(dx), math.abs(dy))
+                dx = side if dx >= 0.0 else -side
+                dy = side if dy >= 0.0 else -side
+            self.left = self.start_x
+            self.top = self.start_y
+            self.right = self.start_x + dx
+            self.bottom = self.start_y + dy
+        elif grab >= 0 and grab < 8:
+            self.left = self.from_left
+            self.top = self.from_top
+            self.right = self.from_right
+            self.bottom = self.from_bottom
+            let corner = grab == 0 or grab == 2 or grab == 4 or grab == 6
+            let moves_left = grab == 0 or grab == 6 or grab == 7
+            let moves_right = grab == 2 or grab == 3 or grab == 4
+            let moves_top = grab <= 2
+            let moves_bottom = grab >= 4 and grab <= 6
+            if moves_left:
+                self.left = px
+            if moves_right:
+                self.right = px
+            if moves_top:
+                self.top = py
+            if moves_bottom:
+                self.bottom = py
+            if corner and shift:
+                # Keep the box's proportions: the height follows the width.
+                let wide = self.from_right - self.from_left
+                let tall = self.from_bottom - self.from_top
+                if wide > 0.0:
+                    let new_tall = math.round(math.abs(self.right - self.left) * tall / wide)
+                    if moves_top:
+                        self.top = self.bottom - new_tall
+                    else:
+                        self.bottom = self.top + new_tall
+
+    ## The shade outside the box, the box with its thirds, and the handles,
+    ## for a view showing `size` points of the document at `zoom` with its
+    ## corner at (`left`, `top`).
+    pub func draw(self, painter: Painter, width: float, height: float, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        let x0 = math.min(self.left, self.right) * zoom + left
+        let y0 = math.min(self.top, self.bottom) * zoom + top
+        let x1 = math.max(self.left, self.right) * zoom + left
+        let y1 = math.max(self.top, self.bottom) * zoom + top
+        let shade = Color(0.0, 0.0, 0.0, 0.55)
+        painter.rectangle(Rect(0.0, 0.0, width, math.max(0.0, y0)), shade)
+        painter.rectangle(Rect(0.0, y1, width, math.max(0.0, height - y1)), shade)
+        painter.rectangle(Rect(0.0, y0, math.max(0.0, x0), y1 - y0), shade)
+        painter.rectangle(Rect(x1, y0, math.max(0.0, width - x1), y1 - y0), shade)
+        # The rule of thirds, faintly.
+        let faint = Color(ink.red, ink.green, ink.blue, 0.35)
+        var third = 1
+        while third < 3:
+            let tx = x0 + (x1 - x0) * float(third) / 3.0
+            let ty = y0 + (y1 - y0) * float(third) / 3.0
+            painter.rectangle(Rect(math.floor(tx), y0, 1.0, y1 - y0), faint)
+            painter.rectangle(Rect(x0, math.floor(ty), x1 - x0, 1.0), faint)
+            third += 1
+        let corners = [Point(x0, y0), Point(x1, y0), Point(x1, y1), Point(x0, y1)]
+        var index = 0
+        while index < 4:
+            let a = corners[index]
+            let b = corners[(index + 1) % 4]
+            painter.line(a, b, 3.0, backing)
+            painter.line(a, b, 1.0, ink)
+            index += 1
+        index = 0
+        while index < 8:
+            let hx = self.handle_x(index) * zoom + left
+            let hy = self.handle_y(index) * zoom + top
+            painter.rectangle(Rect(math.floor(hx) - 4.0, math.floor(hy) - 4.0, 9.0, 9.0), ink)
+            painter.rectangle(Rect(math.floor(hx) - 3.0, math.floor(hy) - 3.0, 7.0, 7.0), backing)
+            index += 1

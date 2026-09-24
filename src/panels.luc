@@ -26,6 +26,7 @@ from prompts import Prompts
 from crash_dialog import CrashDialog
 from menus import menu_bar
 from tools import tools
+from layer_groups import group_selected, ungroup
 import math
 from units import unit_ids, unit_label
 
@@ -80,6 +81,7 @@ pub class Panels:
         self.view.on_key_up = self.spring_back
         self.view.on_changed = self.refresh
         self.view.on_text = self.place_text
+        self.view.on_refused = self.prompts.tell
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
         self.tabs.on_close = self.close_document_at
@@ -90,6 +92,7 @@ pub class Panels:
         self.header = ToolHeader(workspace, kit)
         self.header.brush_settings = self.open_brush
         self.header.refreshed = self.refresh
+        self.header.finished = self.finish_box
         self.brush = BrushSettings(workspace, kit)
         self.adjust = AdjustDialog(workspace, kit)
         self.adjust.changed = self.document_changed
@@ -206,31 +209,39 @@ pub class Panels:
         kit.bind(actions.image_size, func () -> unit!:
             self.prompts.ask("image", "Image size: width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Resize"))
         kit.bind(actions.blur, self.adjust.blur)
-        kit.bind(actions.free_transform, self.adjust.free_transform)
+        kit.bind(actions.free_transform, self.free_transform)
+        kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
+            self.workspace.flip_layer(true)))
+        kit.bind(actions.flip_vertical, self.then_refresh(func () -> unit!:
+            self.workspace.flip_layer(false)))
+        kit.bind(actions.flip_canvas_horizontal, self.then_refresh(func () -> unit!:
+            self.workspace.flip_canvas(true)))
+        kit.bind(actions.flip_canvas_vertical, self.then_refresh(func () -> unit!:
+            self.workspace.flip_canvas(false)))
         kit.bind(actions.layer_style, self.adjust.layer_style)
         kit.bind(actions.rename_layer, func () -> unit!:
             self.prompts.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename"))
         kit.bind(actions.cut, func () -> unit!:
-            self.clipboard_step("Cut", func () -> unit!:
+            self.attempt("Cut", func () -> unit!:
                 self.workspace.copy_selection(false, true)))
         kit.bind(actions.copy, func () -> unit!:
-            self.clipboard_step("Copy", func () -> unit!:
+            self.attempt("Copy", func () -> unit!:
                 self.workspace.copy_selection(false, false)))
         kit.bind(actions.copy_merged, func () -> unit!:
-            self.clipboard_step("Copy Merged", func () -> unit!:
+            self.attempt("Copy Merged", func () -> unit!:
                 self.workspace.copy_selection(true, false)))
         kit.bind(actions.paste, func () -> unit!:
-            self.clipboard_step("Paste", func () -> unit!:
+            self.attempt("Paste", func () -> unit!:
                 # Paste lands in the middle of the view, as Photoshop's does.
                 let bounds = self.view.layout().bounds()
                 let x = (bounds.width * 0.5 - self.workspace.offset_x) / self.workspace.zoom
                 let y = (bounds.height * 0.5 - self.workspace.offset_y) / self.workspace.zoom
                 self.workspace.paste(x, y)))
         kit.bind(actions.layer_via_copy, func () -> unit!:
-            self.clipboard_step("Layer via Copy", func () -> unit!:
+            self.attempt("Layer via Copy", func () -> unit!:
                 self.workspace.layer_via_copy(false)))
         kit.bind(actions.layer_via_cut, func () -> unit!:
-            self.clipboard_step("Layer via Cut", func () -> unit!:
+            self.attempt("Layer via Cut", func () -> unit!:
                 self.workspace.layer_via_copy(true)))
         kit.bind(actions.add_layer, self.add_layer)
         kit.bind(actions.duplicate_layer, self.duplicate_layer)
@@ -243,6 +254,14 @@ pub class Panels:
         kit.bind(actions.merge_down, self.then_refresh(self.workspace.merge_down))
         kit.bind(actions.delete_layer, self.delete_layer)
         kit.bind(actions.toggle_mask, self.toggle_mask)
+        kit.bind(actions.group_layers, self.attempting("Group Layers", func () -> unit!:
+            group_selected(self.workspace)))
+        kit.bind(actions.ungroup, self.attempting("Ungroup", func () -> unit!:
+            ungroup(self.workspace)))
+        kit.bind(actions.hide_all_mask, self.attempting("Add Mask", func () -> unit!:
+            self.workspace.toggle_mask(true)))
+        kit.bind(actions.toggle_mask_enabled, self.attempting("Mask", self.workspace.toggle_mask_enabled))
+        kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.load_transparency))
         kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
         kit.bind(actions.toggle_clipped, self.toggle_clipped)
         kit.bind(actions.toggle_visibility, self.toggle_visibility)
@@ -368,19 +387,44 @@ pub class Panels:
         let titles = ["Brightness / Contrast", "Hue / Saturation / Lightness", "", "Levels", "", "Threshold", "Posterize", "Curves"]
         self.adjust.open(kind, titles[kind])
 
+    ## Edit › Free Transform: the box goes up around the layer's pixels on the canvas.
+    pub func free_transform(self) -> unit!:
+        let started = self.workspace.begin_transform() catch failure:
+            self.prompts.tell(f"Cannot transform: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell("Nothing to transform: the layer has no pixels")
+        # Enter and Esc go to the canvas.
+        self.view.layout().request_focus()
+        self.refresh()
+
+    ## The header's Apply or Cancel: the free transform, or the Crop tool's box.
+    pub func finish_box(self, keep: bool) -> unit!:
+        if self.workspace.transform != none:
+            self.workspace.finish_transform(keep)
+        else:
+            self.workspace.finish_crop(keep)
+        self.refresh()
+
     pub func crop(self) -> unit!:
         self.workspace.crop() catch failure:
             self.prompts.tell(f"Cannot crop: {failure.message}")
             return
         self.refresh()
 
-    ## Run a clipboard or layer command; a failure (nothing selected, no image
-    ## on the clipboard) is said in the prompt.
-    func clipboard_step(self, name: str, step: func() -> unit!) -> unit!:
+    ## Run a command's `step`; a failure (nothing selected, no image on the
+    ## clipboard, a group where pixels are needed) is said in the prompt under
+    ## `name`. The window refreshes after it.
+    func attempt(self, name: str, step: func() -> unit!) -> unit!:
         step() catch failure:
             self.prompts.tell(f"{name}: {failure.message}")
             return
         self.refresh()
+
+    ## `attempt` as a command's action.
+    func attempting(self, name: str, step: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            self.attempt(name, step)
 
     # -- Layers.
 
@@ -405,8 +449,8 @@ pub class Panels:
         self.refresh()
 
     pub func toggle_mask(self) -> unit!:
-        self.workspace.toggle_mask()
-        self.refresh()
+        self.attempt("Mask", func () -> unit!:
+            self.workspace.toggle_mask())
 
     pub func toggle_clipped(self) -> unit!:
         self.workspace.toggle_clipped()

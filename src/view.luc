@@ -27,6 +27,8 @@ pub class CanvasView: Widget:
     pub var on_key_up: func(Key) -> unit!? = none
     ## Something the window shows changed from the keyboard (an opacity by digit).
     pub var on_changed: func() -> unit!? = none
+    ## Something a press could not do, said to the user: painting on a group.
+    pub var on_refused: func(str) -> unit!? = none
     pub var pointer_x: float = 0.0
     pub var pointer_y: float = 0.0
     pub var pointer_inside: bool = false
@@ -74,6 +76,8 @@ pub class CanvasView: Widget:
     var move_y: float = 0.0
     var move_now_x: float = 0.0
     var move_now_y: float = 0.0
+    ## A free transform's or the Crop tool's box being dragged.
+    var boxing: bool = false
     ## A zoom tool drag: right zooms in, left out, about where it started.
     var zooming: bool = false
     var zoom_moved: bool = false
@@ -145,6 +149,7 @@ pub class CanvasView: Widget:
                 ants_top += float(self.move_shown_y) * workspace.zoom
             workspace.canvas.draw_selection(target, whole, workspace.zoom, ants_left, ants_top, self.ants)
         self.selection.draw(painter, workspace.zoom, left, top, theme.text())
+        self.draw_box(painter, size.width, size.height)
         if self.pointer_inside and not self.panning and (workspace.tool == "brush" or workspace.tool == "eraser"):
             self.draw_brush_outline(painter)
         painter.close()
@@ -277,6 +282,14 @@ pub class CanvasView: Widget:
                 # Esc drops the stroke in progress.
                 self.painting = false
                 self.workspace.cancel_stroke()
+            elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and (self.workspace.transform != none or self.workspace.crop_box != none):
+                # Enter applies a free transform or crops; Esc drops it.
+                if self.workspace.transform != none:
+                    self.workspace.finish_transform(event.key == Key.enter)
+                else:
+                    self.workspace.finish_crop(event.key == Key.enter)
+                if let changed = self.on_changed:
+                    changed()
             elif not event.meta and not event.control and not event.repeated and digit_value(event.key) >= 0:
                 self.type_digit(digit_value(event.key))
             elif event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down:
@@ -319,6 +332,17 @@ pub class CanvasView: Widget:
             return
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
+        # A free transform or the Crop tool's box takes presses while it is up;
+        # handles answer within 6 points whatever the zoom.
+        let reach = 6.0 / workspace.zoom
+        if let box = workspace.transform:
+            box.begin(box.hit(x, y, reach), x, y)
+            self.boxing = true
+            return
+        if let crop = workspace.crop_box:
+            crop.begin(crop.hit(x, y, reach), x, y)
+            self.boxing = true
+            return
         # Cmd (Ctrl) held makes most tools the Move tool for the drag, as in Photoshop.
         let temporary_move = (event.meta or event.control) and tool != "hand" and tool != "zoom"
         let selecting_tool = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"
@@ -341,6 +365,8 @@ pub class CanvasView: Widget:
         elif (tool == "brush" or tool == "gradient") and event.alt:
             # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
             workspace.pick(x, y)
+        elif self.refuses_group(tool):
+            return
         elif tool == "gradient":
             self.gradient_dragging = true
             self.gradient_x = x
@@ -358,6 +384,16 @@ pub class CanvasView: Widget:
             self.selection.begin(workspace, x, y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
         else:
             self.begin_painting(x, y, event.shift, event.pressure)
+
+    ## Whether `tool` needs pixels and the selected layer is a group, which has
+    ## none: then say so, as Photoshop does, and do nothing.
+    func refuses_group(self, tool: str) -> bool!:
+        let paints = tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "text"
+        if not paints or not self.workspace.canvas.layer_is_group(self.workspace.selected):
+            return false
+        if let refused = self.on_refused:
+            refused("The layer is a group: pick a layer inside it to paint on")
+        return true
 
     ## Start painting at a document point. With Shift, a straight line first
     ## runs from where the last stroke ended, and the stroke keeps to one axis.
@@ -456,9 +492,36 @@ pub class CanvasView: Widget:
         elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"):
             workspace.move_selection(dx, dy)
 
+    ## A free transform's or the Crop tool's box dragged to a document point.
+    func drag_box(self, x: float, y: float, shift: bool, alt: bool) -> unit!:
+        if let box = self.workspace.transform:
+            box.drag(x, y, shift, alt)
+            self.workspace.preview_transform()
+            return
+        if let crop = self.workspace.crop_box:
+            crop.drag(x, y, shift)
+
+    func end_box(self):
+        if let box = self.workspace.transform:
+            box.end()
+            return
+        if let crop = self.workspace.crop_box:
+            crop.end()
+
+    ## A free transform's box, or else the Crop tool's, over the view.
+    func draw_box(self, painter: Painter, width: float, height: float) -> unit!:
+        let workspace = self.workspace
+        if let box = workspace.transform:
+            box.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
+            return
+        if let crop = workspace.crop_box:
+            crop.draw(painter, width, height, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
+
     ## The pointer moved: carry on the gesture in progress.
     func drag(self, event: Event) -> unit!:
-        if self.panning:
+        if self.boxing:
+            self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
+        elif self.panning:
             self.workspace.pan(event.x - self.last_x, event.y - self.last_y)
             self.last_x = event.x
             self.last_y = event.y
@@ -504,7 +567,10 @@ pub class CanvasView: Widget:
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
         self.panning = false
-        if self.zooming:
+        if self.boxing:
+            self.boxing = false
+            self.end_box()
+        elif self.zooming:
             self.zooming = false
             if not self.zoom_moved:
                 workspace.zoom_about(0.5 if self.zoom_out else 2.0, self.zoom_x, self.zoom_y)

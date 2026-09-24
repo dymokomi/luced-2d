@@ -1,8 +1,9 @@
 ## The contextual tool header across the top, after Compositor's: the active
 ## tool's name and only its options — the brush's preset, size, hardness,
 ## opacity, flow and spacing (eleusis scrubbers: drag to change, click to
-## type), the wand's tolerance, the text size, the Move tool's Auto-Select —
-## and the tool's hint, shown at the right of the status line.
+## type), the wand's tolerance, the text size, the Move tool's Auto-Select,
+## Cancel and Apply while a free transform or the Crop tool's box is up — and
+## the tool's hint, shown at the right of the status line.
 from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Button, Checkbox
 from workspace import Workspace
 from kit import Kit
@@ -27,9 +28,12 @@ pub class ToolHeader:
     pub let text_controls: HStack
     pub let auto_select_box: Checkbox
     pub let move_controls: HStack
-    ## Brush…: the window opens Brush Settings; a preset picked: the window refreshes.
+    pub let box_controls: HStack
+    ## Brush…: the window opens Brush Settings; a preset picked: the window
+    ## refreshes; Apply or Cancel: the window finishes the box, keeping it or not.
     pub var brush_settings: func() -> unit!? = none
     pub var refreshed: func() -> unit!? = none
+    pub var finished: func(bool) -> unit!? = none
     let workspace: Workspace
     let kit: Kit
 
@@ -75,7 +79,13 @@ pub class ToolHeader:
         self.auto_select_box = kit.checkbox("Auto-Select", func () -> unit!:
             self.workspace.auto_select = not self.workspace.auto_select)
         self.move_controls = HStack([self.auto_select_box], spacing = 12.0)
-        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer()], font = font, inset = 10.0, gap = 6.0)
+        let cancel = kit.button("Cancel", func () -> unit!:
+            self.finish(false))
+        let apply = kit.button("Apply", func () -> unit!:
+            self.finish(true))
+        self.box_controls = HStack([cancel, apply], spacing = 8.0)
+        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer(), self.box_controls],
+                           font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
     func scrubber(self, value: float, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
@@ -89,6 +99,10 @@ pub class ToolHeader:
         if let open = self.brush_settings:
             open()
 
+    func finish(self, keep: bool) -> unit!:
+        if let done = self.finished:
+            done(keep)
+
     func toggle_contiguous(self) -> unit!:
         self.workspace.contiguous = not self.workspace.contiguous
         self.contiguous_button.set_text("Contiguous ✓" if self.workspace.contiguous else "Contiguous")
@@ -100,11 +114,14 @@ pub class ToolHeader:
         let tool = workspace.tool
         let active = tool_by_id(tool)
         let on_mask = workspace.canvas.editing_mask() and (tool == "brush" or tool == "eraser")
-        self.title.set_text(active.title + " on mask" if on_mask else active.title)
-        self.brush_controls.layout().set_visible(tool == "brush" or tool == "eraser" or tool == "gradient")
-        self.wand_controls.layout().set_visible(tool == "wand")
-        self.text_controls.layout().set_visible(tool == "text")
-        self.move_controls.layout().set_visible(tool == "move")
+        # A free transform takes over the header until it is applied or cancelled.
+        let transforming = workspace.transform != none
+        self.title.set_text("Transform" if transforming else (active.title + " on mask" if on_mask else active.title))
+        self.brush_controls.layout().set_visible(not transforming and (tool == "brush" or tool == "eraser" or tool == "gradient"))
+        self.wand_controls.layout().set_visible(not transforming and tool == "wand")
+        self.text_controls.layout().set_visible(not transforming and tool == "text")
+        self.move_controls.layout().set_visible(not transforming and tool == "move")
+        self.box_controls.layout().set_visible(transforming or workspace.crop_box != none)
         self.auto_select_box.set_checked(workspace.auto_select)
         self.size_field.set_value(workspace.brush.diameter)
         self.hardness_field.set_value(workspace.brush.hardness * 100.0)
@@ -112,4 +129,7 @@ pub class ToolHeader:
         self.flow_field.set_value(workspace.brush.flow * 100.0)
         self.spacing_field.set_value(workspace.brush.spacing * 100.0)
         self.preset_menu.set_text(workspace.brush.preset + " ▾")
-        self.hint.set_text("Click the canvas to sample a color · X swaps · D resets" if sampling else active.hint)
+        if transforming:
+            self.hint.set_text("Drag a corner to scale (shift frees it) · a side stretches · alt about the middle · outside turns · Enter applies · Esc cancels")
+        else:
+            self.hint.set_text("Click the canvas to sample a color · X swaps · D resets" if sampling else active.hint)

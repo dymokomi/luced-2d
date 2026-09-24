@@ -5,6 +5,8 @@ from canvas import Canvas
 from panels import Panels
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
+from transform_box import TransformBox, grab_move, grab_turn
+from crop_box import CropBox, crop_new
 from settings import Settings
 from ui import Event
 from input import EventKind, Key
@@ -16,11 +18,13 @@ import window
 pub func main(arguments: list[str]) -> int!:
     discard(arguments)
     layers()
+    picking()
     viewing()
     contents()
     settings_round_trip()
     checker_regions()
     tool_gestures()
+    boxes()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -78,10 +82,16 @@ func contents() -> unit!:
     assert(not actions.undo.is_enabled() and not actions.crop.is_enabled())
     actions.select_all.trigger()
     assert(actions.crop.is_enabled())
-    actions.tools[8].trigger()
+    actions.tools[9].trigger()
     assert(workspace.tool == "brush")
     actions.tools[4].trigger()
     assert(workspace.tool == "wand")
+    # The Crop tool's box starts around the whole canvas and goes with the tool.
+    actions.tools[5].trigger()
+    let crop = workspace.crop_box else trap("the crop tool shows its box")
+    assert(workspace.tool == "crop" and crop.width() == 300 and crop.height() == 200)
+    actions.tools[4].trigger()
+    assert(workspace.crop_box == none)
     # Brush Settings opens floating, once; docked, it stays where it was put.
     panels.open_brush()
     assert(panels.dock.is_floating(panels.brush.panel) and panels.dock.panel_count() == 4)
@@ -250,3 +260,71 @@ func tool_gestures() -> unit!:
     panels.actions.previous_blend.trigger()
     assert(workspace.canvas.layer_blend(workspace.selected) == Canvas.blend_mode_count() - 1)
     panels.close()
+
+func near(a: float, b: float) -> bool:
+    return math.abs(a - b) < 0.0001
+
+## The free transform's and the Crop tool's box geometry, as Photoshop's.
+func boxes() -> unit!:
+    let box = TransformBox(0.0, 0.0, 100.0, 50.0)
+    assert(box.hit(50.0, 25.0, 3.0) == grab_move and box.hit(1.0, -1.0, 3.0) == 0 and box.hit(200.0, 200.0, 3.0) == grab_turn)
+    # The bottom-right corner to (200, 100): twice the size, the top-left held.
+    box.begin(4, 100.0, 50.0)
+    box.drag(200.0, 100.0, false, false)
+    assert(near(box.scale_x, 2.0) and near(box.scale_y, 2.0) and near(box.dx, 50.0) and near(box.dy, 25.0))
+    # With Shift the corner goes free: only the width doubles here.
+    box.drag(200.0, 50.0, true, false)
+    assert(near(box.scale_x, 2.0) and near(box.scale_y, 1.0) and near(box.dx, 50.0) and near(box.dy, 0.0))
+    box.end()
+    let middle = TransformBox(0.0, 0.0, 100.0, 50.0)
+    # Alt stretches the right side about the middle, which stays.
+    middle.begin(3, 100.0, 25.0)
+    middle.drag(150.0, 25.0, false, true)
+    assert(near(middle.scale_x, 2.0) and near(middle.scale_y, 1.0) and near(middle.dx, 0.0))
+    middle.end()
+    # Outside turns it about its middle; Shift keeps to 15° steps.
+    assert(middle.hit(250.0, 25.0, 3.0) == grab_turn)
+    middle.begin(grab_turn, 250.0, 25.0)
+    middle.drag(50.0, 125.0, false, false)
+    assert(near(middle.angle, 90.0))
+    middle.drag(60.0, 125.0, true, false)
+    assert(near(middle.angle, 90.0))
+    middle.end()
+    # Turned a quarter, its right side (100 out from the middle) is at the bottom now.
+    assert(middle.hit(50.0, 125.0, 3.0) == 3)
+    let crop = CropBox(300.0, 200.0)
+    # The bottom-right handle pulled in, to whole pixels.
+    crop.begin(crop.hit(300.0, 200.0, 3.0), 300.0, 200.0)
+    crop.drag(250.4, 150.6, false)
+    crop.end()
+    assert(crop.width() == 250 and crop.height() == 151)
+    # A drag outside draws a new box, put right however it was drawn.
+    assert(crop.hit(280.0, 10.0, 3.0) == crop_new)
+    crop.begin(crop_new, 280.0, 10.0)
+    crop.drag(260.0, 40.0, false)
+    crop.end()
+    assert(crop.left == 260.0 and crop.width() == 20 and crop.top == 10.0 and crop.height() == 30)
+
+## Several layers selected, as Photoshop's Layers panel: Cmd-click adds or
+## takes one out, Shift-click takes a run, a plain select keeps one.
+func picking() -> unit!:
+    let workspace = Workspace(64, 64)
+    workspace.add_layer()
+    workspace.add_layer()
+    workspace.add_layer()
+    assert(workspace.layer_count() == 4 and workspace.selected == 3)
+    workspace.toggle_picked(1)
+    assert(workspace.selected == 1 and workspace.is_selected(3) and workspace.is_selected(1) and not workspace.is_selected(2))
+    let ids = workspace.selected_ids()
+    assert(ids.length == 2 and ids[0] == workspace.canvas.layer_id(1) and ids[1] == workspace.canvas.layer_id(3))
+    # Cmd-click again takes it out; the one the tools act on stays.
+    workspace.toggle_picked(3)
+    assert(not workspace.is_selected(3) and workspace.selected_ids().length == 1)
+    workspace.pick_range(3)
+    assert(workspace.selected == 3 and workspace.selected_ids().length == 3 and not workspace.is_selected(0))
+    workspace.select(0)
+    assert(workspace.selected_ids().length == 1)
+    # Deleting several at once keeps the rest.
+    workspace.pick_range(2)
+    workspace.delete_layer()
+    assert(workspace.layer_count() == 1)

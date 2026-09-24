@@ -1,0 +1,132 @@
+## Groups in the layer stack, as Photoshop's: Group Layers (Cmd-G) gathers the
+## selected layers into a new group where the top-most of them was, Ungroup
+## (Shift-Cmd-G) lets a group's layers out where it was, and a row dragged in
+## the Layers panel lands above the row it is dropped on — or, dropped on a
+## group's row, inside it on top. The Layers panel lists what folded groups
+## hide with `shown_rows`.
+from workspace import Workspace
+
+## Layer › Group Layers: the selected layers, in their order, into a new group
+## placed where the top-most of them is.
+pub func group_selected(workspace: Workspace) -> unit!:
+    let canvas = workspace.canvas
+    let ids = workspace.selected_ids()
+    if ids.length == 0:
+        return
+    let top = workspace.index_of(ids[ids.length - 1])
+    let parent = canvas.layer_parent(top)
+    let position = canvas.layer_position(top)
+    let name = f"Group {workspace.next_group}"
+    workspace.next_group += 1
+    let group = canvas.add_group(name)
+    canvas.move_into(group, parent, position + 1)
+    for id in ids:
+        # A layer already inside another selected layer goes along with it.
+        if not held_by_any(workspace, id, ids):
+            canvas.move_into(id, group, -1)
+    workspace.select_id(group)
+
+## Layer › Ungroup: the selected group's layers out where it was, in order,
+## and the empty group gone.
+pub func ungroup(workspace: Workspace) -> unit!:
+    let canvas = workspace.canvas
+    let index = workspace.selected
+    if not canvas.layer_is_group(index):
+        return
+    let group = canvas.layer_id(index)
+    let parent = canvas.layer_parent(index)
+    let first = members(workspace, group)
+    for id in first:
+        # Each one goes just below the group, so they keep their order.
+        canvas.move_into(id, parent, canvas.layer_position(workspace.index_of(group)))
+    canvas.remove_layer(group)
+    if first.length > 0:
+        workspace.select_id(first[first.length - 1])
+    else:
+        workspace.select(0 if index >= workspace.layer_count() else index)
+
+## Where a dragged row lands against the row it is dropped on.
+pub let drop_above: int = 0
+pub let drop_inside: int = 1
+pub let drop_below: int = 2
+
+## A dragged row dropped: the layer `id` goes just above (or below) the layer
+## at `target` in its group, or on top inside it when it is a group and `how`
+## is `drop_inside`. A group cannot go inside itself.
+pub func drop_layer(workspace: Workspace, id: int, target: int, how: int) -> unit!:
+    let canvas = workspace.canvas
+    let target_id = canvas.layer_id(target)
+    if target_id == id or held_by(workspace, target_id, id):
+        return
+    if how == drop_inside and canvas.layer_is_group(target):
+        canvas.move_into(id, target_id, -1)
+    else:
+        let position = canvas.layer_position(target)
+        canvas.move_into(id, canvas.layer_parent(target), position + 1 if how == drop_above else position)
+    workspace.select_id(id)
+
+## The layers directly in group `group`, bottom to top.
+pub func members(workspace: Workspace, group: int) -> list[int]!:
+    var ids: list[int] = []
+    var index = 0
+    while index < workspace.layer_count():
+        if workspace.canvas.layer_parent(index) == group:
+            ids.append(workspace.canvas.layer_id(index))
+        index += 1
+    return ids
+
+## Whether layer `id` is somewhere inside group `group`.
+pub func held_by(workspace: Workspace, id: int, group: int) -> bool!:
+    var parent = workspace.canvas.layer_parent(workspace.index_of(id))
+    while parent != 0:
+        if parent == group:
+            return true
+        parent = workspace.canvas.layer_parent(workspace.index_of(parent))
+    return false
+
+func held_by_any(workspace: Workspace, id: int, groups: list[int]) -> bool!:
+    for group in groups:
+        if group != id and held_by(workspace, id, group):
+            return true
+    return false
+
+## The Layers panel's rows, top first: every layer's stack index but those
+## inside a folded group.
+pub func shown_rows(workspace: Workspace) -> list[int]!:
+    var rows: list[int] = []
+    var index = workspace.layer_count() - 1
+    while index >= 0:
+        if not folded_away(workspace, index):
+            rows.append(index)
+        index -= 1
+    return rows
+
+## Whether a group holding the layer at `index` is folded shut.
+func folded_away(workspace: Workspace, index: int) -> bool!:
+    var parent = workspace.canvas.layer_parent(index)
+    while parent != 0:
+        if is_folded(workspace, parent):
+            return true
+        parent = workspace.canvas.layer_parent(workspace.index_of(parent))
+    return false
+
+## Whether group `group` is folded shut in the Layers panel.
+pub func is_folded(workspace: Workspace, group: int) -> bool:
+    for id in workspace.collapsed:
+        if id == group:
+            return true
+    return false
+
+## Fold a group shut in the Layers panel, or open it.
+pub func toggle_folded(workspace: Workspace, group: int):
+    var kept: list[int] = []
+    var found = false
+    for id in workspace.collapsed:
+        if id == group:
+            found = true
+        else:
+            kept.append(id)
+    if not found:
+        kept.append(group)
+    workspace.collapsed = kept
+    workspace.touch()

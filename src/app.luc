@@ -11,7 +11,7 @@ import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.25"
+pub let version: str = "0.1.26"
 
 pub class Luce2D:
     pub let app: Application
@@ -39,6 +39,9 @@ pub class Luce2D:
             discard(elapsed)
             panels.view.march()))
         app.set_commands(actions.all)
+        # What input could not do (a filter on a group, a file that would not
+        # open) is said in a prompt rather than ending the run.
+        app.set_error_handler(panels.prompts.tell)
         panels.settings_dialog.apply()
         if store.warning != "":
             panels.status.set_text(store.warning)

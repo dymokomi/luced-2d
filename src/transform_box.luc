@@ -1,0 +1,217 @@
+## Free Transform on the canvas, as in Photoshop: a box around what the layer
+## has painted with eight handles. A corner scales proportionally (Shift frees
+## it), a side stretches one way, Alt scales about the middle; inside the box
+## moves (Shift keeps to an axis), outside it turns (Shift in 15° steps).
+##
+## The box keeps the canvas's model: the painted box as found, scaled by
+## (`scale_x`, `scale_y`) and turned `angle` degrees about its middle, then
+## moved by (`dx`, `dy`). Everything is in document pixels but the handles,
+## which are hit and drawn at screen size.
+from ui import Painter, Point
+from gpu import Rect, Color
+import math
+
+## What a press on the box grabbed.
+pub let grab_none: int = -1
+## 0..7 are the handles, clockwise from the top-left corner; then these.
+pub let grab_move: int = 8
+pub let grab_turn: int = 9
+
+pub class TransformBox:
+    ## The painted box as found, and its middle: the transform's pivot.
+    pub let left: float
+    pub let top: float
+    pub let width: float
+    pub let height: float
+    pub var scale_x: float = 1.0
+    pub var scale_y: float = 1.0
+    pub var angle: float = 0.0
+    pub var dx: float = 0.0
+    pub var dy: float = 0.0
+    ## The drag under way: what was grabbed, where, and the model as it was.
+    pub var grabbed: int = -1
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+    var from_scale_x: float = 1.0
+    var from_scale_y: float = 1.0
+    var from_angle: float = 0.0
+    var from_dx: float = 0.0
+    var from_dy: float = 0.0
+
+    pub func init(self, left: float, top: float, width: float, height: float):
+        self.left = left
+        self.top = top
+        self.width = width
+        self.height = height
+
+    pub func pivot_x(self) -> float:
+        return self.left + self.width * 0.5
+
+    pub func pivot_y(self) -> float:
+        return self.top + self.height * 0.5
+
+    ## Whether it is still the box as found.
+    pub func unchanged(self) -> bool:
+        return self.scale_x == 1.0 and self.scale_y == 1.0 and self.angle == 0.0 and self.dx == 0.0 and self.dy == 0.0
+
+    ## Handle `index`'s side of the box along x and y: -1, 0 or 1.
+    func side_x(self, index: int) -> float:
+        if index == 0 or index == 6 or index == 7:
+            return -1.0
+        if index == 1 or index == 5:
+            return 0.0
+        return 1.0
+
+    func side_y(self, index: int) -> float:
+        if index <= 2:
+            return -1.0
+        if index == 3 or index == 7:
+            return 0.0
+        return 1.0
+
+    ## Where the point at (`sx`, `sy`) of the box — each -1..1 across it —
+    ## is now, in document pixels.
+    func place_x(self, sx: float, sy: float) -> float:
+        let turn = self.angle * math.pi / 180.0
+        let ux = sx * self.width * 0.5 * self.scale_x
+        let uy = sy * self.height * 0.5 * self.scale_y
+        return self.pivot_x() + self.dx + ux * math.cos(turn) - uy * math.sin(turn)
+
+    func place_y(self, sx: float, sy: float) -> float:
+        let turn = self.angle * math.pi / 180.0
+        let ux = sx * self.width * 0.5 * self.scale_x
+        let uy = sy * self.height * 0.5 * self.scale_y
+        return self.pivot_y() + self.dy + ux * math.sin(turn) + uy * math.cos(turn)
+
+    ## What a press at document point (`x`, `y`) grabs, with handles `reach`
+    ## document pixels about (their screen size over the zoom).
+    pub func hit(self, x: float, y: float, reach: float) -> int:
+        var index = 0
+        while index < 8:
+            let hx = self.place_x(self.side_x(index), self.side_y(index))
+            let hy = self.place_y(self.side_x(index), self.side_y(index))
+            if math.abs(x - hx) <= reach and math.abs(y - hy) <= reach:
+                return index
+            index += 1
+        # Inside: the point in the box's own frame lies within its half-sizes.
+        let turn = self.angle * math.pi / 180.0
+        let px = x - self.pivot_x() - self.dx
+        let py = y - self.pivot_y() - self.dy
+        let local_x = px * math.cos(turn) + py * math.sin(turn)
+        let local_y = -px * math.sin(turn) + py * math.cos(turn)
+        if math.abs(local_x) <= math.abs(self.width * 0.5 * self.scale_x) and math.abs(local_y) <= math.abs(self.height * 0.5 * self.scale_y):
+            return grab_move
+        return grab_turn
+
+    ## Start dragging what `grab` names from document point (`x`, `y`).
+    pub func begin(self, grab: int, x: float, y: float):
+        self.grabbed = grab
+        self.start_x = x
+        self.start_y = y
+        self.from_scale_x = self.scale_x
+        self.from_scale_y = self.scale_y
+        self.from_angle = self.angle
+        self.from_dx = self.dx
+        self.from_dy = self.dy
+
+    pub func end(self):
+        self.grabbed = grab_none
+
+    ## The pointer at document point (`x`, `y`) with the modifiers held.
+    pub func drag(self, x: float, y: float, shift: bool, alt: bool):
+        let grab = self.grabbed
+        if grab == grab_move:
+            var move_x = x - self.start_x
+            var move_y = y - self.start_y
+            if shift:
+                if math.abs(move_x) >= math.abs(move_y):
+                    move_y = 0.0
+                else:
+                    move_x = 0.0
+            self.dx = self.from_dx + move_x
+            self.dy = self.from_dy + move_y
+        elif grab == grab_turn:
+            let cx = self.pivot_x() + self.dx
+            let cy = self.pivot_y() + self.dy
+            let swept = math.atan2(y - cy, x - cx) - math.atan2(self.start_y - cy, self.start_x - cx)
+            var turned = self.from_angle + swept * 180.0 / math.pi
+            if shift:
+                turned = math.round(turned / 15.0) * 15.0
+            # Kept to -180..180 so the number shown stays readable.
+            turned = math.mod(turned + 540.0, 360.0) - 180.0
+            self.angle = turned
+        elif grab >= 0 and grab < 8:
+            self.stretch(grab, x, y, shift, alt)
+
+    ## Handle `index` dragged to (`x`, `y`): the opposite side (or with Alt the
+    ## middle) stays put while the box scales to reach the pointer.
+    func stretch(self, index: int, x: float, y: float, shift: bool, alt: bool):
+        let side_x = self.side_x(index)
+        let side_y = self.side_y(index)
+        # Measured with the model as the drag began.
+        self.scale_x = self.from_scale_x
+        self.scale_y = self.from_scale_y
+        self.dx = self.from_dx
+        self.dy = self.from_dy
+        let anchor_x = 0.0 if alt else -side_x
+        let anchor_y = 0.0 if alt else -side_y
+        let fixed_x = self.place_x(anchor_x, anchor_y)
+        let fixed_y = self.place_y(anchor_x, anchor_y)
+        let turn = self.angle * math.pi / 180.0
+        # The pointer from the fixed point, in the box's own frame.
+        let px = x - fixed_x
+        let py = y - fixed_y
+        let local_x = px * math.cos(turn) + py * math.sin(turn)
+        let local_y = -px * math.sin(turn) + py * math.cos(turn)
+        # How far the handle sits from the fixed point, in box widths and heights.
+        let reach_x = side_x - anchor_x
+        let reach_y = side_y - anchor_y
+        var scale_x = self.from_scale_x
+        var scale_y = self.from_scale_y
+        if reach_x != 0.0 and self.width > 0.0:
+            scale_x = local_x / (reach_x * self.width * 0.5)
+        if reach_y != 0.0 and self.height > 0.0:
+            scale_y = local_y / (reach_y * self.height * 0.5)
+        let corner = side_x != 0.0 and side_y != 0.0
+        if corner and not shift:
+            # Proportional: the one factor that best lines the corner up with the pointer.
+            let handle_x = reach_x * self.width * 0.5 * self.from_scale_x
+            let handle_y = reach_y * self.height * 0.5 * self.from_scale_y
+            let length = handle_x * handle_x + handle_y * handle_y
+            let factor = (local_x * handle_x + local_y * handle_y) / length if length > 0.0 else 1.0
+            scale_x = self.from_scale_x * factor
+            scale_y = self.from_scale_y * factor
+        # Never quite flat: the canvas takes 0.1% at least.
+        self.scale_x = keep_off_zero(scale_x)
+        self.scale_y = keep_off_zero(scale_y)
+        # The fixed point is where it was: the middle follows from it.
+        let ux = -anchor_x * self.width * 0.5 * self.scale_x
+        let uy = -anchor_y * self.height * 0.5 * self.scale_y
+        let centre_x = fixed_x + ux * math.cos(turn) - uy * math.sin(turn)
+        let centre_y = fixed_y + ux * math.sin(turn) + uy * math.cos(turn)
+        self.dx = centre_x - self.pivot_x()
+        self.dy = centre_y - self.pivot_y()
+
+    ## The box's outline and handles, at screen resolution, for a view showing
+    ## the document at `zoom` with its corner at (`left`, `top`).
+    pub func draw(self, painter: Painter, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        var index = 0
+        while index < 8:
+            let next = (index + 1) % 8
+            let a = Point(self.place_x(self.side_x(index), self.side_y(index)) * zoom + left, self.place_y(self.side_x(index), self.side_y(index)) * zoom + top)
+            let b = Point(self.place_x(self.side_x(next), self.side_y(next)) * zoom + left, self.place_y(self.side_x(next), self.side_y(next)) * zoom + top)
+            painter.line(a, b, 3.0, backing)
+            painter.line(a, b, 1.0, ink)
+            index += 1
+        index = 0
+        while index < 8:
+            let hx = self.place_x(self.side_x(index), self.side_y(index)) * zoom + left
+            let hy = self.place_y(self.side_x(index), self.side_y(index)) * zoom + top
+            painter.rectangle(Rect(math.floor(hx) - 4.0, math.floor(hy) - 4.0, 9.0, 9.0), ink)
+            painter.rectangle(Rect(math.floor(hx) - 3.0, math.floor(hy) - 3.0, 7.0, 7.0), backing)
+            index += 1
+
+func keep_off_zero(scale: float) -> float:
+    if math.abs(scale) >= 0.001:
+        return scale
+    return -0.001 if scale < 0.0 else 0.001

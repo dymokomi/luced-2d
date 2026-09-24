@@ -32,6 +32,8 @@ pub class Actions:
     pub let swap_colors: Command
     pub let reset_colors: Command
     pub let free_transform: Command
+    pub let flip_horizontal: Command
+    pub let flip_vertical: Command
     pub let settings: Command
     # Select
     pub let select_all: Command
@@ -42,6 +44,8 @@ pub class Actions:
     pub let feather: Command
     # Image
     pub let crop: Command
+    pub let flip_canvas_horizontal: Command
+    pub let flip_canvas_vertical: Command
     pub let canvas_size: Command
     pub let image_size: Command
     # Adjust, one per luce-image adjustment kind, and Filter
@@ -57,7 +61,12 @@ pub class Actions:
     pub let layer_down: Command
     pub let merge_down: Command
     pub let delete_layer: Command
+    pub let group_layers: Command
+    pub let ungroup: Command
     pub let toggle_mask: Command
+    pub let hide_all_mask: Command
+    pub let toggle_mask_enabled: Command
+    pub let load_transparency: Command
     pub let toggle_mask_editing: Command
     pub let toggle_clipped: Command
     pub let toggle_visibility: Command
@@ -105,7 +114,9 @@ pub class Actions:
         self.fill_background = Command("Fill Selection with Background", Shortcut(Key.backspace, primary = true), id = "fill_background")
         self.swap_colors = Command("Swap Colors", Shortcut(Key.x), id = "swap_colors")
         self.reset_colors = Command("Default Colors", Shortcut(Key.d), id = "reset_colors")
-        self.free_transform = Command("Free Transform…", Shortcut(Key.t, primary = true), id = "free_transform")
+        self.free_transform = Command("Free Transform", Shortcut(Key.t, primary = true), id = "free_transform")
+        self.flip_horizontal = Command("Flip Horizontal", id = "flip_horizontal")
+        self.flip_vertical = Command("Flip Vertical", id = "flip_vertical")
         self.settings = Command("Settings…", Shortcut(Key.comma, primary = true), id = "settings")
         self.select_all = Command("All", Shortcut(Key.a, primary = true), id = "select_all")
         self.deselect = Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect")
@@ -114,6 +125,8 @@ pub class Actions:
         self.contract = Command("Contract…", id = "contract")
         self.feather = Command("Feather…", id = "feather")
         self.crop = Command("Crop to Selection", id = "crop")
+        self.flip_canvas_horizontal = Command("Flip Canvas Horizontal", id = "flip_canvas_horizontal")
+        self.flip_canvas_vertical = Command("Flip Canvas Vertical", id = "flip_canvas_vertical")
         self.canvas_size = Command("Canvas Size…", id = "canvas_size")
         self.image_size = Command("Image Size…", id = "image_size")
         self.adjustments = [Command("Brightness / Contrast…", id = "adjust_0"), Command("Hue / Saturation / Lightness…", Shortcut(Key.u, primary = true), id = "adjust_1"),
@@ -130,7 +143,12 @@ pub class Actions:
         self.layer_down = Command("Move Layer Down", Shortcut(Key.left_bracket, primary = true), id = "layer_down")
         self.merge_down = Command("Merge Down", Shortcut(Key.e, primary = true), id = "merge_down")
         self.delete_layer = Command("Delete Layer", Shortcut(Key.delete, primary = true, shift = true), id = "delete_layer")
+        self.group_layers = Command("Group Layers", Shortcut(Key.g, primary = true), id = "group_layers")
+        self.ungroup = Command("Ungroup Layers", Shortcut(Key.g, primary = true, shift = true), id = "ungroup")
         self.toggle_mask = Command("Add / Remove Mask", id = "toggle_mask")
+        self.hide_all_mask = Command("Add Mask Hiding All", id = "hide_all_mask")
+        self.toggle_mask_enabled = Command("Disable / Enable Mask", id = "toggle_mask_enabled")
+        self.load_transparency = Command("Load Layer Transparency", id = "load_transparency")
         self.toggle_mask_editing = Command("Edit Mask / Pixels", Shortcut(Key.backslash), id = "toggle_mask_editing")
         self.toggle_clipped = Command("Clip to Below / Release", Shortcut(Key.g, primary = true, alt = true), id = "toggle_clipped")
         self.toggle_visibility = Command("Hide / Show", Shortcut(Key.h, primary = true, shift = true), id = "toggle_visibility")
@@ -160,10 +178,11 @@ pub class Actions:
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
-        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.settings,
+        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
-                    self.crop, self.canvas_size, self.image_size, self.blur,
+                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.image_size, self.blur,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
+                    self.group_layers, self.ungroup, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
                     self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.blends + self.tools + self.units
 
@@ -187,10 +206,21 @@ pub class Actions:
         self.layer_down.set_enabled(workspace.selected > 0)
         self.merge_down.set_enabled(workspace.selected > 0)
         self.delete_layer.set_enabled(layers > 1)
+        let group = canvas.layer_is_group(workspace.selected)
         self.toggle_mask_editing.set_enabled(canvas.layer_masked(workspace.selected))
+        self.toggle_mask_enabled.set_enabled(canvas.layer_masked(workspace.selected))
+        self.toggle_mask.set_enabled(not group)
+        self.hide_all_mask.set_enabled(not group and not canvas.layer_masked(workspace.selected))
+        self.load_transparency.set_enabled(not group)
+        self.ungroup.set_enabled(group)
+        self.duplicate_layer.set_enabled(not group)
         self.toggle_clipped.set_enabled(workspace.selected > 0)
         for command in self.adjustments:
             command.set_enabled(not previewing)
         self.blur.set_enabled(not previewing)
         self.free_transform.set_enabled(not previewing)
+        self.flip_horizontal.set_enabled(not previewing)
+        self.flip_vertical.set_enabled(not previewing)
+        self.flip_canvas_horizontal.set_enabled(not previewing)
+        self.flip_canvas_vertical.set_enabled(not previewing)
         self.layer_style.set_enabled(not previewing)

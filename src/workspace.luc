@@ -11,6 +11,8 @@ from hex_color import hex_of_linear, linear_of_hex
 import math
 import paths
 from units import pixels_per
+from transform_box import TransformBox
+from crop_box import CropBox
 
 pub class Workspace:
     pub var canvas: Canvas
@@ -41,6 +43,10 @@ pub class Workspace:
     pub var text_y: float = 0.0
     ## The Move tool's Auto-Select: a press picks the top layer with pixels under it.
     pub var auto_select: bool = false
+    ## The free transform under way on the canvas, if any.
+    pub var transform: TransformBox? = none
+    ## The Crop tool's box while the tool is active.
+    pub var crop_box: CropBox? = none
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     pub var contiguous: bool = true
@@ -63,13 +69,20 @@ pub class Workspace:
     pub var units: str = "px"
     ## The picker's history: sRGB hex strings, newest first, at most 16.
     pub var recent: list[str]
+    ## Layers selected besides `selected` (Cmd- and Shift-click in Layers), by
+    ## id; and the groups folded shut in the Layers panel, by id.
+    pub var picked: list[int]
+    pub var collapsed: list[int]
     var next_name: int = 1
+    pub var next_group: int = 1
 
     pub func init(self, width: int, height: int) -> unit!:
         self.canvas = blank_canvas(width, height)
         self.look = Look()
         self.brush = Brush()
         self.recent = []
+        self.picked = []
+        self.collapsed = []
         self.documents = [Document(self.canvas, "")]
         self.touch()
 
@@ -78,10 +91,12 @@ pub class Workspace:
 
     # -- Documents: the live fields are the current document's; switching stashes and restores them.
 
-    ## Copy the live fields into the current document's record.
-    func stash(self):
+    ## Copy the live fields into the current document's record; a free
+    ## transform under way is dropped first.
+    func stash(self) -> unit!:
         if self.current < 0 or self.current >= self.documents.length:
             return
+        self.finish_transform(false)
         let document = self.documents[self.current]
         document.canvas = self.canvas
         document.path = self.path
@@ -102,8 +117,13 @@ pub class Workspace:
         self.offset_x = document.offset_x
         self.offset_y = document.offset_y
         self.selected = document.selected
+        self.picked = []
+        self.collapsed = []
         self.fitted = document.fitted
         self.next_name = document.next_name
+        # The Crop tool's box goes around the document now shown.
+        if self.crop_box != none:
+            self.crop_box = CropBox(float(self.width()), float(self.height()))
         self.touch()
 
     ## Add `document` as a new tab and switch to it — or, when the only open
@@ -208,8 +228,7 @@ pub class Workspace:
     pub func place_file(self, path: str, x: float, y: float) -> unit!:
         let id = self.canvas.add_layer(paths.stem(path))
         self.canvas.place_layer(id, path, int(x), int(y))
-        self.selected = self.layer_count() - 1
-        self.touch()
+        self.place_above_selected(id)
 
     # -- Units and the grid.
 
@@ -243,45 +262,118 @@ pub class Workspace:
     pub func select(self, index: int) -> unit!:
         if index >= 0 and index < self.layer_count():
             self.selected = index
+            self.picked = []
             if not self.canvas.layer_masked(index):
                 self.canvas.edit_mask(false)
             self.touch()
 
+    ## The stack index of the layer whose id is `id`, or -1.
+    pub func index_of(self, id: int) -> int!:
+        var index = 0
+        while index < self.layer_count():
+            if self.canvas.layer_id(index) == id:
+                return index
+            index += 1
+        return -1
+
+    ## Whether the layer at `index` is selected, alone or with others.
+    pub func is_selected(self, index: int) -> bool!:
+        if index == self.selected:
+            return true
+        let id = self.canvas.layer_id(index)
+        for picked in self.picked:
+            if picked == id:
+                return true
+        return false
+
+    ## Every selected layer's id, bottom to top.
+    pub func selected_ids(self) -> list[int]!:
+        var ids: list[int] = []
+        var index = 0
+        while index < self.layer_count():
+            if self.is_selected(index):
+                ids.append(self.canvas.layer_id(index))
+            index += 1
+        return ids
+
+    ## Cmd-click in Layers: add the layer to the selection, or take it out; it
+    ## becomes the one the tools act on.
+    pub func toggle_picked(self, index: int) -> unit!:
+        let id = self.canvas.layer_id(index)
+        if self.is_selected(index) and index != self.selected:
+            var kept: list[int] = []
+            for picked in self.picked:
+                if picked != id:
+                    kept.append(picked)
+            self.picked = kept
+        elif index != self.selected:
+            let before = self.canvas.layer_id(self.selected)
+            var kept = self.picked
+            kept.append(before)
+            self.selected = index
+            self.picked = kept
+        self.touch()
+
+    ## Shift-click in Layers: select every layer from the selected one to `index`.
+    pub func pick_range(self, index: int) -> unit!:
+        let low = self.selected if self.selected < index else index
+        let high = index if self.selected < index else self.selected
+        var ids: list[int] = []
+        var at = low
+        while at <= high:
+            if at != index:
+                ids.append(self.canvas.layer_id(at))
+            at += 1
+        self.selected = index
+        self.picked = ids
+        self.touch()
+
+    ## A new empty layer just above the selected one, in its group, selected.
     pub func add_layer(self) -> unit!:
         self.next_name += 1
-        discard(self.canvas.add_layer(f"Layer {self.next_name}"))
-        self.selected = self.layer_count() - 1
-        self.touch()
+        self.place_above_selected(self.canvas.add_layer(f"Layer {self.next_name}"))
 
+    ## Put the new layer `id` just above the selected layer, in the same group,
+    ## and select it — or, above a group, just above the whole group.
+    pub func place_above_selected(self, id: int) -> unit!:
+        let created = self.index_of(id)
+        if self.selected != created and self.selected < self.layer_count():
+            let parent = self.canvas.layer_parent(self.selected)
+            let position = self.canvas.layer_position(self.selected)
+            self.canvas.move_into(id, parent, position + 1)
+        self.select_id(id)
+
+    ## Delete every selected layer (a group with all it holds), keeping one.
     pub func delete_layer(self) -> unit!:
-        if self.layer_count() <= 1:
-            return
-        self.canvas.remove_layer(self.selected_id())
-        if self.selected >= self.layer_count():
-            self.selected = self.layer_count() - 1
+        let at = self.selected
+        for id in self.selected_ids():
+            let index = self.index_of(id)
+            # One layer always stays; a group going takes its layers, so check each time.
+            if index >= 0 and self.layer_count() > 1:
+                self.canvas.remove_layer(id)
+        self.picked = []
+        self.selected = at if at < self.layer_count() else self.layer_count() - 1
         self.touch()
 
-    ## Move the selected layer `step` places up the stack (negative: down).
+    ## Move the selected layer one place up among its group's layers (negative:
+    ## down); a group goes with everything in it.
     pub func reorder(self, step: int) -> unit!:
-        let target = self.selected + step
-        if target < 0 or target >= self.layer_count():
-            return
-        self.canvas.reorder_layer(self.selected_id(), step)
-        self.selected = target
+        let id = self.selected_id()
+        self.canvas.reorder_layer(id, step)
+        self.selected = self.index_of(id)
         self.touch()
 
     pub func duplicate(self) -> unit!:
         let name = self.canvas.layer_name(self.selected) + " copy"
-        discard(self.canvas.duplicate_layer(self.selected_id(), name))
-        self.selected += 1
-        self.touch()
+        let copy = self.canvas.duplicate_layer(self.selected_id(), name)
+        self.select_id(copy)
 
     pub func merge_down(self) -> unit!:
         if self.selected == 0:
             return
+        let below = self.canvas.layer_id(self.selected - 1)
         self.canvas.merge_down(self.selected_id())
-        self.selected -= 1
-        self.touch()
+        self.select_id(below)
 
     ## Copy the selected layer's selected pixels (all of them without a
     ## selection) to the system clipboard, or the whole picture's with
@@ -293,12 +385,10 @@ pub class Workspace:
     ## The clipboard's image on a new layer just above the selected one, centred
     ## on a document point, and selected.
     pub func paste(self, x: float, y: float) -> unit!:
-        let above = self.selected + 1
+        let parent = self.canvas.layer_parent(self.selected)
+        let position = self.canvas.layer_position(self.selected)
         let id = self.canvas.paste(int(x), int(y))
-        var at = self.layer_count() - 1
-        while at > above:
-            self.canvas.reorder_layer(id, -1)
-            at -= 1
+        self.canvas.move_into(id, parent, position + 1)
         self.select_id(id)
 
     ## Layer via Copy (via Cut with `cut`): a new layer of the selected pixels, selected.
@@ -307,13 +397,10 @@ pub class Workspace:
         self.select_id(id)
 
     ## Select the layer whose id is `id`.
-    func select_id(self, id: int) -> unit!:
-        var index = 0
-        while index < self.layer_count():
-            if self.canvas.layer_id(index) == id:
-                self.select(index)
-                return
-            index += 1
+    pub func select_id(self, id: int) -> unit!:
+        let index = self.index_of(id)
+        if index >= 0:
+            self.select(index)
 
     ## Rename the selected layer.
     pub func rename(self, name: str) -> unit!:
@@ -347,8 +434,25 @@ pub class Workspace:
         let count = Canvas.blend_mode_count()
         self.set_blend((self.canvas.layer_blend(self.selected) + step % count + count) % count)
 
-    pub func toggle_mask(self) -> unit!:
-        self.canvas.set_mask(self.selected_id(), not self.canvas.layer_masked(self.selected))
+    ## Add a mask — revealing the selection when there is one, as Photoshop's
+    ## button does, else everything; `hide` hides everything instead — or
+    ## remove the mask the layer has.
+    pub func toggle_mask(self, hide: bool = false) -> unit!:
+        if self.canvas.layer_masked(self.selected):
+            self.canvas.set_mask(self.selected_id(), false)
+        else:
+            self.canvas.set_mask(self.selected_id(), true, 1 if hide else (2 if self.canvas.has_selection() else 0))
+        self.touch()
+
+    ## Keep the selected layer's mask but stop it hiding anything, or bring it back.
+    pub func toggle_mask_enabled(self) -> unit!:
+        if self.canvas.layer_masked(self.selected):
+            self.canvas.enable_mask(self.selected_id(), not self.canvas.layer_mask_enabled(self.selected))
+            self.touch()
+
+    ## The selected layer's transparency becomes the selection.
+    pub func load_transparency(self) -> unit!:
+        self.canvas.select_from_layer(self.selected_id(), false, 0)
         self.touch()
 
     ## \: paint on the selected layer's mask, or back on its pixels.
@@ -360,9 +464,41 @@ pub class Workspace:
         self.canvas.set_clipped(self.selected_id(), not self.canvas.layer_clipped(self.selected))
         self.touch()
 
+    ## Move every selected layer by whole pixels, as one undo step; a group
+    ## moves what it holds.
     pub func move_layer(self, dx: int, dy: int) -> unit!:
-        self.canvas.move_layer(self.selected_id(), dx, dy)
+        var first = true
+        for id in self.moving_ids():
+            if not first:
+                self.canvas.join_next_edit()
+            self.canvas.move_layer(id, dx, dy)
+            first = false
         self.touch()
+
+    ## The pixel layers a move takes: the selected ones and those inside
+    ## selected groups, each once.
+    func moving_ids(self) -> list[int]!:
+        var ids: list[int] = []
+        var index = 0
+        while index < self.layer_count():
+            if not self.canvas.layer_is_group(index) and self.inside_selection(index):
+                ids.append(self.canvas.layer_id(index))
+            index += 1
+        return ids
+
+    ## Whether the layer at `index` is selected or inside a selected group.
+    func inside_selection(self, index: int) -> bool!:
+        if self.is_selected(index):
+            return true
+        var parent = self.canvas.layer_parent(index)
+        while parent != 0:
+            let holder = self.index_of(parent)
+            if holder < 0:
+                return false
+            if self.is_selected(holder):
+                return true
+            parent = self.canvas.layer_parent(holder)
+        return false
 
     # -- The whole image.
 
@@ -370,6 +506,17 @@ pub class Workspace:
         self.canvas.crop()
         self.fitted = false
         self.touch()
+
+    ## Crop to the Crop tool's box (Enter), or put it back around the whole
+    ## canvas (Esc). Past the canvas's edges the canvas grows, transparent.
+    pub func finish_crop(self, keep: bool) -> unit!:
+        if let box = self.crop_box:
+            if keep:
+                box.end()
+                self.canvas.resize_canvas(box.width(), box.height(), -int(box.left), -int(box.top))
+                self.fitted = false
+            self.crop_box = CropBox(float(self.width()), float(self.height()))
+            self.touch()
 
     ## The canvas `width` by `height`, the old one's top-left at (`offset_x`, `offset_y`).
     pub func resize_canvas(self, width: int, height: int, offset_x: int, offset_y: int) -> unit!:
@@ -481,10 +628,45 @@ pub class Workspace:
         self.canvas.preview_blur(radius)
         self.touch()
 
-    ## Preview the free transform: scales as fractions (1 = 100%), the turn in
-    ## degrees, the move in document pixels.
-    pub func preview_transform(self, scale_x: float, scale_y: float, angle: float, dx: float, dy: float) -> unit!:
-        self.canvas.preview_transform(scale_x, scale_y, angle, dx, dy)
+    ## Edit › Free Transform: a box around what the selected layer has painted,
+    ## previewing live until `finish_transform`. False when there is nothing
+    ## painted to transform, or something else is previewing.
+    pub func begin_transform(self) -> bool!:
+        if self.transform != none or self.previewing():
+            return false
+        let id = self.selected_id()
+        if not self.canvas.measure_content(id):
+            return false
+        self.transform = TransformBox(float(self.canvas.content_left()), float(self.canvas.content_top()),
+                                      float(self.canvas.content_width()), float(self.canvas.content_height()))
+        self.canvas.begin_preview(id)
+        self.touch()
+        return true
+
+    ## Show the layer as the transform box has it now.
+    pub func preview_transform(self) -> unit!:
+        if let box = self.transform:
+            self.canvas.preview_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+            self.touch()
+
+    ## Apply the transform (Enter) or drop it (Esc). Applied, it is one undo
+    ## step, and a linked mask goes with the pixels.
+    pub func finish_transform(self, keep: bool) -> unit!:
+        if let box = self.transform:
+            self.transform = none
+            self.canvas.end_preview(false)
+            if keep and not box.unchanged():
+                self.canvas.transform_layer(self.selected_id(), box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+            self.touch()
+
+    ## Edit › Transform › Flip: the selected layer mirrored about its painted middle.
+    pub func flip_layer(self, horizontal: bool) -> unit!:
+        self.canvas.flip_layer(self.selected_id(), horizontal)
+        self.touch()
+
+    ## Image › Flip Canvas: every layer mirrored about the canvas's middle.
+    pub func flip_canvas(self, horizontal: bool) -> unit!:
+        self.canvas.flip_canvas(horizontal)
         self.touch()
 
     pub func end_preview(self, keep: bool) -> unit!:
@@ -585,6 +767,12 @@ pub class Workspace:
         self.tool_used = false
         self.tool = tool
         self.erasing = tool == "eraser"
+        # The Crop tool's box starts around the whole canvas, and goes with the tool.
+        if tool == "crop":
+            if self.crop_box == none:
+                self.crop_box = CropBox(float(self.width()), float(self.height()))
+        else:
+            self.crop_box = none
         self.touch()
 
     pub func select_all(self) -> unit!:

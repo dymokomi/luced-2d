@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -312,6 +312,76 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 200.0 * zoom, y = oy + 200.0 * zoom, button = 0))
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 500.0 * zoom, y = oy + 350.0 * zoom))
             editor.panels.refresh()''',
+    'transform': '''            editor.workspace.select(1)
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            editor.workspace.fit(area.width, area.height)
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            editor.panels.free_transform()
+            let box = editor.workspace.transform else trap("a transform box")
+            print(f"TRANSFORM box {box.left},{box.top} {box.width}x{box.height}")
+            # Shrink from the bottom-right corner, then turn it a little from outside.
+            let corner_x = box.left + box.width
+            let corner_y = box.top + box.height
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + corner_x * zoom, y = oy + corner_y * zoom, button = 0))
+            print(f"TRANSFORM grabbed {box.grabbed} tool {editor.workspace.tool} zoom {zoom}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + (corner_x - 200.0) * zoom, y = oy + (corner_y - 200.0) * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + (corner_x - 200.0) * zoom, y = oy + (corner_y - 200.0) * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 1350.0 * zoom, y = oy + 440.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 1300.0 * zoom, y = oy + 800.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 1300.0 * zoom, y = oy + 800.0 * zoom, button = 0))
+            print(f"TRANSFORM scale {box.scale_x} {box.scale_y} angle {box.angle} move {box.dx} {box.dy}")
+            editor.panels.refresh()''',
+    'crop': '''            print("CROP choose")
+            editor.workspace.choose_tool("crop")
+            print("CROP chosen")
+            editor.panels.refresh()
+            print("CROP refreshed")
+            let area = editor.panels.view.layout().bounds()
+            editor.workspace.fit(area.width, area.height)
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            # Pull the top-left corner in; the rest shades.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox, y = oy, button = 0))
+            print("CROP pressed")
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 300.0 * zoom, y = oy + 200.0 * zoom))
+            print("CROP dragged")
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 300.0 * zoom, y = oy + 200.0 * zoom, button = 0))
+            let crop = editor.workspace.crop_box else trap("a crop box")
+            print(f"CROP box {crop.left},{crop.top} {crop.width()}x{crop.height()}")
+            editor.panels.refresh()''',
+    'flip': '''            editor.workspace.select(1)
+            editor.workspace.flip_layer(true)
+            editor.workspace.flip_canvas(false)
+            print(f"FLIP undo {editor.workspace.canvas.can_undo()}")
+            editor.panels.refresh()''',
+    # Choosing the Crop tool rebuilds the header; a press after it once set off
+    # a collection inside the relayout that trapped (luce-ui 0.6.5 fixed it).
+    'croppress': '''            editor.workspace.choose_tool("crop")
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            print(f"PRESS at {ox},{oy}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox, y = oy, button = 0))
+            print("PRESS done")
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox, y = oy, button = 0))
+            print("PRESS up")
+            editor.panels.refresh()''',
+    'groups': '''            editor.workspace.select(1)
+            editor.workspace.toggle_picked(0)
+            group_selected(editor.workspace)
+            editor.workspace.add_layer()
+            editor.workspace.toggle_mask(true)
+            var index = editor.workspace.layer_count() - 1
+            while index >= 0:
+                let canvas = editor.workspace.canvas
+                print(f"GROUPS {index} {canvas.layer_name(index)} depth {canvas.layer_depth(index)} group {canvas.layer_is_group(index)} masked {canvas.layer_masked(index)}")
+                index -= 1
+            editor.panels.refresh()''',
     'clipboard': '''            let saved = clipboard.read_text()
             editor.workspace.select(0)
             editor.workspace.choose_tool("marquee")
@@ -341,7 +411,7 @@ if arguments.zoom:
     SCENE += '\n            editor.workspace.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
@@ -354,7 +424,13 @@ with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     native += '''
 import files
 import memory
+import ownership
 import strings
+
+## Run the cycle collector now, so a scene can find where references go wrong.
+pub func collect():
+    ownership.collect()
+
 pub func save(path: str) -> !:
     let texture = captured_texture else trap("no captured frame")
     let width = uint(texture, sel("width"))

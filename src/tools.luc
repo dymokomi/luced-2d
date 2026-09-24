@@ -30,6 +30,7 @@ pub func tools() -> list[Tool]!:
                  "Drag to select · shift adds, alt subtracts · shift while dragging makes a circle, alt centers · cmd-D deselect", shift = true),
             Tool("lasso", "Lasso", "Lasso", "lasso-tool", Key.l, "Drag around the area to select · shift adds · alt subtracts · cmd-D deselect"),
             Tool("wand", "Magic Wand", "Magic Wand", "magic-wand-tool", Key.w, "Click a color to select it · shift adds · alt subtracts"),
+            Tool("crop", "Crop", "Crop", "crop-tool", Key.c, "Drag an edge or corner · inside moves · outside draws anew · Enter crops · Esc resets"),
             Tool("text", "Text", "Text", "text-tool", Key.t, "Click where the text starts, then type it"),
             Tool("eyedropper", "Eyedropper", "Eyedropper", "eyedropper-tool", Key.i, "Click a color to make it the foreground color"),
             Tool("gradient", "Gradient", "Gradient", "gradient-tool", Key.g, "Drag from the foreground color to the background color · fills the selection"),

@@ -1,17 +1,17 @@
 ## The adjust dialog, after Compositor's floating panels: a card centred over
 ## the canvas holding one column of rows for the open adjustment (or the blur,
-## the free transform, the layer style), live-previewing, with Cancel/Apply.
+## the layer style), live-previewing, with Cancel/Apply.
 ## Each row is a captioned slider and number field showing one value.
 ##
 ## Kinds, which index the rows: 0 brightness/contrast, 1 hue/saturation/
 ## lightness, 2 invert, 3 levels, 4 desaturate, 5 threshold, 6 posterize,
-## 7 curves, 8 Gaussian blur, 9 free transform, 10 layer style.
+## 7 curves, 8 Gaussian blur, 10 layer style; 9 is free (Free Transform is on
+## the canvas now, see transform_box.luc).
 from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Dialog, Checkbox, CurveEditor
 from workspace import Workspace
 from kit import Kit, SliderField
 
 let blur_kind: int = 8
-let transform_kind: int = 9
 let style_kind: int = 10
 
 pub class AdjustDialog:
@@ -76,9 +76,7 @@ pub class AdjustDialog:
         self.row([HStack([Menu("Channel ▾", channels, font = kit.font), self.curve_label, Spacer(), kit.button("Reset", self.reset_curve)], spacing = 8.0),
                   self.curve_editor])
         self.row([self.control("Radius", 0.5, 250.0, 8.0, 1, " px")])
-        self.row([self.control("Width", 1.0, 400.0, 100.0, 0, "%"), self.control("Height", 1.0, 400.0, 100.0, 0, "%"),
-                  self.control("Angle", -180.0, 180.0, 0.0, 0, "°"), self.control("X", -2000.0, 2000.0, 0.0, 0, " px"),
-                  self.control("Y", -2000.0, 2000.0, 0.0, 0, " px")])
+        self.row([])
         # Layer Style: each effect is a checkbox heading over its rows, as Compositor's Effects panel.
         var style_items: list[Widget] = []
         self.style_section(style_items, 0, "Drop Shadow", [self.control("X", -100.0, 100.0, 4.0, 0, " px"), self.control("Y", -100.0, 100.0, 4.0, 0, " px"),
@@ -149,14 +147,6 @@ pub class AdjustDialog:
     ## Filter › Gaussian Blur…
     pub func blur(self) -> unit!:
         self.open(blur_kind, "Gaussian Blur")
-
-    ## Edit › Free Transform…: scale 100%, no turn, no move.
-    pub func free_transform(self) -> unit!:
-        var index = 0
-        while index < 5:
-            self.set_control(transform_kind, index, 100.0 if index < 2 else 0.0)
-            index += 1
-        self.open(transform_kind, "Free Transform")
 
     ## Layer › Layer Style…: the selected layer's styles, for editing.
     pub func layer_style(self) -> unit!:
@@ -238,8 +228,6 @@ pub class AdjustDialog:
         let pairs = self.controls[kind]
         if kind == blur_kind:
             self.workspace.preview_blur(pairs[0].value())
-        elif kind == transform_kind:
-            self.workspace.preview_transform(pairs[0].value() / 100.0, pairs[1].value() / 100.0, pairs[2].value(), pairs[3].value(), pairs[4].value())
         else:
             self.workspace.preview_adjust(kind, self.values())
         self.notify()

@@ -1,19 +1,27 @@
 ## The Layers panel's list: a row per layer with its eye, thumbnails, name and
-## blend, selection and visibility by click, and pictures dropped on it placed
-## as new layers.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, draw_icon
+## blend, groups folding, selection of one or several layers by click, and
+## pictures dropped on it placed as new layers.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, draw_icon
 from gpu import RenderTarget, Rect, Color
 from input import EventKind, Cursor
 from workspace import Workspace
 import theme
 import math
 from kit import dropped_paths
+from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_inside, drop_above, drop_below
 
-## The layer list: one 52-point row per layer, top layer first, each with an
-## eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it has
-## one, the name and a subtitle, indented when clipped. Clicking a row selects
-## it; the eye toggles visibility; the mask thumbnail targets the mask for
-## painting, the layer thumbnail targets the pixels again.
+## The layer list: one 52-point row per shown layer, top layer first, each with
+## an eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it
+## has one, the name and a subtitle, indented when clipped and for each group
+## holding it. A group shows a folder instead, which folds it shut or open.
+##
+## As in Photoshop: a click selects a row, Cmd-click adds it to the selection
+## or takes it out, Shift-click selects a run; the eye toggles visibility; the
+## mask thumbnail targets the mask for painting, the layer thumbnail the pixels
+## again; Cmd-click on a thumbnail loads it as the selection (Shift adds, Alt
+## subtracts) and Shift-click on the mask thumbnail disables the mask. A row
+## dragged lands above the row it is dropped on, or inside a group dropped on
+## its middle.
 pub class LayerList: Widget:
     let box: Layout
     pub let workspace: Workspace
@@ -40,14 +48,22 @@ pub class LayerList: Widget:
         return self.box
 
     pub func measure(self, available: Constraints) -> Size!:
-        let rows = self.workspace.layer_count() if self.workspace.layer_count() > 1 else 1
-        return Size(252.0, self.row_height * float(rows))
+        let count = shown_rows(self.workspace).length
+        return Size(252.0, self.row_height * float(count if count > 1 else 1))
 
-    func row_of(self, y: float) -> int:
+    ## The layer index of the row at `y`, or -1.
+    func row_of(self, y: float) -> int!:
+        let rows = shown_rows(self.workspace)
         let row = int(math.floor(y / self.row_height))
-        if row < 0 or row >= self.workspace.layer_count():
+        if row < 0 or row >= rows.length:
             return -1
-        return self.workspace.layer_count() - 1 - row
+        return rows[row]
+
+    ## Where a row's thumbnail starts: past the eye, a step in per group
+    ## holding it, and further when clipped.
+    func thumb_left(self, index: int) -> float!:
+        let canvas = self.workspace.canvas
+        return 32.0 + 16.0 * float(canvas.layer_depth(index)) + (24.0 if canvas.layer_clipped(index) else 0.0)
 
     pub func draw(self, target: RenderTarget) -> unit!:
         let painter = Painter(target)
@@ -60,10 +76,10 @@ pub class LayerList: Widget:
         let thumb = 36.0
         let mask_thumb = 30.0
         var row = 0
-        var index = workspace.layer_count() - 1
-        while index >= 0:
+        for index in shown_rows(workspace):
             let top = float(row) * self.row_height
-            let selected = index == workspace.selected
+            let selected = workspace.is_selected(index)
+            let group = canvas.layer_is_group(index)
             let clipped = canvas.layer_clipped(index)
             let masked = canvas.layer_masked(index)
             let visible = canvas.layer_visible(index)
@@ -73,22 +89,28 @@ pub class LayerList: Widget:
             let soft = theme.on_accent() if selected and focused else theme.text_muted()
             # The eye.
             draw_icon(target, "visible" if visible else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), ink)
-            var x = 32.0 + (24.0 if clipped else 0.0)
-            # The layer thumbnail: a checker-grey slot with the layer's own pixels in
-            # the document's shape, bordered in the accent when it is the target.
+            var x = self.thumb_left(index)
             let aspect = float(workspace.width()) / float(workspace.height())
-            var tw = thumb
-            var th = thumb
-            if aspect > 1.0:
-                th = math.max(6.0, thumb / aspect)
+            if group:
+                # A group: its folder, open or shut, where a layer has its thumbnail.
+                let shut = is_folded(workspace, canvas.layer_id(index))
+                draw_icon(target, "folder" if shut else "folder-open", Rect(x + 8.0, top + (self.row_height - 20.0) * 0.5, 20.0, 20.0), ink)
+                x += thumb + 8.0
             else:
-                tw = math.max(6.0, thumb * aspect)
-            let ty = top + (self.row_height - th) * 0.5
-            painter.rectangle(Rect(x, ty, tw, th), theme.checker_light())
-            canvas.draw_layer(target, index, Rect(x, ty, tw, th), false)
-            if selected and not canvas.editing_mask():
-                self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), self.workspace.look.accent)
-            x += thumb + 8.0
+                # The layer thumbnail: a checker-grey slot with the layer's own pixels in
+                # the document's shape, bordered in the accent when it is the target.
+                var tw = thumb
+                var th = thumb
+                if aspect > 1.0:
+                    th = math.max(6.0, thumb / aspect)
+                else:
+                    tw = math.max(6.0, thumb * aspect)
+                let ty = top + (self.row_height - th) * 0.5
+                painter.rectangle(Rect(x, ty, tw, th), theme.checker_light())
+                canvas.draw_layer(target, index, Rect(x, ty, tw, th), false)
+                if index == workspace.selected and not canvas.editing_mask():
+                    self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), self.workspace.look.accent)
+                x += thumb + 8.0
             if masked:
                 var mw = mask_thumb
                 var mh = mask_thumb
@@ -99,25 +121,38 @@ pub class LayerList: Widget:
                 let my = top + (self.row_height - mh) * 0.5
                 painter.rectangle(Rect(x, my, mw, mh), Color(1.0, 1.0, 1.0))
                 canvas.draw_layer(target, index, Rect(x, my, mw, mh), true)
-                if selected and canvas.editing_mask():
+                if not canvas.layer_mask_enabled(index):
+                    # Disabled: struck through with a red cross, as Photoshop shows it.
+                    let cross = Color(0.85, 0.1, 0.08)
+                    painter.line(Point(x, my), Point(x + mw, my + mh), 2.0, cross)
+                    painter.line(Point(x + mw, my), Point(x, my + mh), 2.0, cross)
+                if index == workspace.selected and canvas.editing_mask():
                     self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), self.workspace.look.accent)
                 x += mask_thumb + 8.0
             let name = ("↳ " if clipped else "") + canvas.layer_name(index)
             painter.text(name, x, top + 10.0, ink, self.font)
             let opacity = int(canvas.layer_opacity(index) * 100.0 + 0.5)
-            let subtitle = f"{workspace.blend_name(index)} · {opacity}%" if not clipped else f"Clipped · {workspace.blend_name(index)} · {opacity}%"
+            var subtitle = f"{workspace.blend_name(index)} · {opacity}%"
+            if group:
+                subtitle = f"Group · {opacity}%"
+            elif clipped:
+                subtitle = f"Clipped · {workspace.blend_name(index)} · {opacity}%"
             painter.text(subtitle, x, top + 30.0, soft, self.font)
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
             row += 1
-            index -= 1
         self.draw_drop_indicator(painter, size.width)
         painter.close()
 
-    ## The drop indicator while a row is dragged: an accent line at the nearest row edge.
+    ## The drop indicator while a row is dragged: an accent line at the row edge
+    ## it lands on, or a frame round the group it goes into.
     func draw_drop_indicator(self, painter: Painter, width: float) -> unit!:
         if self.drag_index < 0 or not self.drag_started:
             return
-        let count = self.workspace.layer_count()
+        let row = int(math.floor(self.drag_y / self.row_height))
+        if self.into_group(self.drag_y):
+            self.frame(painter, Rect(0.0, float(row) * self.row_height, width, self.row_height), self.workspace.look.accent)
+            return
+        let count = shown_rows(self.workspace).length
         let slot = clamp_int(int(math.floor(self.drag_y / self.row_height + 0.5)), 0, count)
         painter.rectangle(Rect(0.0, float(slot) * self.row_height - 1.0, width, 2.0), self.workspace.look.accent)
 
@@ -127,16 +162,29 @@ pub class LayerList: Widget:
         painter.rectangle(Rect(rect.x, rect.y, 2.0, rect.height), color)
         painter.rectangle(Rect(rect.x + rect.width - 2.0, rect.y, 2.0, rect.height), color)
 
-    ## The layer index a drop at `y` lands on: rows run top-most layer first.
-    func drop_target(self, y: float) -> int!:
-        let count = self.workspace.layer_count()
-        let slot = clamp_int(int(math.floor(y / self.row_height + 0.5)), 0, count)
-        # Slot k is the edge above row k; a row dragged down past its own place lands one higher.
-        let from_row = count - 1 - self.drag_index
-        var to_row = slot
-        if slot > from_row:
-            to_row = slot - 1
-        return count - 1 - clamp_int(to_row, 0, count - 1)
+    ## Whether a drop at `y` is on the middle of a group's row: into the group.
+    func into_group(self, y: float) -> bool!:
+        let index = self.row_of(y)
+        if index < 0 or not self.workspace.canvas.layer_is_group(index):
+            return false
+        let within = y / self.row_height - math.floor(y / self.row_height)
+        return within > 0.3 and within < 0.7
+
+    ## A drop at `y`: onto a group's middle it goes in; otherwise at the row
+    ## edge nearest the pointer, above the row below that edge — or, past the
+    ## last row, below it.
+    func drop(self, y: float) -> unit!:
+        let workspace = self.workspace
+        let id = workspace.canvas.layer_id(self.drag_index)
+        if self.into_group(y):
+            drop_layer(workspace, id, self.row_of(y), drop_inside)
+            return
+        let rows = shown_rows(workspace)
+        let slot = clamp_int(int(math.floor(y / self.row_height + 0.5)), 0, rows.length)
+        if slot < rows.length:
+            drop_layer(workspace, id, rows[slot], drop_above)
+        else:
+            drop_layer(workspace, id, rows[rows.length - 1], drop_below)
 
     ## The dragged files that can become layers.
     pub func event(self, event: Event) -> unit!:
@@ -153,25 +201,8 @@ pub class LayerList: Widget:
         if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
             self.box.request_focus()
             let index = self.row_of(event.y)
-            if index < 0:
-                return
-            let workspace = self.workspace
-            if event.x < 28.0:
-                workspace.select(index)
-                workspace.toggle_visibility()
-            else:
-                workspace.select(index)
-                self.drag_index = index
-                self.drag_y = event.y
-                self.drag_started = false
-                let masked = workspace.canvas.layer_masked(index)
-                let clipped = workspace.canvas.layer_clipped(index)
-                let mask_left = 32.0 + (24.0 if clipped else 0.0) + 36.0 + 8.0
-                if masked and event.x >= mask_left and event.x < mask_left + 30.0:
-                    workspace.canvas.edit_mask(true)
-                elif event.x < mask_left:
-                    workspace.canvas.edit_mask(false)
-                workspace.touch()
+            if index >= 0:
+                self.press(index, event)
             self.box.invalidate()
         elif event.kind == EventKind.pointer_moved and self.drag_index >= 0:
             if math.abs(event.y - self.drag_y) > 4.0:
@@ -181,12 +212,7 @@ pub class LayerList: Widget:
                 self.box.invalidate()
         elif event.kind == EventKind.pointer_up and event.button == 0 and self.drag_index >= 0:
             if self.drag_started:
-                # The row edge nearest the pointer is where the layer goes.
-                let target = self.drop_target(event.y)
-                let workspace = self.workspace
-                workspace.select(self.drag_index)
-                while workspace.selected != target:
-                    workspace.reorder(1 if target > workspace.selected else -1)
+                self.drop(event.y)
             self.drag_index = -1
             self.drag_started = false
             self.box.invalidate()
@@ -194,6 +220,43 @@ pub class LayerList: Widget:
             self.drag_index = -1
             self.drag_started = false
             self.box.invalidate()
+
+    ## A press on the row of the layer at `index`.
+    func press(self, index: int, event: Event) -> unit!:
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        let command = event.meta or event.control
+        let thumb = self.thumb_left(index)
+        let mask_left = thumb + 44.0
+        let on_thumb = event.x >= thumb and event.x < thumb + 36.0
+        let on_mask = canvas.layer_masked(index) and event.x >= mask_left and event.x < mask_left + 30.0
+        let mode = 1 if event.shift else (2 if event.alt else 0)
+        if event.x < 28.0:
+            workspace.select(index)
+            workspace.toggle_visibility()
+        elif canvas.layer_is_group(index) and on_thumb:
+            toggle_folded(workspace, canvas.layer_id(index))
+        elif command and (on_thumb or on_mask):
+            # Cmd-click on a thumbnail: its pixels' transparency (or the mask) as the selection.
+            canvas.select_from_layer(canvas.layer_id(index), on_mask, mode)
+            workspace.touch()
+        elif on_mask and event.shift:
+            canvas.enable_mask(canvas.layer_id(index), not canvas.layer_mask_enabled(index))
+            workspace.touch()
+        elif command:
+            workspace.toggle_picked(index)
+        elif event.shift:
+            workspace.pick_range(index)
+        else:
+            workspace.select(index)
+            self.drag_index = index
+            self.drag_y = event.y
+            self.drag_started = false
+            if on_mask:
+                canvas.edit_mask(true)
+            elif on_thumb or event.x < mask_left:
+                canvas.edit_mask(false)
+            workspace.touch()
 
 func clamp_int(value: int, low: int, high: int) -> int:
     return low if value < low else (high if value > high else value)
