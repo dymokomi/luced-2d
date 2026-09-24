@@ -1,0 +1,98 @@
+## The brush, in Photoshop's units: size and edge, strength, tip shape,
+## dynamics (jitters 0..1, pen-pressure controls), scattering and texture;
+## the built-in presets; and pushing it all to the canvas before a stroke.
+from canvas import Canvas
+import math
+
+pub class Brush:
+    pub var diameter: float = 32.0
+    pub var hardness: float = 0.75
+    pub var opacity: float = 1.0
+    pub var flow: float = 1.0
+    ## Tip shape: dab spacing as a fraction of the diameter, the tip's angle in
+    ## degrees and its roundness 0..1, and stroke smoothing in pixels.
+    pub var spacing: float = 0.25
+    pub var angle: float = 0.0
+    pub var roundness: float = 1.0
+    pub var smoothing: float = 0.0
+    pub var size_jitter: float = 0.0
+    pub var angle_jitter: float = 0.0
+    pub var roundness_jitter: float = 0.0
+    pub var pressure_size: bool = true
+    pub var pressure_flow: bool = false
+    ## Scattering: spread as a fraction of the diameter, dabs per step.
+    pub var scatter: float = 0.0
+    pub var scatter_count: int = 1
+    pub var flow_jitter: float = 0.0
+    pub var hue_jitter: float = 0.0
+    pub var saturation_jitter: float = 0.0
+    pub var brightness_jitter: float = 0.0
+    ## Texture: 0 none, 1 grain, 2 canvas, 3 dots; its scale and depth.
+    pub var texture: int = 0
+    pub var texture_scale: float = 1.0
+    pub var texture_depth: float = 0.5
+    ## The preset these settings started from.
+    pub var preset: str = "Hard Round"
+
+    ## Push every setting to `canvas` for the next stroke, painting in the
+    ## linear color `red`, `green`, `blue`, or erasing.
+    pub func apply(self, canvas: Canvas, red: float, green: float, blue: float, erasing: bool) -> unit!:
+        canvas.set_brush(self.diameter, self.hardness, self.opacity, self.flow, red, green, blue, erasing)
+        canvas.set_brush_shape(self.spacing, self.angle, self.roundness, self.smoothing)
+        canvas.set_brush_dynamics(self.size_jitter, self.angle_jitter, self.roundness_jitter, self.scatter, self.scatter_count,
+                                  self.flow_jitter, self.hue_jitter, self.saturation_jitter, self.brightness_jitter, self.pressure_size, self.pressure_flow)
+        canvas.set_brush_texture(self.texture, self.texture_scale, self.texture_depth)
+
+    ## [ and ]: the diameter by `factor`, always by at least a pixel, 1..4096.
+    pub func scale(self, factor: float):
+        var next = math.floor(self.diameter * factor + 0.5)
+        if next == self.diameter:
+            next = self.diameter + (1.0 if factor > 1.0 else -1.0)
+        self.diameter = math.max(1.0, math.min(4096.0, next))
+
+## The built-in presets, Photoshop's usual first few.
+pub func preset_names() -> list[str]:
+    return ["Hard Round", "Soft Round", "Airbrush", "Chalk", "Spatter", "Ink Pen", "Canvas Wash"]
+
+## Preset `name` (one of `preset_names`) at `diameter` and `opacity`: the size
+## and strength carry over from the brush it replaces, as in Photoshop.
+pub func preset(name: str, diameter: float, opacity: float) -> Brush!:
+    let brush = Brush()
+    brush.diameter = diameter
+    brush.opacity = opacity
+    brush.preset = name
+    brush.hardness = 1.0
+    if name == "Soft Round":
+        brush.hardness = 0.2
+    elif name == "Airbrush":
+        brush.hardness = 0.0
+        brush.flow = 0.1
+        brush.spacing = 0.05
+        brush.pressure_flow = true
+    elif name == "Chalk":
+        brush.hardness = 0.9
+        brush.roundness = 0.8
+        brush.angle = 35.0
+        brush.texture = 1
+        brush.texture_depth = 0.9
+        brush.spacing = 0.1
+    elif name == "Spatter":
+        brush.hardness = 0.6
+        brush.spacing = 0.5
+        brush.scatter = 1.5
+        brush.scatter_count = 4
+        brush.size_jitter = 0.6
+        brush.flow_jitter = 0.5
+    elif name == "Ink Pen":
+        brush.spacing = 0.08
+        brush.smoothing = 6.0
+        brush.roundness = 0.6
+        brush.angle = 45.0
+    elif name == "Canvas Wash":
+        brush.hardness = 0.3
+        brush.flow = 0.3
+        brush.spacing = 0.15
+        brush.texture = 2
+        brush.texture_scale = 1.5
+        brush.texture_depth = 0.7
+    return brush

@@ -1,3 +1,5 @@
+## The rulers along the top and left of the canvas, and the corner where they
+## meet.
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
 from gpu import RenderTarget, Rect
 from workspace import Workspace
@@ -15,8 +17,6 @@ pub class Ruler: Widget:
     let font: Font
     let horizontal: bool
     let view: CanvasView
-    ## Where the view's origin sits along this ruler, in its own points.
-    pub var origin: float = 0.0
 
     pub func init(self, workspace: Workspace, view: CanvasView, font: Font, horizontal: bool) -> unit!:
         self.workspace = workspace
@@ -46,7 +46,7 @@ pub class Ruler: Widget:
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.tab_strip())
         let length = size.width if self.horizontal else size.height
         # The document's origin along this ruler, and points per unit.
-        let start = (workspace.offset_x if self.horizontal else workspace.offset_y) + self.origin
+        let start = (workspace.offset_x if self.horizontal else workspace.offset_y)
         let per_unit = workspace.pixels_per_unit() * workspace.zoom
         let step = major_step(per_unit)
         let major = step * per_unit
@@ -76,7 +76,7 @@ pub class Ruler: Widget:
             position += minor
         # The pointer's place over the canvas, in the accent.
         if self.view.pointer_inside:
-            let at = (self.view.pointer_x if self.horizontal else self.view.pointer_y) + self.origin
+            let at = (self.view.pointer_x if self.horizontal else self.view.pointer_y)
             if self.horizontal:
                 painter.rectangle(Rect(math.floor(at), 0.0, 1.0, thickness), workspace.look.accent)
             else:

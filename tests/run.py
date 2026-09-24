@@ -10,6 +10,11 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+# Crash reports carry app.luc's version: it must be the package's.
+package_version = re.search(r'^    str version = "([^"]+)"', (ROOT / 'package.prisma').read_text(), re.M).group(1)
+app_version = re.search(r'pub let version: str = "([^"]+)"', (ROOT / 'src/app.luc').read_text()).group(1)
+if app_version != package_version:
+    raise SystemExit(f'src/app.luc says {app_version}; package.prisma says {package_version}')
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / ('luce-base/build/luce-base.exe' if os.name == 'nt' else 'luce-base/build/luce-base'))
 parser.add_argument('--luce', type=Path, default=ROOT.parent / ('luce/build/luce.exe' if os.name == 'nt' else 'luce/build/luce'))

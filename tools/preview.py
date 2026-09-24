@@ -17,50 +17,50 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
 SCENES = {
-    'style': '''            editor.panels.layer_style()
+    'style': '''            editor.panels.adjust.layer_style()
             editor.workspace.choose_tool("brush")
             editor.panels.refresh()
-            editor.panels.toggle_style(0)
-            editor.panels.adjust_sliders[10][0].set_value(14.0)
-            editor.panels.adjust_sliders[10][1].set_value(14.0)
-            editor.panels.adjust_sliders[10][2].set_value(10.0)
-            editor.panels.toggle_style(1)
-            editor.panels.adjust_sliders[10][4].set_value(6.0)
-            editor.panels.preview()
+            editor.panels.adjust.toggle_style(0)
+            editor.panels.adjust.set_control(10, 0, 14.0)
+            editor.panels.adjust.set_control(10, 1, 14.0)
+            editor.panels.adjust.set_control(10, 2, 10.0)
+            editor.panels.adjust.toggle_style(1)
+            editor.panels.adjust.set_control(10, 4, 6.0)
+            editor.panels.adjust.preview()
             editor.panels.refresh()''',
     'settings': '''            editor.workspace.choose_tool("brush")
             editor.panels.settings_dialog.open()
-            editor.panels.settings_dialog.show_page(2)
+            editor.panels.settings_dialog.show_page(1)
             editor.panels.refresh()''',
     'brush': '''            editor.workspace.select(1)
             editor.workspace.set_color(0.02, 0.18, 0.65)
             editor.workspace.apply_preset("Spatter")
-            editor.workspace.diameter = 40.0
+            editor.workspace.brush.diameter = 40.0
             editor.workspace.begin_stroke(200.0, 200.0)
             editor.workspace.extend_stroke(600.0, 260.0)
             editor.workspace.extend_stroke(1000.0, 180.0)
             editor.workspace.end_stroke()
             editor.workspace.set_color(0.9, 0.9, 0.9)
             editor.workspace.apply_preset("Chalk")
-            editor.workspace.diameter = 60.0
+            editor.workspace.brush.diameter = 60.0
             editor.workspace.begin_stroke(200.0, 420.0)
             editor.workspace.extend_stroke(700.0, 480.0)
             editor.workspace.extend_stroke(1100.0, 400.0)
             editor.workspace.end_stroke()
             editor.workspace.set_color(0.8, 0.1, 0.05)
             editor.workspace.apply_preset("Canvas Wash")
-            editor.workspace.diameter = 90.0
+            editor.workspace.brush.diameter = 90.0
             editor.workspace.begin_stroke(200.0, 640.0)
             editor.workspace.extend_stroke(1100.0, 700.0)
             editor.workspace.end_stroke()
             editor.workspace.set_color(0.05, 0.05, 0.05)
             editor.workspace.apply_preset("Ink Pen")
-            editor.workspace.diameter = 14.0
+            editor.workspace.brush.diameter = 14.0
             editor.workspace.begin_stroke(1150.0, 200.0)
             editor.workspace.extend_stroke(1300.0, 700.0)
             editor.workspace.extend_stroke(1350.0, 300.0)
@@ -127,8 +127,9 @@ SCENES = {
             editor.workspace.offset_y = 10.0
             print(f"PAN far {editor.workspace.offset_x},{editor.workspace.offset_y} zoom {editor.workspace.zoom}")
             editor.panels.refresh()''',
-    'crash': '''            editor.panels.refresh()
-            let copy = editor.panels.crash_copy.layout().bounds()
+    'crash': '''            editor.panels.show_crash("trap: src/view.luc:1:1: a sample report\\nat frame 0")
+            editor.panels.refresh()
+            let copy = editor.panels.crash.copy.layout().bounds()
             editor.app.dispatch(Event(kind = EventKind.pointer_down, x = copy.x + 4.0, y = copy.y + 4.0, button = 0))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = copy.x + 4.0, y = copy.y + 4.0, button = 0))
             editor.panels.refresh()''',
@@ -177,12 +178,12 @@ SCENES = {
             editor.workspace.canvas.set_layer(editor.workspace.selected_id(), true, 1.0, 0)
             editor.workspace.set_color(1.0, 1.0, 1.0)
             editor.workspace.apply_preset("Hard Round")
-            editor.workspace.diameter = 40.0
+            editor.workspace.brush.diameter = 40.0
             editor.workspace.begin_stroke(200.0, 200.0)
             editor.workspace.extend_stroke(1000.0, 260.0)
             editor.workspace.end_stroke()
             editor.workspace.apply_preset("Soft Round")
-            editor.workspace.diameter = 80.0
+            editor.workspace.brush.diameter = 80.0
             editor.workspace.begin_stroke(200.0, 450.0)
             editor.workspace.extend_stroke(1000.0, 520.0)
             editor.workspace.end_stroke()
@@ -190,9 +191,9 @@ SCENES = {
     'brushdock': '''            editor.workspace.choose_tool("brush")
             editor.panels.open_brush()
             editor.panels.refresh()
-            editor.panels.dock.move(editor.panels.brush_panel, editor.panels.properties_panel, DockPosition.tab)
+            editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
             editor.panels.refresh()
-            print(f"BRUSHDOCK floating {editor.panels.dock.is_floating(editor.panels.brush_panel)}")
+            print(f"BRUSHDOCK floating {editor.panels.dock.is_floating(editor.panels.brush.panel)}")
             editor.panels.refresh()''',
     'zoomhold': '''            editor.workspace.choose_tool("marquee")
             editor.panels.refresh()
@@ -211,6 +212,10 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = cx + 60.0, y = cy, button = 0))
             editor.app.dispatch(Event(kind = EventKind.key_up, key = Key.z))
             print(f"ZOOMHOLD zoom {before} -> {editor.workspace.zoom} tool after {editor.workspace.tool}")
+            editor.panels.refresh()''',
+    'pickerwhite': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.set_color(1.0, 1.0, 1.0)
+            editor.panels.pick_color(false)
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
@@ -287,13 +292,13 @@ from app import Luce2D
         frames += 1
         if frames == 4:
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
-            editor.workspace.diameter = 48.0
+            editor.workspace.brush.diameter = 48.0
             editor.workspace.begin_stroke(180.0, 480.0)
             editor.workspace.extend_stroke(420.0, 140.0)
             editor.workspace.extend_stroke(700.0, 520.0)
             editor.workspace.end_stroke()
             editor.workspace.erasing = true
-            editor.workspace.diameter = 90.0
+            editor.workspace.brush.diameter = 90.0
             editor.workspace.begin_stroke(760.0, 320.0)
             editor.workspace.extend_stroke(900.0, 360.0)
             editor.workspace.end_stroke()
@@ -304,7 +309,7 @@ from app import Luce2D
             editor.workspace.select(1)
             editor.workspace.canvas.select_rectangle(120, 80, 360, 240, 0)
             editor.workspace.set_color(0.75, 0.03, 0.02)
-            editor.workspace.opacity = 0.6
+            editor.workspace.brush.opacity = 0.6
             editor.workspace.fill_selection(false)
             editor.workspace.deselect()
             editor.workspace.blur(6.0)
@@ -326,7 +331,7 @@ from app import Luce2D
             editor.workspace.select(0)
             editor.workspace.canvas.select_rectangle(0, 700, 1400, 180, 0)
             editor.workspace.set_color(0.02, 0.02, 0.03)
-            editor.workspace.opacity = 0.9
+            editor.workspace.brush.opacity = 0.9
             editor.workspace.fill_gradient(700.0, 880.0, 700.0, 700.0)
             editor.workspace.deselect()
             editor.workspace.select(1)

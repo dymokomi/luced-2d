@@ -1,0 +1,126 @@
+## Brush Settings: Photoshop's sections — Tip Shape, Shape Dynamics,
+## Scattering, Texture, Color Dynamics, Transfer — as an accordion, one open
+## at a time, each rows of a slider and a number field. Edits go straight to
+## the workspace; the next stroke paints with them. A dockable panel: it opens
+## floating over the workspace and docks wherever the user puts it.
+from ui import VStack, Size, Spacer, Menu, Command, Widget, DStack, Panel, Checkbox, Accordion
+from workspace import Workspace
+from kit import Kit, SliderField
+
+pub class BrushSettings:
+    pub let panel: Panel
+    let workspace: Workspace
+    let kit: Kit
+    ## The rows in the order `show` writes them.
+    let rows: list[SliderField]
+    let checks: list[Checkbox]
+    let texture_menu: Menu
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.rows = []
+        self.checks = []
+        self.texture_menu = Menu("None ▾", self.texture_commands(), font = kit.font)
+        var tip: list[Widget] = []
+        tip.append(self.row("Spacing", 1.0, 500.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.spacing = value / 100.0))
+        tip.append(self.row("Angle", -180.0, 180.0, "°", func (value: float) -> unit!:
+            self.workspace.brush.angle = value))
+        tip.append(self.row("Roundness", 5.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.roundness = value / 100.0))
+        tip.append(self.row("Smoothing", 0.0, 100.0, " px", func (value: float) -> unit!:
+            self.workspace.brush.smoothing = value))
+        var shape: list[Widget] = []
+        shape.append(self.row("Size Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.size_jitter = value / 100.0))
+        shape.append(self.row("Angle Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.angle_jitter = value / 100.0))
+        shape.append(self.row("Roundness Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.roundness_jitter = value / 100.0))
+        shape.append(self.check("Pen pressure controls size", func () -> unit!:
+            self.workspace.brush.pressure_size = not self.workspace.brush.pressure_size))
+        var scattering: list[Widget] = []
+        scattering.append(self.row("Scatter", 0.0, 1000.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.scatter = value / 100.0))
+        scattering.append(self.row("Count", 1.0, 16.0, "", func (value: float) -> unit!:
+            self.workspace.brush.scatter_count = int(value)))
+        var texture: list[Widget] = [kit.dialog_row("Pattern", self.texture_menu)]
+        texture.append(self.row("Scale", 10.0, 1000.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.texture_scale = value / 100.0))
+        texture.append(self.row("Depth", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.texture_depth = value / 100.0))
+        var color_rows: list[Widget] = []
+        color_rows.append(self.row("Hue Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.hue_jitter = value / 100.0))
+        color_rows.append(self.row("Saturation Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.saturation_jitter = value / 100.0))
+        color_rows.append(self.row("Brightness Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.brightness_jitter = value / 100.0))
+        var transfer: list[Widget] = []
+        transfer.append(self.row("Flow Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.flow_jitter = value / 100.0))
+        transfer.append(self.check("Pen pressure controls flow", func () -> unit!:
+            self.workspace.brush.pressure_flow = not self.workspace.brush.pressure_flow))
+        var sections: list[Widget] = []
+        for rows in [tip, shape, scattering, texture, color_rows, transfer]:
+            sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
+        let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = kit.font, open = 0)
+        self.panel = Panel("Brush Settings", VStack([stack, Spacer()], spacing = 0.0, padding = 6.0), minimum = Size(320.0, 240.0))
+
+    ## One setting: a captioned slider and field, `apply` taking each edit.
+    func row(self, label: str, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> Widget!:
+        let pair = self.kit.slider_field(minimum, maximum, minimum, 0, suffix, func (value: float) -> unit!:
+            apply(value)
+            self.workspace.touch())
+        self.rows.append(pair)
+        return self.kit.dialog_row(label, pair.row)
+
+    func check(self, label: str, toggle: func() -> unit!) -> Widget!:
+        let box = self.kit.checkbox(label, func () -> unit!:
+            toggle()
+            self.workspace.touch())
+        self.checks.append(box)
+        return box
+
+    ## The texture menu's entries: picking one sets the pattern.
+    func texture_commands(self) -> list[Command]!:
+        var kinds: list[Command] = []
+        var kind = 0
+        for name in texture_names():
+            let chosen = kind
+            let command = Command(name, id = f"texture_{kind}")
+            self.kit.bind(command, func () -> unit!:
+                self.workspace.brush.texture = chosen
+                self.show())
+            kinds.append(command)
+            kind += 1
+        return kinds
+
+    ## Show the workspace's brush, in the rows' order.
+    pub func show(self) -> unit!:
+        let w = self.workspace
+        let values = [w.brush.spacing * 100.0, w.brush.angle, w.brush.roundness * 100.0, w.brush.smoothing,
+                      w.brush.size_jitter * 100.0, w.brush.angle_jitter * 100.0, w.brush.roundness_jitter * 100.0,
+                      w.brush.scatter * 100.0, float(w.brush.scatter_count), w.brush.texture_scale * 100.0, w.brush.texture_depth * 100.0,
+                      w.brush.hue_jitter * 100.0, w.brush.saturation_jitter * 100.0, w.brush.brightness_jitter * 100.0, w.brush.flow_jitter * 100.0]
+        var index = 0
+        for value in values:
+            self.rows[index].set_value(value)
+            index += 1
+        self.checks[0].set_checked(w.brush.pressure_size)
+        self.checks[1].set_checked(w.brush.pressure_flow)
+        self.texture_menu.set_text(texture_names()[w.brush.texture] + " ▾")
+
+    ## Show the panel: floating the first time, else brought forward wherever
+    ## it was left, floating or docked.
+    pub func open(self, dock: DStack) -> unit!:
+        self.show()
+        if dock.contains(self.panel):
+            dock.select(self.panel)
+        else:
+            dock.float(self.panel)
+
+## The names, in their index order.
+func texture_names() -> list[str]:
+    return ["None", "Grain", "Canvas", "Dots"]

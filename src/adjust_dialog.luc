@@ -1,0 +1,311 @@
+## The adjust dialog, after Compositor's floating panels: a card centred over
+## the canvas holding one column of rows for the open adjustment (or the blur,
+## the free transform, the layer style), live-previewing, with Cancel/Apply.
+## Each row is a captioned slider and number field showing one value.
+##
+## Kinds, which index the rows: 0 brightness/contrast, 1 hue/saturation/
+## lightness, 2 invert, 3 levels, 4 desaturate, 5 threshold, 6 posterize,
+## 7 curves, 8 Gaussian blur, 9 free transform, 10 layer style.
+from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Dialog, Checkbox, CurveEditor
+from workspace import Workspace
+from kit import Kit, SliderField
+
+let blur_kind: int = 8
+let transform_kind: int = 9
+let style_kind: int = 10
+
+pub class AdjustDialog:
+    pub let dialog: Dialog
+    pub let title: Text
+    ## One column per kind; `controls[kind]` its slider/field pairs in order.
+    let rows: list[VStack]
+    pub let controls: list[list[SliderField]]
+    var built: list[SliderField]
+    ## The Curves row: the editor for one channel at a time, chosen from a menu.
+    pub let curve_editor: CurveEditor
+    let curve_label: Text
+    var curve_channel: int = 0
+    ## The open kind, or -1.
+    pub var kind: int = -1
+    ## Layer Style: three effect toggles beside their rows, and the style as it
+    ## was when the dialog opened, for Cancel.
+    pub let style_toggles: list[Checkbox]
+    var style_on: list[bool]
+    var style_before: list[float]
+    ## What the window does when the document changed, when the dialog opens or
+    ## closes, and when an adjustment cannot start.
+    pub var changed: func() -> unit!? = none
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.title = Text("", font = kit.font)
+        self.rows = []
+        self.controls = []
+        self.built = []
+        self.style_toggles = []
+        self.style_on = [false, false, false]
+        self.style_before = []
+        # The rows in the units Photoshop shows.
+        self.row([self.control("Brightness", -100.0, 100.0, 0.0), self.control("Contrast", -100.0, 100.0, 0.0)])
+        self.row([self.control("Hue", -180.0, 180.0, 0.0, 0, "°"), self.control("Saturation", -100.0, 100.0, 0.0),
+                  self.control("Lightness", -100.0, 100.0, 0.0)])
+        self.row([])
+        self.row([self.control("In Black", 0.0, 255.0, 0.0), self.control("In White", 0.0, 255.0, 255.0),
+                  self.control("Gamma", 0.1, 9.99, 1.0, 2), self.control("Out Black", 0.0, 255.0, 0.0),
+                  self.control("Out White", 0.0, 255.0, 255.0)])
+        self.row([])
+        self.row([self.control("Threshold", 0.0, 255.0, 128.0)])
+        self.row([self.control("Levels", 2.0, 32.0, 4.0)])
+        self.curve_editor = CurveEditor()
+        kit.keep(self.curve_editor.on_change(self.curve_changed))
+        var channels: list[Command] = []
+        var channel = 0
+        for name in curve_names():
+            let chosen = channel
+            let command = Command(name, id = f"curve_channel_{channel}")
+            kit.bind(command, func () -> unit!:
+                self.show_curve_channel(chosen))
+            channels.append(command)
+            channel += 1
+        self.curve_label = Text("RGB", font = kit.font)
+        self.row([HStack([Menu("Channel ▾", channels, font = kit.font), self.curve_label, Spacer(), kit.button("Reset", self.reset_curve)], spacing = 8.0),
+                  self.curve_editor])
+        self.row([self.control("Radius", 0.5, 250.0, 8.0, 1, " px")])
+        self.row([self.control("Width", 1.0, 400.0, 100.0, 0, "%"), self.control("Height", 1.0, 400.0, 100.0, 0, "%"),
+                  self.control("Angle", -180.0, 180.0, 0.0, 0, "°"), self.control("X", -2000.0, 2000.0, 0.0, 0, " px"),
+                  self.control("Y", -2000.0, 2000.0, 0.0, 0, " px")])
+        # Layer Style: each effect is a checkbox heading over its rows, as Compositor's Effects panel.
+        var style_items: list[Widget] = []
+        self.style_section(style_items, 0, "Drop Shadow", [self.control("X", -100.0, 100.0, 4.0, 0, " px"), self.control("Y", -100.0, 100.0, 4.0, 0, " px"),
+                                                          self.control("Blur", 0.0, 100.0, 4.0, 0, " px"), self.control("Opacity", 0.0, 100.0, 75.0, 0, "%")])
+        self.style_section(style_items, 1, "Stroke", [self.control("Size", 0.0, 100.0, 3.0, 0, " px"), self.control("Opacity", 0.0, 100.0, 100.0, 0, "%")])
+        self.style_section(style_items, 2, "Outer Glow", [self.control("Size", 0.0, 100.0, 8.0, 0, " px"), self.control("Opacity", 0.0, 100.0, 75.0, 0, "%")])
+        self.row(style_items)
+        var items: list[Widget] = [self.title]
+        for row in self.rows:
+            items.append(row)
+        items.append(HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
+        self.dialog = Dialog(items, width = 420.0)
+
+    # -- Building the rows.
+
+    ## One control, after Compositor's rows: a muted label in a 64-point column,
+    ## then the slider and number field. Every change re-previews.
+    func control(self, label: str, minimum: float, maximum: float, value: float, decimals: int = 0, suffix: str = "") -> Widget!:
+        let pair = self.kit.slider_field(minimum, maximum, value, decimals, suffix, func (moved: float) -> unit!:
+            discard(moved)
+            self.preview())
+        self.built.append(pair)
+        return self.kit.dialog_row(label, pair.row, 64.0)
+
+    ## One kind's column of rows, hidden until it opens; the controls built
+    ## since the last row belong to it.
+    func row(self, items: list[Widget]) -> unit!:
+        let row = VStack(items, spacing = 10.0)
+        row.layout().set_visible(false)
+        self.rows.append(row)
+        self.controls.append(self.built)
+        self.built = []
+
+    ## One effect of the Layer Style: its checkbox heading, then its rows.
+    func style_section(self, items: list[Widget], effect: int, name: str, controls: list[Widget]) -> unit!:
+        let box = Checkbox(name, font = self.kit.font)
+        self.kit.keep(box.on_change(func (value: bool) -> unit!:
+            discard(value)
+            self.toggle_style(effect)))
+        self.style_toggles.append(box)
+        items.append(box)
+        for control in controls:
+            items.append(control)
+
+    ## Set one control of `kind` from code.
+    pub func set_control(self, kind: int, index: int, value: float) -> unit!:
+        self.controls[kind][index].set_value(value)
+
+    # -- Opening and closing.
+
+    ## Open for `kind` with its controls as they are, previewing at once.
+    pub func open(self, kind: int, title: str) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        self.workspace.begin_preview() catch failure:
+            self.fail(f"Cannot adjust: {failure.message}")
+            return
+        self.kind = kind
+        if kind == 7:
+            var channel = 0
+            while channel < 4:
+                self.workspace.canvas.reset_curve(channel)
+                channel += 1
+            self.show_curve_channel(0)
+        self.show_row(kind, title)
+        self.preview()
+
+    ## Filter › Gaussian Blur…
+    pub func blur(self) -> unit!:
+        self.open(blur_kind, "Gaussian Blur")
+
+    ## Edit › Free Transform…: scale 100%, no turn, no move.
+    pub func free_transform(self) -> unit!:
+        var index = 0
+        while index < 5:
+            self.set_control(transform_kind, index, 100.0 if index < 2 else 0.0)
+            index += 1
+        self.open(transform_kind, "Free Transform")
+
+    ## Layer › Layer Style…: the selected layer's styles, for editing.
+    pub func layer_style(self) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        self.style_before = []
+        var field = 0
+        while field < 20:
+            self.style_before.append(self.workspace.style_value(field))
+            field += 1
+        let before = self.style_before
+        self.style_on = [before[0] != 0.0, before[8] != 0.0, before[14] != 0.0]
+        let shown = [before[1], before[2], before[3], before[7] * 100.0, before[9], before[13] * 100.0, before[15], before[19] * 100.0]
+        var index = 0
+        for value in shown:
+            self.set_control(style_kind, index, value)
+            index += 1
+        self.show_style_toggles()
+        self.kind = style_kind
+        self.show_row(style_kind, "Layer Style")
+
+    func show_row(self, kind: int, title: str) -> unit!:
+        var index = 0
+        for row in self.rows:
+            row.layout().set_visible(index == kind)
+            index += 1
+        self.title.set_text(title)
+        self.dialog.open()
+        self.refresh()
+
+    ## Close, keeping the preview (Apply) or dropping it (Cancel).
+    pub func close(self, keep: bool) -> unit!:
+        if self.kind == style_kind and not keep and self.style_before.length == 20:
+            # Cancel puts the styles back as they were when the dialog opened.
+            let b = self.style_before
+            let id = self.workspace.selected_id()
+            self.workspace.canvas.set_shadow(id, b[0] != 0.0, b[1], b[2], b[3], b[4], b[5], b[6], b[7])
+            self.workspace.canvas.set_stroke(id, b[8] != 0.0, b[9], b[10], b[11], b[12], b[13])
+            self.workspace.canvas.set_glow(id, b[14] != 0.0, b[15], b[16], b[17], b[18], b[19])
+            self.workspace.touch()
+        if self.workspace.previewing():
+            self.workspace.end_preview(keep)
+        self.kind = -1
+        self.dialog.hide()
+        self.refresh()
+
+    pub func apply(self) -> unit!:
+        self.close(true)
+
+    pub func cancel(self) -> unit!:
+        self.close(false)
+
+    # -- Previewing.
+
+    ## The open kind's values in the units the canvas takes.
+    func values(self) -> list[float]:
+        let kind = self.kind
+        var values: list[float] = []
+        for pair in self.controls[kind]:
+            values.append(pair.value())
+        if kind == 0:
+            return [values[0] / 100.0, values[1] / 100.0]
+        if kind == 1:
+            return [values[0] / 360.0, values[1] / 100.0, values[2] / 100.0]
+        if kind == 3:
+            return [values[0] / 255.0, values[1] / 255.0, values[2], values[3] / 255.0, values[4] / 255.0]
+        if kind == 5:
+            return [values[0] / 255.0]
+        return values
+
+    ## Show the open kind with the controls as they are.
+    pub func preview(self) -> unit!:
+        let kind = self.kind
+        if kind == style_kind:
+            self.apply_styles()
+            return
+        if kind < 0 or not self.workspace.previewing():
+            return
+        let pairs = self.controls[kind]
+        if kind == blur_kind:
+            self.workspace.preview_blur(pairs[0].value())
+        elif kind == transform_kind:
+            self.workspace.preview_transform(pairs[0].value() / 100.0, pairs[1].value() / 100.0, pairs[2].value(), pairs[3].value(), pairs[4].value())
+        else:
+            self.workspace.preview_adjust(kind, self.values())
+        self.notify()
+
+    # -- Curves.
+
+    ## The editor's points become the canvas's curve for the shown channel, then re-preview.
+    func curve_changed(self) -> unit!:
+        let canvas = self.workspace.canvas
+        canvas.reset_curve(self.curve_channel)
+        var index = 0
+        while index < self.curve_editor.point_count():
+            canvas.add_curve_point(self.curve_channel, self.curve_editor.point_x(index), self.curve_editor.point_y(index))
+            index += 1
+        self.preview()
+
+    ## Load the canvas's curve for `channel` into the editor.
+    func show_curve_channel(self, channel: int) -> unit!:
+        self.curve_channel = channel
+        let canvas = self.workspace.canvas
+        self.curve_editor.reset()
+        var index = 0
+        while index < canvas.curve_point_count(channel):
+            self.curve_editor.add_point(canvas.curve_point_x(channel, index), canvas.curve_point_y(channel, index))
+            index += 1
+        self.curve_label.set_text(curve_names()[channel])
+
+    func reset_curve(self) -> unit!:
+        self.workspace.canvas.reset_curve(self.curve_channel)
+        self.show_curve_channel(self.curve_channel)
+        self.preview()
+
+    # -- Layer styles.
+
+    ## Layer styles are not destructive: the controls write straight to the layer.
+    func apply_styles(self) -> unit!:
+        let s = self.controls[style_kind]
+        self.workspace.set_styles(self.style_on[0], s[0].value(), s[1].value(), s[2].value(), s[3].value() / 100.0,
+                                  self.style_on[1], s[4].value(), s[5].value() / 100.0, self.style_on[2], s[6].value(), s[7].value() / 100.0)
+        self.notify()
+
+    pub func toggle_style(self, effect: int) -> unit!:
+        self.style_on[effect] = not self.style_on[effect]
+        self.show_style_toggles()
+        self.apply_styles()
+
+    func show_style_toggles(self) -> unit!:
+        var effect = 0
+        while effect < 3:
+            self.style_toggles[effect].set_checked(self.style_on[effect])
+            effect += 1
+
+    # -- Telling the window.
+
+    func notify(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+## The names, in their index order.
+func curve_names() -> list[str]:
+    return ["RGB", "Red", "Green", "Blue"]

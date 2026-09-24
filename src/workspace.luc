@@ -1,36 +1,16 @@
+## The editing session: the open documents (one live at a time, its fields
+## kept on the workspace so tools never look past it), the active tool, the
+## brush, the foreground and background colors, and the view aids. Every
+## change bumps `revision` so views know to redraw. Layer operations act on
+## the selected layer; `selected` is its stack index, `selected_id()` its id.
 from canvas import Canvas
+from theme import Look
+from brush import Brush, preset
+from documents import Document, title_of, blank_canvas
+from hex_color import hex_of_linear, linear_of_hex
 import math
 import paths
-from theme import Look
-
-## One open document and how it is shown: the luce-image canvas, its file,
-## the view's zoom and offset, and which layer is selected. Every change bumps
-## `revision` so views know to redraw.
-## One open document: its canvas, where it lives, and the view state that
-## belongs to it. The workspace holds one of these per tab and keeps the
-## current one's fields live on itself, so the tools never look past it.
-pub class Document:
-    pub var canvas: Canvas
-    pub var path: str = ""
-    pub var zoom: float = 1.0
-    pub var offset_x: float = 0.0
-    pub var offset_y: float = 0.0
-    pub var selected: int = 0
-    ## Whether the view has had its first fit; the view fits a document that has not.
-    pub var fitted: bool = false
-    pub var next_name: int = 1
-
-    pub func init(self, canvas: Canvas, path: str) -> unit!:
-        self.canvas = canvas
-        self.path = path
-
-    ## The tab's name: the file's, or Untitled.
-    pub func title(self) -> str:
-        return paths.base(self.path) if self.path != "" else "Untitled"
-
-    ## Whether it has work its file does not.
-    pub func dirty(self) -> bool:
-        return self.canvas.can_undo()
+from units import pixels_per
 
 pub class Workspace:
     pub var canvas: Canvas
@@ -46,14 +26,15 @@ pub class Workspace:
     pub var selected: int = 0
     pub var revision: int = 0
     pub var fitted: bool = false
-    pub var erasing: bool = false
-    ## The active tool: "move", "marquee", "ellipse", "lasso", "wand", "brush", "eraser", "hand" or "zoom".
+    ## The active tool, a `tools()` id, and whether the brush erases (the eraser).
     pub var tool: str = "brush"
+    pub var erasing: bool = false
     ## Spring-loaded tools, as in Photoshop: the tool before the last switch,
     ## and whether the current one has been used on the canvas since. Holding a
     ## tool's key while using it returns to the previous tool on release.
     pub var tool_before: str = "brush"
     pub var tool_used: bool = false
+    pub var brush: Brush
     ## The text tool's size in pixels and where the next text goes.
     pub var text_size: float = 48.0
     pub var text_x: float = 0.0
@@ -61,31 +42,6 @@ pub class Workspace:
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     pub var contiguous: bool = true
-    ## The brush, in Photoshop's units: size and edge, strength, tip shape,
-    ## dynamics (jitters 0..1, pressure controls), scattering, texture.
-    pub var diameter: float = 32.0
-    pub var hardness: float = 0.75
-    pub var opacity: float = 1.0
-    pub var flow: float = 1.0
-    pub var spacing: float = 0.25
-    pub var angle: float = 0.0
-    pub var roundness: float = 1.0
-    pub var smoothing: float = 0.0
-    pub var size_jitter: float = 0.0
-    pub var angle_jitter: float = 0.0
-    pub var roundness_jitter: float = 0.0
-    pub var pressure_size: bool = true
-    pub var pressure_flow: bool = false
-    pub var scatter: float = 0.0
-    pub var scatter_count: int = 1
-    pub var flow_jitter: float = 0.0
-    pub var hue_jitter: float = 0.0
-    pub var saturation_jitter: float = 0.0
-    pub var brightness_jitter: float = 0.0
-    pub var texture: int = 0
-    pub var texture_scale: float = 1.0
-    pub var texture_depth: float = 0.5
-    pub var preset: str = "Hard Round"
     ## The foreground and background colors (linear), black over white by
     ## default, as Compositor's palette: the brush, text and fills use the
     ## foreground; gradients run to the background; cmd-Delete fills with it.
@@ -108,12 +64,15 @@ pub class Workspace:
     var next_name: int = 1
 
     pub func init(self, width: int, height: int) -> unit!:
-        self.canvas = Canvas(width, height)
+        self.canvas = blank_canvas(width, height)
         self.look = Look()
+        self.brush = Brush()
         self.recent = []
-        discard(self.canvas.add_layer("Background"))
         self.documents = [Document(self.canvas, "")]
         self.touch()
+
+    pub func touch(self):
+        self.revision += 1
 
     # -- Documents: the live fields are the current document's; switching stashes and restores them.
 
@@ -181,12 +140,10 @@ pub class Workspace:
                 kept.append(document)
             at += 1
         if kept.length == 0:
-            let fresh = Canvas(closing.canvas.width(), closing.canvas.height())
-            discard(fresh.add_layer("Background"))
-            kept.append(Document(fresh, ""))
+            kept.append(Document(blank_canvas(closing.canvas.width(), closing.canvas.height()), ""))
         closing.canvas.close()
         self.documents = kept
-        # The tab that was current stays current, unless it was the one closed: then its neighbour.
+        # The tab that was current stays current, unless it was the one closed: then its neighbor.
         var next = self.current
         if index < self.current:
             next = self.current - 1
@@ -199,19 +156,13 @@ pub class Workspace:
     pub func document_count(self) -> int:
         return self.documents.length
 
-    ## The name and dirtiness of document `index`, the live one read live.
+    ## The tab name of document `index`, the live one read live.
     pub func document_title(self, index: int) -> str:
-        if index == self.current:
-            return paths.base(self.path) if self.path != "" else "Untitled"
-        return self.documents[index].title()
+        return title_of(self.path) if index == self.current else self.documents[index].title()
 
+    ## Whether document `index` has unsaved work, the live one read live.
     pub func document_dirty(self, index: int) -> bool:
-        if index == self.current:
-            return self.canvas.can_undo()
-        return self.documents[index].dirty()
-
-    pub func touch(self):
-        self.revision += 1
+        return self.canvas.can_undo() if index == self.current else self.documents[index].dirty()
 
     pub func width(self) -> int:
         return self.canvas.width()
@@ -221,19 +172,16 @@ pub class Workspace:
 
     ## Open a new empty document in its own tab.
     pub func create(self, width: int, height: int) -> unit!:
-        let canvas = Canvas(width, height)
-        discard(canvas.add_layer("Background"))
-        self.adopt(Document(canvas, ""))
+        self.adopt(Document(blank_canvas(width, height), ""))
 
     ## Open the picture at `path` in its own tab.
     pub func open(self, path: str) -> unit!:
-        let canvas = Canvas.open(path)
-        self.adopt(Document(canvas, path))
+        self.adopt(Document(Canvas.open(path), path))
 
     ## Save to `path`: an `.l2d` package keeps every layer; any other extension
     ## writes the flattened picture in that format.
     pub func save(self, path: str) -> unit!:
-        if path.length > 4 and path[path.length - 4..] == ".l2d":
+        if path.lower().ends_with(".l2d"):
             self.canvas.save_package(path)
         else:
             self.canvas.save(path)
@@ -243,11 +191,7 @@ pub class Workspace:
     ## Whether `path` is a file luced-2d opens: a picture, a Photoshop document or
     ## its own .l2d package.
     pub func can_open(self, path: str) -> bool:
-        let lowered = path.lower()
-        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".psd", ".l2d"]:
-            if lowered.ends_with(suffix):
-                return true
-        return false
+        return self.can_place(path) or path.lower().ends_with(".psd") or path.lower().ends_with(".l2d")
 
     ## Whether `path` is a picture that can become a layer.
     pub func can_place(self, path: str) -> bool:
@@ -265,20 +209,13 @@ pub class Workspace:
         self.selected = self.layer_count() - 1
         self.touch()
 
+    # -- Units and the grid.
+
     ## Document pixels per one of the current unit.
     pub func pixels_per_unit(self) -> float:
-        if self.units == "mm":
-            return self.canvas.resolution() / 25.4
-        if self.units == "in":
-            return self.canvas.resolution()
-        return 1.0
+        return pixels_per(self.units, self.canvas.resolution())
 
-    ## The unit's short name, as rulers and fields show it.
-    pub func unit_suffix(self) -> str:
-        return " mm" if self.units == "mm" else (" in" if self.units == "in" else " px")
-
-    ## The grid in document pixels: a major line every 64 px, 10 mm or 1 inch,
-    ## and how many parts each major is cut into.
+    ## The grid's major spacing in document pixels: every 64 px, 10 mm or 1 inch.
     pub func grid_major(self) -> float:
         if self.units == "mm":
             return 10.0 * self.pixels_per_unit()
@@ -286,14 +223,27 @@ pub class Workspace:
             return self.pixels_per_unit()
         return 64.0
 
+    ## How many parts each major grid square is cut into.
     pub func grid_divisions(self) -> int:
         return 10 if self.units == "mm" else 8
+
+    # -- Layers: each acts on the selected one.
 
     pub func layer_count(self) -> int:
         return self.canvas.layer_count()
 
+    ## The selected layer's id, which the canvas's setters take.
     pub func selected_id(self) -> int!:
         return self.canvas.layer_id(self.selected)
+
+    ## Select the layer at stack index `index`; leaving a layer without a mask
+    ## leaves mask editing too.
+    pub func select(self, index: int) -> unit!:
+        if index >= 0 and index < self.layer_count():
+            self.selected = index
+            if not self.canvas.layer_masked(index):
+                self.canvas.edit_mask(false)
+            self.touch()
 
     pub func add_layer(self) -> unit!:
         self.next_name += 1
@@ -309,6 +259,7 @@ pub class Workspace:
             self.selected = self.layer_count() - 1
         self.touch()
 
+    ## Move the selected layer `step` places up the stack (negative: down).
     pub func reorder(self, step: int) -> unit!:
         let target = self.selected + step
         if target < 0 or target >= self.layer_count():
@@ -330,146 +281,131 @@ pub class Workspace:
         self.selected -= 1
         self.touch()
 
+    ## Rename the selected layer.
+    pub func rename(self, name: str) -> unit!:
+        self.canvas.rename_layer(self.selected_id(), name)
+        self.touch()
+
+    ## The blend mode's name of the layer at stack index `index`.
+    pub func blend_name(self, index: int) -> str!:
+        return Canvas.blend_mode_name(self.canvas.layer_blend(index))
+
+    ## Set the selected layer's visibility, opacity and blend mode together, as
+    ## the canvas takes them.
+    func set_appearance(self, visible: bool, opacity: float, blend: int) -> unit!:
+        self.canvas.set_layer(self.selected_id(), visible, math.max(0.0, math.min(1.0, opacity)), blend)
+        self.touch()
+
+    pub func toggle_visibility(self) -> unit!:
+        let at = self.selected
+        self.set_appearance(not self.canvas.layer_visible(at), self.canvas.layer_opacity(at), self.canvas.layer_blend(at))
+
+    pub func set_opacity(self, opacity: float) -> unit!:
+        let at = self.selected
+        self.set_appearance(self.canvas.layer_visible(at), opacity, self.canvas.layer_blend(at))
+
+    pub func set_blend(self, mode: int) -> unit!:
+        let at = self.selected
+        self.set_appearance(self.canvas.layer_visible(at), self.canvas.layer_opacity(at), mode)
+
+    ## Step the selected layer's blend mode `step` places through Photoshop's list, wrapping.
+    pub func cycle_blend(self, step: int) -> unit!:
+        let count = Canvas.blend_mode_count()
+        self.set_blend((self.canvas.layer_blend(self.selected) + step % count + count) % count)
+
+    pub func toggle_mask(self) -> unit!:
+        self.canvas.set_mask(self.selected_id(), not self.canvas.layer_masked(self.selected))
+        self.touch()
+
+    ## \: paint on the selected layer's mask, or back on its pixels.
+    pub func toggle_mask_editing(self) -> unit!:
+        self.canvas.edit_mask(self.canvas.layer_masked(self.selected) and not self.canvas.editing_mask())
+        self.touch()
+
+    pub func toggle_clipped(self) -> unit!:
+        self.canvas.set_clipped(self.selected_id(), not self.canvas.layer_clipped(self.selected))
+        self.touch()
+
+    pub func move_layer(self, dx: int, dy: int) -> unit!:
+        self.canvas.move_layer(self.selected_id(), dx, dy)
+        self.touch()
+
+    # -- The whole image.
+
     pub func crop(self) -> unit!:
         self.canvas.crop()
         self.fitted = false
         self.touch()
 
+    ## The canvas `width` by `height`, the old one's top-left at (`offset_x`, `offset_y`).
     pub func resize_canvas(self, width: int, height: int, offset_x: int, offset_y: int) -> unit!:
         self.canvas.resize_canvas(width, height, offset_x, offset_y)
         self.fitted = false
         self.touch()
 
+    ## Every layer resampled to `width` by `height`.
     pub func resize_image(self, width: int, height: int) -> unit!:
         self.canvas.resize_image(width, height)
         self.fitted = false
         self.touch()
 
-    pub func toggle_visibility(self) -> unit!:
-        let id = self.selected_id()
-        self.canvas.set_layer(id, not self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), self.canvas.layer_blend(self.selected))
-        self.touch()
+    # -- Painting.
 
-    ## Step the selected layer's blend mode through Photoshop's list.
-    pub func cycle_blend(self, step: int) -> unit!:
-        let id = self.selected_id()
-        let count = Canvas.blend_mode_count()
-        let next = (self.canvas.layer_blend(self.selected) + step + count) % count
-        self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), self.canvas.layer_opacity(self.selected), next)
-        self.touch()
-
-    pub func toggle_mask(self) -> unit!:
-        let id = self.selected_id()
-        self.canvas.set_mask(id, not self.canvas.layer_masked(self.selected))
-        self.touch()
-
-    pub func toggle_mask_editing(self) -> unit!:
-        if self.canvas.layer_masked(self.selected):
-            self.canvas.edit_mask(not self.canvas.editing_mask())
-        else:
-            self.canvas.edit_mask(false)
-        self.touch()
-
-    pub func toggle_clipped(self) -> unit!:
-        let id = self.selected_id()
-        self.canvas.set_clipped(id, not self.canvas.layer_clipped(self.selected))
-        self.touch()
-
-    pub func blend_name(self, index: int) -> str!:
-        return Canvas.blend_mode_name(self.canvas.layer_blend(index))
-
-    pub func set_opacity(self, opacity: float) -> unit!:
-        let id = self.selected_id()
-        self.canvas.set_layer(id, self.canvas.layer_visible(self.selected), math.max(0.0, math.min(1.0, opacity)), self.canvas.layer_blend(self.selected))
-        self.touch()
-
-    ## Push the brush settings to the canvas and start a stroke on the selected layer.
-    ## Start a stroke; `pressure` is the stylus's, 0..1, or zero from a mouse.
-    ## Push every brush setting to the canvas.
-    pub func apply_brush(self) -> unit!:
-        self.canvas.set_brush(self.diameter, self.hardness, self.opacity, self.flow, self.red, self.green, self.blue, self.erasing)
-        self.canvas.set_brush_shape(self.spacing, self.angle, self.roundness, self.smoothing)
-        self.canvas.set_brush_dynamics(self.size_jitter, self.angle_jitter, self.roundness_jitter, self.scatter, self.scatter_count,
-                                       self.flow_jitter, self.hue_jitter, self.saturation_jitter, self.brightness_jitter, self.pressure_size, self.pressure_flow)
-        self.canvas.set_brush_texture(self.texture, self.texture_scale, self.texture_depth)
-
-    ## The built-in presets, Photoshop's usual first few; `name` picks one.
-    pub func preset_names(self) -> list[str]:
-        return ["Hard Round", "Soft Round", "Airbrush", "Chalk", "Spatter", "Ink Pen", "Canvas Wash"]
-
+    ## Start again from brush preset `name`, keeping the size and opacity.
     pub func apply_preset(self, name: str) -> unit!:
-        self.preset = name
-        self.hardness = 1.0
-        self.flow = 1.0
-        self.spacing = 0.25
-        self.angle = 0.0
-        self.roundness = 1.0
-        self.smoothing = 0.0
-        self.size_jitter = 0.0
-        self.angle_jitter = 0.0
-        self.roundness_jitter = 0.0
-        self.pressure_size = true
-        self.pressure_flow = false
-        self.scatter = 0.0
-        self.scatter_count = 1
-        self.flow_jitter = 0.0
-        self.hue_jitter = 0.0
-        self.saturation_jitter = 0.0
-        self.brightness_jitter = 0.0
-        self.texture = 0
-        self.texture_scale = 1.0
-        self.texture_depth = 0.5
-        if name == "Soft Round":
-            self.hardness = 0.2
-        elif name == "Airbrush":
-            self.hardness = 0.0
-            self.flow = 0.1
-            self.spacing = 0.05
-            self.pressure_flow = true
-        elif name == "Chalk":
-            self.hardness = 0.9
-            self.roundness = 0.8
-            self.angle = 35.0
-            self.texture = 1
-            self.texture_depth = 0.9
-            self.spacing = 0.1
-        elif name == "Spatter":
-            self.hardness = 0.6
-            self.spacing = 0.5
-            self.scatter = 1.5
-            self.scatter_count = 4
-            self.size_jitter = 0.6
-            self.flow_jitter = 0.5
-        elif name == "Ink Pen":
-            self.spacing = 0.08
-            self.smoothing = 6.0
-            self.roundness = 0.6
-            self.angle = 45.0
-        elif name == "Canvas Wash":
-            self.hardness = 0.3
-            self.flow = 0.3
-            self.spacing = 0.15
-            self.texture = 2
-            self.texture_scale = 1.5
-            self.texture_depth = 0.7
+        self.brush = preset(name, self.brush.diameter, self.brush.opacity)
         self.touch()
 
+    ## [ and ]: the brush size by `factor`.
+    pub func scale_brush(self, factor: float):
+        self.brush.scale(factor)
+        self.touch()
+
+    ## Start a stroke on the selected layer at a document point; `pressure` is
+    ## the stylus's, 0..1, or zero from a mouse. A hidden layer takes no paint.
     pub func begin_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
         if not self.canvas.layer_visible(self.selected):
             return
-        self.apply_brush()
+        self.brush.apply(self.canvas, self.red, self.green, self.blue, self.erasing)
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
 
+    ## Continue the stroke in progress, if any, to a document point.
     pub func extend_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
         if self.canvas.painting():
             self.canvas.extend_stroke(x, y, pressure if pressure > 0.0 else 1.0)
             self.touch()
 
+    ## End the stroke in progress, keeping what it painted.
     pub func end_stroke(self) -> unit!:
         if self.canvas.painting():
             self.canvas.end_stroke()
             self.touch()
+
+    ## Fill the selection on the selected layer with the foreground (or
+    ## background) color at the brush's opacity, or `erase` it.
+    pub func fill_selection(self, erase: bool, background: bool = false) -> unit!:
+        let b = self.brush
+        if background:
+            self.canvas.set_brush(b.diameter, b.hardness, b.opacity, 1.0, self.back_red, self.back_green, self.back_blue, false)
+        else:
+            self.canvas.set_brush(b.diameter, b.hardness, b.opacity, 1.0, self.red, self.green, self.blue, false)
+        self.canvas.fill(self.selected_id(), erase)
+        self.touch()
+
+    ## A linear gradient on the selected layer from the foreground color at one
+    ## document point to the background color at another, within the selection.
+    pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let opacity = self.brush.opacity
+        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, opacity, self.back_red, self.back_green, self.back_blue, opacity)
+        self.touch()
+
+    ## Set `text` on the selected layer at the remembered text position, in the foreground color.
+    pub func draw_text(self, text: str) -> unit!:
+        self.canvas.draw_text(self.selected_id(), self.text_x, self.text_y, text, self.text_size, self.red, self.green, self.blue)
+        self.touch()
+
+    # -- History and previews.
 
     pub func undo(self) -> unit!:
         if self.canvas.can_undo() and not self.canvas.previewing():
@@ -488,14 +424,42 @@ pub class Workspace:
     pub func previewing(self) -> bool:
         return self.canvas.previewing()
 
+    ## Preview adjustment `kind` (as `adjust`) with `values`, zeros for the rest.
     pub func preview_adjust(self, kind: int, values: list[float]) -> unit!:
         let params = pad(values)
         self.canvas.preview_adjust(kind, params[0], params[1], params[2], params[3], params[4])
         self.touch()
 
+    ## Preview a Gaussian blur of `radius` pixels.
     pub func preview_blur(self, radius: float) -> unit!:
         self.canvas.preview_blur(radius)
         self.touch()
+
+    ## Preview the free transform: scales as fractions (1 = 100%), the turn in
+    ## degrees, the move in document pixels.
+    pub func preview_transform(self, scale_x: float, scale_y: float, angle: float, dx: float, dy: float) -> unit!:
+        self.canvas.preview_transform(scale_x, scale_y, angle, dx, dy)
+        self.touch()
+
+    pub func end_preview(self, keep: bool) -> unit!:
+        self.canvas.end_preview(keep)
+        self.touch()
+
+    ## Apply adjustment `kind` to the selected layer at once, with `values`
+    ## (zeros for the rest). Kinds are luce-image's: 0 brightness/contrast,
+    ## 1 hue/saturation/lightness, 2 invert, 3 levels, 4 desaturate,
+    ## 5 threshold, 6 posterize, 7 curves.
+    pub func adjust(self, kind: int, values: list[float]) -> unit!:
+        let params = pad(values)
+        self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
+        self.touch()
+
+    ## A Gaussian blur of `radius` pixels on the selected layer at once.
+    pub func blur(self, radius: float) -> unit!:
+        self.canvas.blur_layer(self.selected_id(), radius)
+        self.touch()
+
+    # -- Layer styles.
 
     ## Layer styles on the selected layer; colors: shadow black, stroke the foreground color, glow white.
     pub func set_styles(self, shadow: bool, shadow_x: float, shadow_y: float, shadow_blur: float, shadow_opacity: float,
@@ -510,35 +474,25 @@ pub class Workspace:
     pub func style_value(self, field: int) -> float!:
         return self.canvas.style_value(self.selected, field)
 
-    pub func preview_transform(self, scale_x: float, scale_y: float, angle: float, dx: float, dy: float) -> unit!:
-        self.canvas.preview_transform(scale_x, scale_y, angle, dx, dy)
-        self.touch()
-
-    pub func end_preview(self, keep: bool) -> unit!:
-        self.canvas.end_preview(keep)
-        self.touch()
-
-    ## Apply a destructive adjustment to the selected layer.
-    pub func adjust(self, kind: int, values: list[float]) -> unit!:
-        let params = pad(values)
-        self.canvas.adjust_layer(self.selected_id(), kind, params[0], params[1], params[2], params[3], params[4])
-        self.touch()
+    # -- Colors.
 
     ## The foreground (or background) color as sRGB hex, for the picker.
     pub func color_hex(self, background: bool = false) -> str:
         if background:
-            return hex_of(self.back_red, self.back_green, self.back_blue)
-        return hex_of(self.red, self.green, self.blue)
+            return hex_of_linear(self.back_red, self.back_green, self.back_blue)
+        return hex_of_linear(self.red, self.green, self.blue)
 
     ## Set the foreground (or background) color from sRGB hex like "#e7a03f"; anything else is ignored.
     pub func set_color_hex(self, text: str, background: bool = false):
-        let values = parse_hex(text) else return
+        let values = linear_of_hex(text) else return
         self.set_palette(values[0], values[1], values[2], background)
 
+    ## Set the foreground color, linear components.
     pub func set_color(self, red: float, green: float, blue: float):
         self.set_palette(red, green, blue, false)
 
-    ## Set one color of the palette, linear components.
+    ## Set one color of the palette, linear components. Picking a foreground
+    ## color while erasing goes back to the brush, as Photoshop does.
     pub func set_palette(self, red: float, green: float, blue: float, background: bool):
         if background:
             self.back_red = red
@@ -564,8 +518,21 @@ pub class Workspace:
     pub func reset_colors(self):
         self.set_palette(0.0, 0.0, 0.0, false)
         self.set_palette(1.0, 1.0, 1.0, true)
-        self.touch()
 
+    ## The eyedropper: the flattened color under a document point becomes the
+    ## foreground color (the background one while the picker samples for it).
+    pub func pick(self, x: float, y: float) -> unit!:
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
+            return
+        self.canvas.pick(px, py)
+        if self.canvas.picked_alpha() > 0.0:
+            self.set_palette(self.canvas.picked_red(), self.canvas.picked_green(), self.canvas.picked_blue(), self.sampling and self.sampling_background)
+
+    # -- Tools and selections.
+
+    ## Make `tool` (a `tools()` id) active.
     pub func choose_tool(self, tool: str):
         if tool != self.tool:
             self.tool_before = self.tool
@@ -586,47 +553,13 @@ pub class Workspace:
         self.canvas.invert_selection()
         self.touch()
 
+    ## Grow the selection by `pixels` (negative: shrink) and soften its edge by `feather`.
     pub func adjust_selection(self, pixels: int, feather: int) -> unit!:
         self.canvas.adjust_selection(pixels, feather)
         self.touch()
 
-    ## A rectangle or ellipse between two corners, combined by `mode`
-    ## (0 replace, 1 add, 2 subtract, 3 intersect).
-    ## A linear gradient on the selected layer from the foreground color at one
-    ## document point to the background color at another, within the selection.
-    pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
-        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, self.opacity, self.back_red, self.back_green, self.back_blue, self.opacity)
-        self.touch()
-
-    ## Rename the selected layer.
-    pub func rename(self, name: str) -> unit!:
-        self.canvas.rename_layer(self.selected_id(), name)
-        self.touch()
-
-    ## The eyedropper: the flattened color under a document point becomes the foreground color.
-    pub func pick(self, x: float, y: float) -> unit!:
-        let px = int(math.floor(x))
-        let py = int(math.floor(y))
-        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
-            return
-        self.canvas.pick(px, py)
-        if self.canvas.picked_alpha() > 0.0:
-            self.set_palette(self.canvas.picked_red(), self.canvas.picked_green(), self.canvas.picked_blue(), self.sampling and self.sampling_background)
-
-    ## Set `text` on the selected layer at the remembered text position, in the foreground color.
-    pub func draw_text(self, text: str) -> unit!:
-        self.canvas.draw_text(self.selected_id(), self.text_x, self.text_y, text, self.text_size, self.red, self.green, self.blue)
-        self.touch()
-
-    ## The magic wand at a document pixel on the selected layer, combined by `mode`.
-    pub func select_wand(self, x: float, y: float, mode: int) -> unit!:
-        let px = int(math.floor(x))
-        let py = int(math.floor(y))
-        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
-            return
-        self.canvas.select_wand(self.selected_id(), px, py, self.tolerance, self.contiguous, mode)
-        self.touch()
-
+    ## A rectangle or ellipse between two document corners, combined with the
+    ## selection by `mode` (0 replace, 1 add, 2 subtract, 3 intersect).
     pub func select_shape(self, x0: float, y0: float, x1: float, y1: float, ellipse: bool, mode: int) -> unit!:
         let left = int(math.floor(math.min(x0, x1)))
         let top = int(math.floor(math.min(y0, y1)))
@@ -640,57 +573,16 @@ pub class Workspace:
             self.canvas.select_rectangle(left, top, right - left, bottom - top, mode)
         self.touch()
 
-    pub func fill_selection(self, erase: bool, background: bool = false) -> unit!:
-        if background:
-            self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.back_red, self.back_green, self.back_blue, false)
-        else:
-            self.canvas.set_brush(self.diameter, self.hardness, self.opacity, 1.0, self.red, self.green, self.blue, false)
-        self.canvas.fill(self.selected_id(), erase)
+    ## The magic wand at a document pixel on the selected layer, combined by `mode` (as `select_shape`).
+    pub func select_wand(self, x: float, y: float, mode: int) -> unit!:
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
+            return
+        self.canvas.select_wand(self.selected_id(), px, py, self.tolerance, self.contiguous, mode)
         self.touch()
 
-    pub func move_layer(self, dx: int, dy: int) -> unit!:
-        self.canvas.move_layer(self.selected_id(), dx, dy)
-        self.touch()
-
-    pub func blur(self, radius: float) -> unit!:
-        self.canvas.blur_layer(self.selected_id(), radius)
-        self.touch()
-
-    pub func tool_name(self) -> str:
-        if self.tool == "move":
-            return "Move"
-        if self.tool == "marquee":
-            return "Marquee"
-        if self.tool == "ellipse":
-            return "Ellipse"
-        if self.tool == "lasso":
-            return "Lasso"
-        if self.tool == "wand":
-            return "Magic Wand"
-        if self.tool == "text":
-            return "Text"
-        if self.tool == "eyedropper":
-            return "Eyedropper"
-        if self.tool == "gradient":
-            return "Gradient"
-        if self.tool == "eraser":
-            return "Eraser"
-        if self.tool == "hand":
-            return "Hand"
-        if self.tool == "zoom":
-            return "Zoom"
-        return "Brush"
-
-    pub func scale_brush(self, factor: float):
-        self.diameter = math.max(1.0, math.min(4096.0, math.floor(self.diameter * factor + 0.5)))
-        self.touch()
-
-    pub func select(self, index: int) -> unit!:
-        if index >= 0 and index < self.layer_count():
-            self.selected = index
-            if not self.canvas.layer_masked(index):
-                self.canvas.edit_mask(false)
-            self.touch()
+    # -- The view.
 
     ## Zoom about a point of the view, keeping the document pixel under it still.
     pub func zoom_about(self, factor: float, x: float, y: float):
@@ -712,16 +604,17 @@ pub class Workspace:
         let available_x = math.max(1.0, width - margin * 2.0)
         let available_y = math.max(1.0, height - margin * 2.0)
         self.zoom = math.max(1.0 / 64.0, math.min(64.0, math.min(available_x / float(self.width()), available_y / float(self.height()))))
-        self.center(width, height)
+        self.center_in(width, height)
         self.fitted = true
         self.touch()
 
+    ## 100%, centred in a `width` by `height` view.
     pub func actual_size(self, width: float, height: float):
         self.zoom = 1.0
-        self.center(width, height)
+        self.center_in(width, height)
         self.touch()
 
-    func center(self, width: float, height: float):
+    func center_in(self, width: float, height: float):
         self.offset_x = math.floor((width - float(self.width()) * self.zoom) * 0.5)
         self.offset_y = math.floor((height - float(self.height()) * self.zoom) * 0.5)
 
@@ -733,35 +626,3 @@ func pad(values: list[float]) -> list[float]:
     while params.length < 5:
         params.append(0.0)
     return params
-
-## sRGB transfer, both ways, for the color editor's hex.
-func decode_srgb(encoded: float) -> float:
-    return encoded / 12.92 if encoded <= 0.04045 else math.pow((encoded + 0.055) / 1.055, 2.4)
-
-func encode_srgb(linear: float) -> int:
-    let clamped = math.max(0.0, math.min(1.0, linear))
-    let encoded = clamped * 12.92 if clamped <= 0.0031308 else 1.055 * math.pow(clamped, 1.0 / 2.4) - 0.055
-    return int(math.floor(encoded * 255.0 + 0.5))
-
-## sRGB hex like "#e7a03f" of linear components.
-func hex_of(red: float, green: float, blue: float) -> str:
-    return "#" + hex_byte(encode_srgb(red)) + hex_byte(encode_srgb(green)) + hex_byte(encode_srgb(blue))
-
-## The linear components of sRGB hex like "#e7a03f", or none for anything else.
-func parse_hex(text: str) -> list[float]?:
-    let digits = "0123456789abcdef"
-    let lowered = text.trim().lower()
-    if lowered.length != 7 or lowered[..<1] != "#":
-        return none
-    var values: list[float] = []
-    var index = 1
-    while index < 7:
-        let high = digits.index_of(lowered[index..<index + 1]) else return none
-        let low = digits.index_of(lowered[index + 1..<index + 2]) else return none
-        values.append(decode_srgb(float(high * 16 + low) / 255.0))
-        index += 2
-    return values
-
-func hex_byte(value: int) -> str:
-    let digits = "0123456789abcdef"
-    return digits[value // 16..<value // 16 + 1] + digits[value % 16..<value % 16 + 1]

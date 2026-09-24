@@ -1,0 +1,40 @@
+## One open document: its canvas, where it lives, and the view state that
+## belongs to it. The workspace holds one of these per tab and keeps the
+## current one's fields live on itself, so the tools never look past it.
+from canvas import Canvas
+import paths
+
+pub class Document:
+    pub var canvas: Canvas
+    pub var path: str = ""
+    pub var zoom: float = 1.0
+    pub var offset_x: float = 0.0
+    pub var offset_y: float = 0.0
+    ## The selected layer's stack index.
+    pub var selected: int = 0
+    ## Whether the view has had its first fit; the view fits a document that has not.
+    pub var fitted: bool = false
+    ## The number the next new layer's name takes ("Layer 2").
+    pub var next_name: int = 1
+
+    pub func init(self, canvas: Canvas, path: str) -> unit!:
+        self.canvas = canvas
+        self.path = path
+
+    ## The tab's name: the file's, or Untitled.
+    pub func title(self) -> str:
+        return title_of(self.path)
+
+    ## Whether it has work its file does not.
+    pub func dirty(self) -> bool:
+        return self.canvas.can_undo()
+
+## A tab's name for a document saved at `path`, or Untitled for none.
+pub func title_of(path: str) -> str:
+    return paths.base(path) if path != "" else "Untitled"
+
+## A new untitled canvas of `width` by `height` with one empty Background layer.
+pub func blank_canvas(width: int, height: int) -> Canvas!:
+    let canvas = Canvas(width, height)
+    discard(canvas.add_layer("Background"))
+    return canvas

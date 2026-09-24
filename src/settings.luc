@@ -1,17 +1,17 @@
+## What a machine keeps for luced-2d, in `~/.luced-2d/settings.toml`: the size a
+## new canvas takes, the theme's accent and control radius, the view aids, the
+## picker's recent colors, and the shortcuts that differ from the defaults, by
+## command id (a chord like "cmd+shift+s", "f5" or "none"). Missing keys keep
+## their defaults; an unreadable file is reported and ignored, never rewritten.
 from toml import Table
 import files
 import paths
 import ui
+from units import is_unit
 
-## What a machine keeps for luced-2d, in `~/.luced-2d/settings.toml`: the size a
-## new canvas takes, the display the viewport targets, the theme's accent and
-## control radius, and the shortcuts that differ from the defaults, by command
-## id (a chord like "cmd+shift+s", "f5" or "none"). Missing keys keep their
-## defaults; an unreadable file is reported and ignored, never rewritten.
 pub class Settings:
     pub var canvas_width: int = 1280
     pub var canvas_height: int = 800
-    pub var display: str = "srgb"
     pub var accent: str = "#e7a03f"
     pub var control_radius: float = 5.0
     ## The view aids: rulers shown, grid shown, and the unit (px, mm or in).
@@ -24,19 +24,16 @@ pub class Settings:
 
     pub func init(self, source: str = "") -> unit!:
         let table = Table(source)
-        table.check_within(["canvas.width", "canvas.height", "color.display", "theme.accent", "theme.control_radius", "colors.recent", "view.rulers", "view.grid", "view.units"], ["shortcuts"])
+        table.check_within(["canvas.width", "canvas.height", "theme.accent", "theme.control_radius", "colors.recent", "view.rulers", "view.grid", "view.units"], ["shortcuts"])
         self.canvas_width = int(table.number("canvas.width", 1280.0, 1.0, 30000.0))
         self.canvas_height = int(table.number("canvas.height", 800.0, 1.0, 30000.0))
-        self.display = table.string("color.display", "srgb")
-        if self.display != "srgb" and self.display != "display-p3":
-            error(ui.invalid, "color.display must be \"srgb\" or \"display-p3\"")
         self.accent = table.string("theme.accent", "#e7a03f")
         self.control_radius = table.number("theme.control_radius", 5.0, 0.0, 16.0)
         self.recent = table.string("colors.recent", "")
         self.rulers = table.boolean("view.rulers", true)
         self.grid = table.boolean("view.grid", false)
         self.units = table.string("view.units", "px")
-        if self.units != "px" and self.units != "mm" and self.units != "in":
+        if not is_unit(self.units):
             error(ui.invalid, "view.units must be \"px\", \"mm\" or \"in\"")
         var shortcuts: map[str, str] = {}
         for id in table.keys("shortcuts"):
@@ -48,7 +45,6 @@ pub class Settings:
         let other = Settings()
         other.canvas_width = self.canvas_width
         other.canvas_height = self.canvas_height
-        other.display = self.display
         other.accent = self.accent
         other.control_radius = self.control_radius
         other.recent = self.recent
@@ -65,7 +61,6 @@ pub class Settings:
     pub func serialize(self) -> str:
         var text = "# luced-2d settings. Edit here or in Settings… (cmd-,); saved values apply at once.\n\n"
         text = text + f"[canvas]\nwidth = {self.canvas_width}\nheight = {self.canvas_height}\n\n"
-        text = text + f"[color]\n# The display the viewport targets: \"srgb\" or \"display-p3\".\ndisplay = \"{self.display}\"\n\n"
         text = text + f"[theme]\naccent = \"{self.accent}\"\ncontrol_radius = {self.control_radius}\n\n"
         let rulers = "true" if self.rulers else "false"
         let grid = "true" if self.grid else "false"

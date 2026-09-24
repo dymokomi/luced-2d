@@ -1,14 +1,17 @@
-from ui import Widget, Font, Text, Button, VStack, HStack, Spacer, Size, Dialog, ListView, ListItem, TableView, TableColumn, TableCell, NumberField, TextField, Menu, Command, Shortcut, ShortcutField, Application, Rule
+## Edit › Settings…: the dialog for what a machine keeps for luced-2d — the new
+## canvas size, the shortcuts, the theme — edited as a draft and saved together.
+from ui import Widget, Font, Text, Button, VStack, HStack, Spacer, Size, Dialog, ListView, ListItem, TableView, TableColumn, TableCell, NumberField, TextField, Command, Shortcut, ShortcutField, Application, Rule
 from interop import Connection
 from workspace import Workspace
 from actions import Actions
 from settings import Settings, Store
-from colors import Swatch
+from color_picker import Swatch
 from theme import Look
 import theme
+from hex_color import parse_hex
 
 ## The Settings dialog after eleusis-layout's: a section list at the left
-## (General, Color Management, Shortcuts, Theme), the section's rows at the
+## (General, Shortcuts, Theme), the section's rows at the
 ## right, and Save/Cancel below. Edits go into a draft, not the live settings:
 ## Cancel forgets them all, Save writes the file and applies everything at once.
 ## Shortcuts are the application's commands themselves: pick a row, then record
@@ -27,7 +30,6 @@ pub class SettingsDialog:
     let pages: list[VStack]
     let width_field: NumberField
     let height_field: NumberField
-    let display_menu: Menu
     let accent_field: TextField
     let accent_swatch: Swatch
     let radius_field: NumberField
@@ -65,16 +67,6 @@ pub class SettingsDialog:
         self.connections.append(self.height_field.on_change(func (value: float) -> unit!:
             self.draft.canvas_height = int(value)))
         let general = VStack([self.row("New canvas", HStack([self.width_field, Text("×", font = font, muted = true), self.height_field], spacing = 6.0)), Spacer()], spacing = 8.0)
-        # Color management: which display the viewport targets.
-        let srgb = Command("sRGB", id = "display_srgb")
-        let p3 = Command("Display P3", id = "display_p3")
-        self.display_menu = Menu("sRGB ▾", [srgb, p3], font = font)
-        self.connections.append(srgb.on_trigger(func () -> unit!:
-            self.choose_display("srgb")))
-        self.connections.append(p3.on_trigger(func () -> unit!:
-            self.choose_display("display-p3")))
-        let color = VStack([self.row("Display", self.display_menu),
-                            Text("Documents are sRGB and blend in linear light; the display setting picks the output transform.", font = font, muted = true), Spacer()], spacing = 8.0)
         # Shortcuts: every command in a table; the field beneath records for the picked row.
         self.table = TableView([TableColumn(title = "Action", weight = 1.0), TableColumn(title = "Shortcut", width = 150.0)], self.cells(), font = font)
         self.table.layout().set_limits(Size(200.0, 190.0), Size(16384.0, 190.0))
@@ -96,12 +88,12 @@ pub class SettingsDialog:
         self.connections.append(self.radius_field.on_change(func (value: float) -> unit!:
             self.draft.control_radius = value))
         let look = VStack([self.row("Accent", HStack([self.accent_swatch, self.accent_field], spacing = 8.0)), self.row("Control radius", self.radius_field), Spacer()], spacing = 8.0)
-        self.pages = [general, color, shortcuts, look]
+        self.pages = [general, shortcuts, look]
         for page in self.pages:
             page.layout().set_limits(Size(400.0, 300.0), Size(16384.0, 300.0))
             page.layout().set_visible(false)
         self.pages[0].layout().set_visible(true)
-        self.sections = ListView([ListItem(text = "General"), ListItem(text = "Color Management"), ListItem(text = "Shortcuts"), ListItem(text = "Theme")], font = font)
+        self.sections = ListView([ListItem(text = "General"), ListItem(text = "Shortcuts"), ListItem(text = "Theme")], font = font)
         self.sections.layout().set_limits(Size(170.0, 300.0), Size(170.0, 300.0))
         self.connections.append(self.sections.on_activate(func (index: int) -> unit!:
             self.show_page(index)))
@@ -140,7 +132,6 @@ pub class SettingsDialog:
     func show_draft(self) -> unit!:
         self.width_field.set_value(float(self.draft.canvas_width))
         self.height_field.set_value(float(self.draft.canvas_height))
-        self.display_menu.set_text(("Display P3" if self.draft.display == "display-p3" else "sRGB") + " ▾")
         self.accent_field.set_text(self.draft.accent)
         self.show_accent()
         self.radius_field.set_value(self.draft.control_radius)
@@ -148,15 +139,10 @@ pub class SettingsDialog:
         self.conflict.set_text("")
         self.show_selected()
 
-    func choose_display(self, display: str) -> unit!:
-        self.draft.display = display
-        self.display_menu.set_text(("Display P3" if display == "display-p3" else "sRGB") + " ▾")
-
     func set_accent(self, value: str) -> unit!:
         let text = value.trim()
         let hex = text if text[..<1] == "#" else "#" + text
-        if let components = theme.hex_bytes(hex):
-            discard(components)
+        if parse_hex(hex) != none:
             self.draft.accent = hex.lower()
         self.accent_field.set_text(self.draft.accent)
         self.show_accent()

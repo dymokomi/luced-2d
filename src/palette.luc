@@ -1,0 +1,75 @@
+## The palette below the tool rail, after Compositor's: the foreground and
+## background colors as two overlapping swatches, with swap (X) and reset (D)
+## glyphs. Clicking a swatch asks the window to open the picker for it.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Point
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+from workspace import Workspace
+import theme
+
+## The palette below the tool rail, after Compositor's: the foreground swatch
+## over the background swatch offset half a swatch, a swap arrow (X) at the top
+## right and a reset glyph (D) at the bottom left; 32 points square, the rail's
+## content width.
+pub class Palette: Widget:
+    let box: Layout
+    let workspace: Workspace
+    pub var on_pick: func(bool) -> unit!? = none
+    let swatch: float = 20.0
+    let offset: float = 10.0
+
+    pub func init(self, workspace: Workspace) -> unit!:
+        self.workspace = workspace
+        self.box = Layout()
+        self.box.set_cursor(Cursor.pointer)
+        # Clickable: a box only gets pointer events once it says so.
+        self.box.set_interactive(true)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(self.swatch + self.offset + 2.0, self.swatch + self.offset + 2.0)
+
+    ## A swatch: the color inside a black line inside a white line, corners rounded.
+    func draw_swatch(self, painter: Painter, rect: Rect, color: Color) -> unit!:
+        painter.rounded_rectangle(rect, Color(0.0, 0.0, 0.0), 6.0)
+        painter.rounded_rectangle(Rect(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, rect.height - 2.0), Color(1.0, 1.0, 1.0), 5.0)
+        painter.rounded_rectangle(Rect(rect.x + 2.5, rect.y + 2.5, rect.width - 5.0, rect.height - 5.0), color, 4.0)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let workspace = self.workspace
+        let ink = theme.text_muted()
+        self.draw_swatch(painter, Rect(self.offset, self.offset, self.swatch, self.swatch), Color(workspace.back_red, workspace.back_green, workspace.back_blue))
+        self.draw_swatch(painter, Rect(0.0, 0.0, self.swatch, self.swatch), Color(workspace.red, workspace.green, workspace.blue))
+        # The swap arrow, top right: a diagonal with a head at each end.
+        let ax = self.swatch + 2.0
+        let ay = 0.0
+        painter.line(Point(ax + 1.5, ay + 8.5), Point(ax + 8.5, ay + 1.5), 1.2, ink)
+        painter.line(Point(ax + 8.5, ay + 1.5), Point(ax + 5.0, ay + 1.5), 1.2, ink)
+        painter.line(Point(ax + 8.5, ay + 1.5), Point(ax + 8.5, ay + 5.0), 1.2, ink)
+        painter.line(Point(ax + 1.5, ay + 8.5), Point(ax + 5.0, ay + 8.5), 1.2, ink)
+        painter.line(Point(ax + 1.5, ay + 8.5), Point(ax + 1.5, ay + 5.0), 1.2, ink)
+        # The reset glyph, bottom left: a small pair of squares, black over white.
+        let ry = self.swatch + 2.0
+        painter.rectangle(Rect(3.0, ry + 3.0, 5.0, 5.0), Color(1.0, 1.0, 1.0))
+        painter.rectangle(Rect(0.0, ry, 5.0, 5.0), Color(0.0, 0.0, 0.0))
+        painter.rectangle(Rect(0.5, ry + 0.5, 4.0, 4.0), ink)
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
+            return
+        let workspace = self.workspace
+        if event.x >= self.swatch + 1.0 and event.y < self.offset:
+            workspace.swap_colors()
+        elif event.x < self.offset and event.y >= self.swatch + 1.0:
+            workspace.reset_colors()
+        elif event.x < self.swatch and event.y < self.swatch:
+            if let pick = self.on_pick:
+                pick(false)
+        elif event.x >= self.offset and event.y >= self.offset:
+            if let pick = self.on_pick:
+                pick(true)
+        self.box.invalidate()

@@ -1,3 +1,6 @@
+## luced-2d's application: it loads the settings, builds the workspace and the
+## window's panels, opens any files named on the command line, and runs the
+## window until it closes.
 from ui import Application, Font
 from interop import Connection
 from workspace import Workspace
@@ -8,7 +11,7 @@ import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.18"
+pub let version: str = "0.1.21"
 
 pub class Luce2D:
     pub let app: Application

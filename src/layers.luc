@@ -1,9 +1,13 @@
+## The Layers panel's list: a row per layer with its eye, thumbnails, name and
+## blend, selection and visibility by click, and pictures dropped on it placed
+## as new layers.
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, draw_icon
 from gpu import RenderTarget, Rect, Color
 from input import EventKind, Cursor
 from workspace import Workspace
 import theme
 import math
+from kit import dropped_paths
 
 ## The layer list: one 52-point row per layer, top layer first, each with an
 ## eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it has
@@ -135,22 +139,12 @@ pub class LayerList: Widget:
         return count - 1 - clamp_int(to_row, 0, count - 1)
 
     ## The dragged files that can become layers.
-    func placeable(self) -> list[str]!:
-        var found: list[str] = []
-        var index = 0
-        while index < self.box.drop_count():
-            let path = self.box.drop_path(index)
-            if self.workspace.can_place(path):
-                found.append(path)
-            index += 1
-        return found
-
     pub func event(self, event: Event) -> unit!:
         if event.kind == EventKind.drag_entered:
-            self.box.set_drop_accepted(self.placeable().length > 0)
+            self.box.set_drop_accepted(dropped_paths(self.box, self.workspace.can_place).length > 0)
             return
         if event.kind == EventKind.drop:
-            let files = self.placeable()
+            let files = dropped_paths(self.box, self.workspace.can_place)
             if let place = self.on_place_files:
                 place(files)
             return

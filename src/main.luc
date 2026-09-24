@@ -1,3 +1,4 @@
+## luced-2d's entry point: run the application with the command line.
 from app import Luce2D
 
 pub func main(arguments: list[str]) -> int!:

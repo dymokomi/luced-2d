@@ -5,6 +5,8 @@ from ui import Command, Shortcut
 from input import Key
 from workspace import Workspace
 from canvas import Canvas
+from tools import tools
+from units import unit_ids, unit_label
 
 pub class Actions:
     # File
@@ -63,10 +65,8 @@ pub class Actions:
     pub let actual_size: Command
     pub let zoom_in: Command
     pub let zoom_out: Command
-    # Tools: the command id is the workspace's tool name; `tool_icons` pairs
-    # each with its luciaos-assets icon in rail order.
+    ## One command per tool, in `tools()` order; the command id is the tool's id.
     pub let tools: list[Command]
-    pub let tool_icons: list[str]
     pub let bigger: Command
     pub let smaller: Command
     pub let all: list[Command]
@@ -123,19 +123,16 @@ pub class Actions:
         self.fit = Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit")
         self.show_rulers = Command("Show Rulers", Shortcut(Key.r, primary = true), id = "show_rulers")
         self.show_grid = Command("Show Grid", Shortcut(Key.apostrophe, primary = true), id = "show_grid")
-        self.units = [Command("Pixels", id = "units_px"), Command("Millimeters", id = "units_mm"), Command("Inches", id = "units_in")]
+        self.units = []
+        for unit_id in unit_ids():
+            self.units.append(Command(unit_label(unit_id), id = f"units_{unit_id}"))
         self.document_settings = Command("Document Settings…", Shortcut(Key.i, primary = true, alt = true), id = "document_settings")
         self.actual_size = Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size")
         self.zoom_in = Command("Zoom In", Shortcut(Key.equal, primary = true), id = "zoom_in")
         self.zoom_out = Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out")
-        self.tools = [Command("Move", Shortcut(Key.v), id = "move"), Command("Rectangular Marquee", Shortcut(Key.m), id = "marquee"),
-                      Command("Elliptical Marquee", Shortcut(Key.m, shift = true), id = "ellipse"), Command("Lasso", Shortcut(Key.l), id = "lasso"),
-                      Command("Magic Wand", Shortcut(Key.w), id = "wand"),
-                      Command("Text", Shortcut(Key.t), id = "text"), Command("Eyedropper", Shortcut(Key.i), id = "eyedropper"),
-                      Command("Gradient", Shortcut(Key.g), id = "gradient"),
-                      Command("Brush", Shortcut(Key.b), id = "brush"), Command("Eraser", Shortcut(Key.e), id = "eraser"),
-                      Command("Hand", Shortcut(Key.h), id = "hand"), Command("Zoom", Shortcut(Key.z), id = "zoom")]
-        self.tool_icons = ["move-tool", "selection-tool", "ellipse-select-tool", "lasso-tool", "magic-wand-tool", "text-tool", "eyedropper-tool", "gradient-tool", "brush-tool", "eraser-tool", "pan-tool", "zoom-in"]
+        self.tools = []
+        for tool in tools():
+            self.tools.append(Command(tool.name, Shortcut(tool.key, shift = tool.shift), id = tool.id))
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.all = [self.new_document, self.open_document, self.save, self.save_as, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.settings,

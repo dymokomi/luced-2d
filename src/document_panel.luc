@@ -1,7 +1,10 @@
+## Image › Document Settings…: the dialog for the document's size, resolution,
+## display unit and color profile.
 from ui import Widget, Font, Text, Button, HStack, Spacer, Size, Dialog, NumberField, Checkbox, Menu, Command
 from interop import Connection
 from workspace import Workspace
 import math
+from units import unit_ids, unit_label, unit_suffix, pixels_per
 
 ## Image › Document Settings…: the document's size in the chosen unit, its
 ## resolution, the unit itself and its color profile, after Photoshop's Image
@@ -33,9 +36,9 @@ pub class DocumentSettings:
         self.resolution_field = NumberField(72.0, 1.0, 9600.0, 1.0, suffix = " px/in", font = font, cells = 11.0)
         var unit_commands: list[Command] = []
         var index = 0
-        for unit_name in ["px", "mm", "in"]:
+        for unit_name in unit_ids():
             let chosen = unit_name
-            let command = Command(["Pixels", "Millimeters", "Inches"][index], id = f"document_units_{unit_name}")
+            let command = Command(unit_label(unit_name), id = f"document_units_{unit_name}")
             self.connections.append(command.on_trigger(func () -> unit!:
                 self.choose_units(chosen)))
             unit_commands.append(command)
@@ -94,17 +97,12 @@ pub class DocumentSettings:
         self.height_field.set_range(1.0 / per_unit, 65536.0 / per_unit)
         self.width_field.set_value(float(self.workspace.width()) / per_unit)
         self.height_field.set_value(float(self.workspace.height()) / per_unit)
-        let suffix = " px" if units == "px" else (" mm" if units == "mm" else " in")
+        let suffix = unit_suffix(units)
         self.width_field.set_suffix(suffix)
         self.height_field.set_suffix(suffix)
 
     func pixels_per_unit(self) -> float:
-        let dpi = self.resolution_field.value()
-        if self.units == "mm":
-            return dpi / 25.4
-        if self.units == "in":
-            return dpi
-        return 1.0
+        return pixels_per(self.units, self.resolution_field.value())
 
     ## Apply: the resolution and profile, then the size, resampled or not.
     func apply(self) -> unit!:
@@ -136,5 +134,3 @@ pub class DocumentSettings:
 pub func profile_names() -> list[str]:
     return ["sRGB", "Display P3", "Adobe RGB (1998)", "Rec. 2020", "ProPhoto RGB", "ACEScg", "Linear sRGB"]
 
-func unit_label(units: str) -> str:
-    return "Millimeters" if units == "mm" else ("Inches" if units == "in" else "Pixels")

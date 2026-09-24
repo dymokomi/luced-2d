@@ -1,0 +1,141 @@
+## The control builders every panel of the window uses, in eleusis's look:
+## captioned rows, square icon buttons, flag checkboxes, and a slider paired
+## with a number field. A Kit keeps each signal connection it makes; `close`
+## drops them all. Also two helpers widgets share: a one-point outline, and
+## the dragged files a drop area takes.
+from ui import Font, Text, Button, HStack, VStack, Size, Checkbox, ButtonStyle, Rule, Widget, Command, Slider, NumberField, Layout, Painter
+from gpu import Rect, Color
+from interop import Connection
+
+## A slider and a number field showing one value: changing either moves the
+## other and reports the value.
+pub class SliderField:
+    pub let slider: Slider
+    pub let field: NumberField
+    ## The two side by side, the slider taking the spare width.
+    pub let row: HStack
+
+    pub func init(self, slider: Slider, field: NumberField) -> unit!:
+        self.slider = slider
+        self.field = field
+        self.row = HStack([slider, field], spacing = 10.0)
+
+    pub func value(self) -> float:
+        return self.slider.value()
+
+    ## Show `value` in both from code, reporting nothing.
+    pub func set_value(self, value: float) -> unit!:
+        self.slider.set_value(value)
+        self.field.set_value(value)
+
+pub class Kit:
+    pub let font: Font
+    let connections: list[Connection]
+
+    pub func init(self, font: Font):
+        self.font = font
+        self.connections = []
+
+    ## Keep a connection made elsewhere, so `close` drops it too.
+    pub func keep(self, connection: Connection):
+        self.connections.append(connection)
+
+    ## Run `callback` whenever `command` triggers, from a menu, a shortcut or a button.
+    pub func bind(self, command: Command, callback: func() -> unit!) -> unit!:
+        self.connections.append(command.on_trigger(callback))
+
+    pub func button(self, text: str, callback: func() -> unit!) -> Button!:
+        let button = Button(text, font = self.font)
+        self.connections.append(button.on_click(callback))
+        return button
+
+    pub func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
+        let button = Button(icon = icon, font = self.font)
+        self.connections.append(button.on_click(callback))
+        return button
+
+    ## A square icon button that triggers a tool command: 32 points, the rail's content width.
+    pub func tool_button(self, icon: str, command: Command) -> Button!:
+        let button = Button(icon = icon, font = self.font)
+        self.connections.append(button.on_click(func () -> unit!:
+            command.trigger()))
+        button.layout().set_size(32.0, 32.0)
+        return button
+
+    ## A shelf button: 25 points square, plain, so only the icon shows at rest.
+    pub func shelf_button(self, icon: str, callback: func() -> unit!) -> Button!:
+        let button = Button(icon = icon, font = self.font)
+        button.set_style(ButtonStyle.plain)
+        self.connections.append(button.on_click(callback))
+        button.layout().set_size(25.0, 25.0)
+        return button
+
+    ## A flag checkbox; the state itself comes from the model on refresh, so the
+    ## callback toggles the flag rather than copying the box's value.
+    pub func checkbox(self, label: str, callback: func() -> unit!) -> Checkbox!:
+        let box = Checkbox(label, font = self.font)
+        self.connections.append(box.on_change(func (value: bool) -> unit!:
+            discard(value)
+            callback()))
+        return box
+
+    ## A muted caption in a fixed column.
+    pub func caption(self, label: str, width: float) -> Text!:
+        let caption = Text(label, font = self.font, muted = true)
+        caption.layout().set_limits(Size(width, 0.0), Size(width, 16384.0))
+        return caption
+
+    ## A header control with its muted caption before it.
+    pub func labelled(self, label: str, control: Widget) -> HStack!:
+        return HStack([Text(label, font = self.font, muted = true), control], spacing = 4.0)
+
+    ## A properties row after eleusis: a muted label in a 64-point column, the
+    ## control, and a one-point rule beneath.
+    pub func property_row(self, label: str, control: Widget) -> VStack!:
+        let row = HStack([self.caption(label, 64.0), control], spacing = 6.0, padding = 4.0)
+        return VStack([row, Rule()], spacing = 0.0)
+
+    ## A dialog row: a muted label in a `width`-point column, then the control.
+    pub func dialog_row(self, label: str, control: Widget, width: float = 140.0) -> Widget!:
+        return HStack([self.caption(label, width), control], spacing = 10.0)
+
+    ## A slider and number field from `minimum` to `maximum` starting at
+    ## `value`, `decimals` places (the step follows), `suffix` after the number;
+    ## `changed` hears every edit of either.
+    pub func slider_field(self, minimum: float, maximum: float, value: float, decimals: int, suffix: str, changed: func(float) -> unit!) -> SliderField!:
+        let step = 0.01 if decimals == 2 else (0.1 if decimals == 1 else 1.0)
+        let slider = Slider("", minimum, maximum, value, step, decimals = decimals, font = self.font, show_value = false)
+        slider.layout().set_flex()
+        let field = NumberField(value, minimum, maximum, step, decimals, suffix = suffix, font = self.font, cells = 7.0)
+        self.connections.append(slider.on_change(func (moved: float) -> unit!:
+            field.set_value(moved)
+            changed(moved)))
+        self.connections.append(field.on_change(func (typed: float) -> unit!:
+            slider.set_value(typed)
+            changed(typed)))
+        return SliderField(slider, field)
+
+    pub func close(self):
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()
+
+## A one-point outline just inside `rectangle`.
+pub func outline(painter: Painter, rectangle: Rect, ink: Color) -> unit!:
+    let x = rectangle.x
+    let y = rectangle.y
+    painter.rectangle(Rect(x, y, rectangle.width, 1.0), ink)
+    painter.rectangle(Rect(x, y + rectangle.height - 1.0, rectangle.width, 1.0), ink)
+    painter.rectangle(Rect(x, y, 1.0, rectangle.height), ink)
+    painter.rectangle(Rect(x + rectangle.width - 1.0, y, 1.0, rectangle.height), ink)
+
+## The paths dragged over `box` that `accept` takes.
+pub func dropped_paths(box: Layout, accept: func(str) -> bool) -> list[str]!:
+    var found: list[str] = []
+    var index = 0
+    while index < box.drop_count():
+        let path = box.drop_path(index)
+        if accept(path):
+            found.append(path)
+        index += 1
+    return found

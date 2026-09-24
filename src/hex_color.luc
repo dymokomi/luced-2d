@@ -1,0 +1,43 @@
+## Colors written as sRGB hex, "#rrggbb" — how the picker, the palette's
+## history and Settings show and take them. The GPU and the canvas work in
+## linear light; these convert with luce-color's sRGB transfer.
+import transfer
+import math
+
+## The sRGB components 0..1 of "#rrggbb" (any case, surrounding space
+## ignored), or none for anything else.
+pub func parse_hex(text: str) -> list[float]?:
+    let digits = "0123456789abcdef"
+    let lowered = text.trim().lower()
+    if lowered.length != 7 or lowered[..<1] != "#":
+        return none
+    var values: list[float] = []
+    var index = 1
+    while index < 7:
+        let high = digits.index_of(lowered[index..<index + 1]) else return none
+        let low = digits.index_of(lowered[index + 1..<index + 2]) else return none
+        values.append(float(high * 16 + low) / 255.0)
+        index += 2
+    return values
+
+## "#rrggbb" for sRGB components 0..1, clamped.
+pub func hex_of_srgb(red: float, green: float, blue: float) -> str:
+    return "#" + hex_byte(red) + hex_byte(green) + hex_byte(blue)
+
+## "#rrggbb" for linear components.
+pub func hex_of_linear(red: float, green: float, blue: float) -> str:
+    return hex_of_srgb(transfer.srgb_encode(clamp_unit(red)), transfer.srgb_encode(clamp_unit(green)), transfer.srgb_encode(clamp_unit(blue)))
+
+## The linear components of "#rrggbb", or none for anything else.
+pub func linear_of_hex(text: str) -> list[float]?:
+    let values = parse_hex(text) else return none
+    return [transfer.srgb_decode(values[0]), transfer.srgb_decode(values[1]), transfer.srgb_decode(values[2])]
+
+func clamp_unit(value: float) -> float:
+    return math.max(0.0, math.min(1.0, value))
+
+## Two hex digits for a component 0..1.
+func hex_byte(component: float) -> str:
+    let digits = "0123456789abcdef"
+    let value = int(math.floor(clamp_unit(component) * 255.0 + 0.5))
+    return digits[value // 16..<value // 16 + 1] + digits[value % 16..<value % 16 + 1]

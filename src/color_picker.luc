@@ -1,8 +1,13 @@
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, Dialog, ShadedField, NumberField, TextField, Text, Button, ButtonStyle, HStack, VStack, Spacer, Rule
+## The color picker dialog, after Photoshop's, and the small widgets it is
+## built from: a swatch well, the new-over-current preview and the row of
+## recent colors. The picker edits the foreground or background color in
+## HSB, RGB, Lab, OkLCh or hex, sampling from the canvas while open.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Dialog, ShadedField, NumberField, TextField, Text, Button, ButtonStyle, HStack, VStack, Spacer, Rule
 from gpu import RenderTarget, Rect, Color
 from input import EventKind, Cursor
 from interop import Connection
 from workspace import Workspace
+from hex_color import parse_hex, hex_of_srgb
 import color as science
 import hsl
 import lab
@@ -11,73 +16,6 @@ import space
 import transfer
 import theme
 import math
-
-## The palette below the tool rail, after Compositor's: the foreground swatch
-## over the background swatch offset half a swatch, a swap arrow (X) at the top
-## right and a reset glyph (D) at the bottom left; 32 points square, the rail's
-## content width.
-pub class Palette: Widget:
-    let box: Layout
-    let workspace: Workspace
-    pub var on_pick: func(bool) -> unit!? = none
-    let swatch: float = 20.0
-    let offset: float = 10.0
-
-    pub func init(self, workspace: Workspace) -> unit!:
-        self.workspace = workspace
-        self.box = Layout()
-        self.box.set_cursor(Cursor.pointer)
-        # Clickable: a box only gets pointer events once it says so.
-        self.box.set_interactive(true)
-
-    pub func layout(self) -> Layout:
-        return self.box
-
-    pub func measure(self, available: Constraints) -> Size!:
-        return Size(self.swatch + self.offset + 2.0, self.swatch + self.offset + 2.0)
-
-    ## A swatch: the color inside a black line inside a white line, corners rounded.
-    func draw_swatch(self, painter: Painter, rect: Rect, color: Color) -> unit!:
-        painter.rounded_rectangle(rect, Color(0.0, 0.0, 0.0), 6.0)
-        painter.rounded_rectangle(Rect(rect.x + 1.0, rect.y + 1.0, rect.width - 2.0, rect.height - 2.0), Color(1.0, 1.0, 1.0), 5.0)
-        painter.rounded_rectangle(Rect(rect.x + 2.5, rect.y + 2.5, rect.width - 5.0, rect.height - 5.0), color, 4.0)
-
-    pub func draw(self, target: RenderTarget) -> unit!:
-        let painter = Painter(target)
-        let workspace = self.workspace
-        let ink = theme.text_muted()
-        self.draw_swatch(painter, Rect(self.offset, self.offset, self.swatch, self.swatch), Color(workspace.back_red, workspace.back_green, workspace.back_blue))
-        self.draw_swatch(painter, Rect(0.0, 0.0, self.swatch, self.swatch), Color(workspace.red, workspace.green, workspace.blue))
-        # The swap arrow, top right: a diagonal with a head at each end.
-        let ax = self.swatch + 2.0
-        let ay = 0.0
-        painter.line(Point(ax + 1.5, ay + 8.5), Point(ax + 8.5, ay + 1.5), 1.2, ink)
-        painter.line(Point(ax + 8.5, ay + 1.5), Point(ax + 5.0, ay + 1.5), 1.2, ink)
-        painter.line(Point(ax + 8.5, ay + 1.5), Point(ax + 8.5, ay + 5.0), 1.2, ink)
-        painter.line(Point(ax + 1.5, ay + 8.5), Point(ax + 5.0, ay + 8.5), 1.2, ink)
-        painter.line(Point(ax + 1.5, ay + 8.5), Point(ax + 1.5, ay + 5.0), 1.2, ink)
-        # The reset glyph, bottom left: a small pair of squares, black over white.
-        let ry = self.swatch + 2.0
-        painter.rectangle(Rect(3.0, ry + 3.0, 5.0, 5.0), Color(1.0, 1.0, 1.0))
-        painter.rectangle(Rect(0.0, ry, 5.0, 5.0), Color(0.0, 0.0, 0.0))
-        painter.rectangle(Rect(0.5, ry + 0.5, 4.0, 4.0), ink)
-        painter.close()
-
-    pub func event(self, event: Event) -> unit!:
-        if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
-            return
-        let workspace = self.workspace
-        if event.x >= self.swatch + 1.0 and event.y < self.offset:
-            workspace.swap_colors()
-        elif event.x < self.offset and event.y >= self.swatch + 1.0:
-            workspace.reset_colors()
-        elif event.x < self.swatch and event.y < self.swatch:
-            if let pick = self.on_pick:
-                pick(false)
-        elif event.x >= self.offset and event.y >= self.offset:
-            if let pick = self.on_pick:
-                pick(true)
-        self.box.invalidate()
 
 ## A color shown in a rounded well.
 pub class Swatch: Widget:
@@ -335,6 +273,14 @@ pub class ColorPicker:
         return [o.l, o.c, o.h][index - 9]
 
     ## The color with channel `index` set to `value` (field units), in gamut.
+    ## The hue `value` at full saturation and brightness.
+    func pure_hue(self, value: float) -> science.Color:
+        var h = self.hsv()
+        h = set_hsv(h, 0, value)
+        h = set_hsv(h, 1, self.high(1))
+        h = set_hsv(h, 2, self.high(2))
+        return hsl.from_hsv(h)
+
     func with_channel(self, index: int, value: float) -> science.Color:
         return self.with_both(index, value, index, value)
 
@@ -418,7 +364,9 @@ pub class ColorPicker:
         var step = 0
         while step <= 32:
             let value = self.high(self.mode) - (self.high(self.mode) - self.low(self.mode)) * float(step) / 32.0
-            let shade = linear_of(space.clamp(self.with_channel(self.mode, value)))
+            # The hue strip shows pure hues, as Photoshop's does, so it reads as a
+            # rainbow even while the color is white, grey or black.
+            let shade = linear_of(space.clamp(self.pure_hue(value) if self.mode == 0 else self.with_channel(self.mode, value)))
             ramp.append(shade)
             ramp.append(shade)
             step += 1
@@ -511,25 +459,11 @@ func set_lab(l: lab.Lab, index: int, value: float) -> lab.Lab:
 pub func linear_of(color: science.Color) -> Color:
     return Color(transfer.srgb_decode(color.red), transfer.srgb_decode(color.green), transfer.srgb_decode(color.blue))
 
-## sRGB hex "#rrggbb" for sRGB components 0..1.
-pub func hex_of(color: Color) -> str:
-    return "#" + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.red)) * 255.0 + 0.5))) + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.green)) * 255.0 + 0.5))) + hex_byte(int(math.floor(math.max(0.0, math.min(1.0, color.blue)) * 255.0 + 0.5)))
-
-func hex_byte(value: int) -> str:
-    let digits = "0123456789abcdef"
-    return digits[value // 16..<value // 16 + 1] + digits[value % 16..<value % 16 + 1]
-
 ## The sRGB components of "#rrggbb"; black for anything else.
-pub func srgb_of(hex: str) -> science.Color:
-    let digits = "0123456789abcdef"
-    let lowered = hex.trim().lower()
-    if lowered.length != 7 or lowered[..<1] != "#":
-        return science.Color(0.0, 0.0, 0.0)
-    var values: list[float] = []
-    var index = 1
-    while index < 7:
-        let high = digits.index_of(lowered[index..<index + 1]) else return science.Color(0.0, 0.0, 0.0)
-        let low = digits.index_of(lowered[index + 1..<index + 2]) else return science.Color(0.0, 0.0, 0.0)
-        values.append(float(high * 16 + low) / 255.0)
-        index += 2
+func srgb_of(hex: str) -> science.Color:
+    let values = parse_hex(hex) else return science.Color(0.0, 0.0, 0.0)
     return science.Color(values[0], values[1], values[2])
+
+## "#rrggbb" for an sRGB-encoded color.
+func hex_of(color: Color) -> str:
+    return hex_of_srgb(color.red, color.green, color.blue)

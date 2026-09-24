@@ -1,0 +1,33 @@
+## The report of a crash the last run left, shown once on the next launch:
+## the text, where it is kept, and a button that copies it for a bug report.
+from ui import Text, HStack, Size, Spacer, Button, Dialog, TextEditor
+from kit import Kit
+import clipboard
+
+pub class CrashDialog:
+    pub let dialog: Dialog
+    pub let copy: Button
+    let text: TextEditor
+    var report: str = ""
+
+    pub func init(self, kit: Kit) -> unit!:
+        self.text = TextEditor("", read_only = true, line_numbers = false, font = kit.font)
+        self.text.layout().set_limits(Size(600.0, 260.0), Size(600.0, 260.0))
+        self.copy = kit.button("Copy", self.copy_report)
+        self.dialog = Dialog([Text("luced-2d quit unexpectedly last time", font = kit.font),
+                              Text("The report is kept in ~/.luce/crashes; nothing is sent anywhere.", font = kit.font, muted = true),
+                              self.text, HStack([Spacer(), self.copy, kit.button("Close", self.close)], spacing = 8.0)], width = 640.0)
+
+    pub func show(self, report: str) -> unit!:
+        self.report = report
+        self.text.set_text(report)
+        self.copy.set_text("Copy")
+        self.dialog.open()
+
+    ## Copy: the whole report to the clipboard, and the button says so.
+    func copy_report(self) -> unit!:
+        clipboard.write_text(self.report)
+        self.copy.set_text("Copied")
+
+    func close(self) -> unit!:
+        self.dialog.hide()

@@ -1,320 +1,137 @@
-from ui import Font, Text, Button, VStack, HStack, Toolbar, Size, TextPrompt, Spacer, Application, Menu, Command, Slider, Widget, CurveEditor, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, TextField, NumberField, Checkbox, Dialog, Accordion, TextEditor, ContextMenu
-from interop import Connection
+## The window's contents, after Compositor's: the menu bar, a contextual tool
+## header, the dock (the viewport with its tool rail and rulers, Layers,
+## Properties, and Brush Settings when opened) and a status line; the dialogs
+## float above. Each part lives in its own module; this one composes them,
+## wires every shared command to what the window does for it, and refreshes
+## them all when the document changes.
+from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Application, Widget, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, Dialog, ContextMenu, Button
 from input import Key
 from workspace import Workspace
-from canvas import Canvas
 from actions import Actions
 from view import CanvasView
 from layers import LayerList
 from tabs import DocumentTabs
 from rulers import Ruler, RulerCorner
 from document_panel import DocumentSettings
-from colors import Palette, ColorPicker
+from palette import Palette
+from color_picker import ColorPicker
 from settings import Store
-import clipboard
-import math
 from settings_panel import SettingsDialog
+from kit import Kit
+from tool_header import ToolHeader
+from brush_settings import BrushSettings
+from adjust_dialog import AdjustDialog
+from properties import Properties
+from prompts import Prompts
+from crash_dialog import CrashDialog
+from menus import menu_bar
+from tools import tools
+import math
+from units import unit_ids, unit_label
 
-## The window's contents, after Compositor's: a contextual tool header, a tool
-## rail beside the canvas and the layers panel, and a status line. One text
-## prompt stands in for the dialogs the desktop lacks.
 pub class Panels:
     pub let body: VStack
     pub let view: CanvasView
     ## The open documents' tabs across the top of the viewport.
     pub let tabs: DocumentTabs
     ## Rulers above and left of the canvas; the row above holds the corner too.
-    pub let document_settings: DocumentSettings
     pub let top_ruler: Ruler
     pub let left_ruler: Ruler
     let ruler_row: HStack
     let left_ruler_menu: ContextMenu
     pub let workspace: Workspace
-    pub let status: Text
-    pub let prompt: TextPrompt
-    pub let layers: LayerList
     pub let actions: Actions
-    pub let header_title: Text
-    pub let header_hint: Text
-    ## The brush settings are eleusis scrubbers: drag to change, click to type.
-    pub let size_field: NumberField
-    pub let hardness_field: NumberField
-    pub let opacity_field: NumberField
-    pub let flow_field: NumberField
-    pub let spacing_field: NumberField
-    pub let preset_menu: Menu
-    ## Brush Settings…: one dialog with Photoshop's sections, its controls in the
-    ## order `show_brush` writes them.
-    ## Brush Settings: opens floating over the workspace and docks like any panel.
-    pub let brush_panel: Panel
-    let brush_fields: list[NumberField]
-    let brush_sliders: list[Slider]
-    let brush_checks: list[Checkbox]
-    let texture_menu: Menu
-    pub let layer_opacity: Slider
-    pub let layer_opacity_field: NumberField
-    pub let brush_controls: HStack
-    ## The dock and its three panes: the viewport, the layers and the properties
-    ## of the selected layer, each pane's buttons on a shelf at its bottom.
+    pub let status: Text
+    pub let header: ToolHeader
+    pub let brush: BrushSettings
+    pub let adjust: AdjustDialog
+    pub let properties: Properties
+    pub let prompts: Prompts
+    pub let crash: CrashDialog
+    pub let layers: LayerList
+    ## The dock and its panes, each pane's buttons on a shelf at its bottom.
     pub let dock: DStack
     pub let viewport_panel: Panel
     pub let layers_panel: Panel
-    pub let properties_panel: Panel
     pub let tool_buttons: list[Button]
-    pub let layer_name: TextField
-    pub let visible_box: Checkbox
-    pub let clipped_box: Checkbox
-    pub let mask_box: Checkbox
-    pub let styles_text: Text
-    pub let blend_menu: Menu
-    pub let wand_controls: HStack
-    pub let text_controls: HStack
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
     pub let palette: Palette
-    ## The report of a crash the last run left, shown once on the next launch.
-    pub let crash_dialog: Dialog
-    let crash_text: TextEditor
-    pub let crash_copy: Button
-    var crash_report: str = ""
-    pub let settings_dialog: SettingsDialog
     pub let picker: ColorPicker
+    ## On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
     pub let mask_prompt: Dialog
-    pub let text_size_slider: Slider
-    pub let tolerance_slider: Slider
-    pub let contiguous_button: Button
-    pub let layer_count: Text
-    ## The adjust dialog, after Compositor's floating panels: a card centred over
-    ## the canvas holding one column of rows for the open adjustment (or the
-    ## blur, the free transform, the layer style), live-previewing, with
-    ## Cancel/Apply. Each row is a slider and a number field showing one value.
-    pub let adjust_dialog: Dialog
-    pub let adjust_title: Text
-    let adjust_rows: list[VStack]
-    pub let adjust_sliders: list[list[Slider]]
-    pub let adjust_fields: list[list[NumberField]]
-    var built_sliders: list[Slider]
-    var built_fields: list[NumberField]
-    ## The Curves row: the editor for one channel at a time, chosen from a menu.
-    pub let curve_editor: CurveEditor
-    pub let curve_channel_label: Text
-    var curve_channel: int = 0
-    var adjust_kind: int = -1
-    ## Layer Style (row 10): three effect toggles beside their sliders; the style
-    ## before the bar opened, for Cancel.
-    pub let style_toggles: list[Checkbox]
-    var style_on: list[bool]
-    var style_before: list[float]
-    pub var app: Application? = none
-    let font: Font
-    let connections: list[Connection]
-    var prompt_mode: str = ""
     var mask_background: bool = false
+    pub let document_settings: DocumentSettings
+    pub let settings_dialog: SettingsDialog
+    pub var app: Application? = none
+    let kit: Kit
 
     pub func init(self, workspace: Workspace, actions: Actions, font: Font, store: Store? = none) -> unit!:
         self.workspace = workspace
-        let settings_store = store else Store()
-        self.settings_dialog = SettingsDialog(workspace, actions, font, settings_store)
-        self.settings_dialog.applied = self.refresh
         self.actions = actions
-        self.font = font
-        self.connections = []
+        self.kit = Kit(font)
+        let kit = self.kit
+        self.settings_dialog = SettingsDialog(workspace, actions, font, store else Store())
+        self.settings_dialog.applied = self.refresh
+        self.prompts = Prompts(workspace, font)
+        self.prompts.refreshed = self.refresh
+        kit.keep(self.prompts.prompt.on_submit(self.prompts.apply))
         self.view = CanvasView(workspace)
-        self.tabs = DocumentTabs(workspace, font)
         self.view.on_open_files = self.open_files
         self.view.on_key_up = self.spring_back
+        self.view.on_text = self.place_text
+        self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
         self.tabs.on_close = self.close_document_at
         self.tabs.on_new = self.new_document
-        self.prompt = TextPrompt(font = font)
         self.layers = LayerList(workspace, font)
         self.layers.on_place_files = self.place_files
         self.status = Text("", font = font)
-        self.style_on = [false, false, false]
-        self.style_before = []
-        self.connect()
-        # The contextual header: what the active tool needs.
-        self.header_title = Text("Brush", font = font)
-        self.header_hint = Text("", font = font)
-        self.size_field = NumberField(workspace.diameter, 1.0, 500.0, 1.0, suffix = " px", font = font)
-        self.hardness_field = NumberField(workspace.hardness * 100.0, 0.0, 100.0, 1.0, suffix = "%", font = font)
-        self.opacity_field = NumberField(workspace.opacity * 100.0, 1.0, 100.0, 1.0, suffix = "%", font = font)
-        self.connections.append(self.size_field.on_change(func (value: float) -> unit!:
-            self.workspace.diameter = value
-            self.workspace.touch()))
-        self.connections.append(self.hardness_field.on_change(func (value: float) -> unit!:
-            self.workspace.hardness = value / 100.0
-            self.workspace.touch()))
-        self.connections.append(self.opacity_field.on_change(func (value: float) -> unit!:
-            self.workspace.opacity = value / 100.0
-            self.workspace.touch()))
-        self.flow_field = NumberField(workspace.flow * 100.0, 1.0, 100.0, 1.0, suffix = "%", font = font)
-        self.connections.append(self.flow_field.on_change(func (value: float) -> unit!:
-            self.workspace.flow = value / 100.0
-            self.workspace.touch()))
-        self.spacing_field = NumberField(workspace.spacing * 100.0, 1.0, 500.0, 1.0, suffix = "%", font = font)
-        self.connections.append(self.spacing_field.on_change(func (value: float) -> unit!:
-            self.workspace.spacing = value / 100.0
-            self.workspace.touch()))
-        var presets: list[Command] = []
-        for name in workspace.preset_names():
-            let chosen = name
-            let command = Command(name, id = "preset_" + name)
-            self.connections.append(command.on_trigger(func () -> unit!:
-                self.workspace.apply_preset(chosen)
-                self.refresh()))
-            presets.append(command)
-        self.preset_menu = Menu(workspace.preset + " ▾", presets, font = font)
-        self.brush_fields = []
-        self.brush_sliders = []
-        self.brush_checks = []
-        self.texture_menu = Menu("None ▾", self.texture_commands(), font = font)
-        self.brush_panel = self.build_brush_panel(font)
+        self.header = ToolHeader(workspace, kit)
+        self.header.brush_settings = self.open_brush
+        self.header.refreshed = self.refresh
+        self.brush = BrushSettings(workspace, kit)
+        self.adjust = AdjustDialog(workspace, kit)
+        self.adjust.changed = self.document_changed
+        self.adjust.refreshed = self.refresh
+        self.adjust.failed = self.prompts.tell
+        self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.adjust.layer_style)
+        self.properties.changed = self.document_changed
+        self.properties.refreshed = self.refresh
+        self.crash = CrashDialog(kit)
         self.palette = Palette(workspace)
-        self.document_settings = DocumentSettings(workspace, font)
-        self.document_settings.applied = self.refresh
-        self.crash_text = TextEditor("", read_only = true, line_numbers = false, font = font)
-        self.crash_text.layout().set_limits(Size(600.0, 260.0), Size(600.0, 260.0))
-        self.crash_copy = self.button("Copy", self.copy_crash)
-        self.crash_dialog = Dialog([Text("luced-2d quit unexpectedly last time", font = font),
-                                    Text("The report is kept in ~/.luce/crashes; nothing is sent anywhere.", font = font, muted = true),
-                                    self.crash_text, HStack([Spacer(), self.crash_copy, self.button("Close", self.close_crash)], spacing = 8.0)], width = 640.0)
         self.palette.on_pick = self.pick_color
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
         self.picker.committed = self.settings_dialog.remember
-        # On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
-        self.mask_prompt = Dialog([Text("Mask color", font = font), HStack([self.button("Black · Hide", self.choose_mask_black), self.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
-        self.brush_controls = HStack([self.preset_menu, self.labelled("Size", self.size_field), self.labelled("Hardness", self.hardness_field), self.labelled("Opacity", self.opacity_field),
-                                      self.labelled("Flow", self.flow_field), self.labelled("Spacing", self.spacing_field), self.button("Brush…", self.open_brush)], spacing = 12.0)
-        self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
-        self.connections.append(self.tolerance_slider.on_change(func (value: float) -> unit!:
-            self.workspace.tolerance = value))
-        self.contiguous_button = self.button("Contiguous ✓", self.toggle_contiguous)
-        self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
-        self.text_size_slider = Slider("Size", 8.0, 256.0, workspace.text_size, 1.0, font = font)
-        self.connections.append(self.text_size_slider.on_change(func (value: float) -> unit!:
-            self.workspace.text_size = value))
-        self.text_controls = HStack([self.text_size_slider], spacing = 12.0)
-        self.view.on_text = self.place_text
-        self.header_title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
-        # The adjust dialog's rows, in the units Photoshop shows.
-        self.adjust_title = Text("", font = font)
-        self.adjust_rows = []
-        self.adjust_sliders = []
-        self.adjust_fields = []
-        self.built_sliders = []
-        self.built_fields = []
-        self.adjust_row([self.adjust_control("Brightness", -100.0, 100.0, 0.0), self.adjust_control("Contrast", -100.0, 100.0, 0.0)])
-        self.adjust_row([self.adjust_control("Hue", -180.0, 180.0, 0.0, 0, "°"), self.adjust_control("Saturation", -100.0, 100.0, 0.0),
-                         self.adjust_control("Lightness", -100.0, 100.0, 0.0)])
-        self.adjust_row([])
-        self.adjust_row([self.adjust_control("In Black", 0.0, 255.0, 0.0), self.adjust_control("In White", 0.0, 255.0, 255.0),
-                         self.adjust_control("Gamma", 0.1, 9.99, 1.0, 2), self.adjust_control("Out Black", 0.0, 255.0, 0.0),
-                         self.adjust_control("Out White", 0.0, 255.0, 255.0)])
-        self.adjust_row([])
-        self.adjust_row([self.adjust_control("Threshold", 0.0, 255.0, 128.0)])
-        self.adjust_row([self.adjust_control("Levels", 2.0, 32.0, 4.0)])
-        # Curves (row 7): the editor for one channel at a time, chosen from a menu.
-        self.curve_editor = CurveEditor()
-        self.connections.append(self.curve_editor.on_change(self.curve_changed))
-        var channels: list[Command] = []
-        var channel = 0
-        for name in ["RGB", "Red", "Green", "Blue"]:
-            let chosen = channel
-            let command = Command(name, id = f"curve_channel_{channel}")
-            self.connections.append(command.on_trigger(func () -> unit!:
-                self.show_curve_channel(chosen)))
-            channels.append(command)
-            channel += 1
-        self.curve_channel_label = Text("RGB", font = font)
-        var curve_items: list[Widget] = []
-        curve_items.append(HStack([Menu("Channel ▾", channels, font = font), self.curve_channel_label, Spacer(), self.button("Reset", self.reset_curve)], spacing = 8.0))
-        curve_items.append(self.curve_editor)
-        self.adjust_row(curve_items)
-        self.adjust_row([self.adjust_control("Radius", 0.5, 250.0, 8.0, 1, " px")])
-        self.adjust_row([self.adjust_control("Width", 1.0, 400.0, 100.0, 0, "%"), self.adjust_control("Height", 1.0, 400.0, 100.0, 0, "%"),
-                         self.adjust_control("Angle", -180.0, 180.0, 0.0, 0, "°"), self.adjust_control("X", -2000.0, 2000.0, 0.0, 0, " px"),
-                         self.adjust_control("Y", -2000.0, 2000.0, 0.0, 0, " px")])
-        # Layer Style (row 10): each effect is a checkbox heading over its rows, as Compositor's Effects panel.
-        self.style_toggles = []
-        var style_items: list[Widget] = []
-        self.style_section(style_items, 0, "Drop Shadow", [self.adjust_control("X", -100.0, 100.0, 4.0, 0, " px"), self.adjust_control("Y", -100.0, 100.0, 4.0, 0, " px"),
-                                                          self.adjust_control("Blur", 0.0, 100.0, 4.0, 0, " px"), self.adjust_control("Opacity", 0.0, 100.0, 75.0, 0, "%")])
-        self.style_section(style_items, 1, "Stroke", [self.adjust_control("Size", 0.0, 100.0, 3.0, 0, " px"), self.adjust_control("Opacity", 0.0, 100.0, 100.0, 0, "%")])
-        self.style_section(style_items, 2, "Outer Glow", [self.adjust_control("Size", 0.0, 100.0, 8.0, 0, " px"), self.adjust_control("Opacity", 0.0, 100.0, 75.0, 0, "%")])
-        self.adjust_row(style_items)
-        var dialog_items: list[Widget] = [self.adjust_title]
-        for row in self.adjust_rows:
-            dialog_items.append(row)
-        dialog_items.append(HStack([Spacer(), self.button("Cancel", self.cancel_preview), self.button("Apply", self.apply_preview)], spacing = 8.0))
-        self.adjust_dialog = Dialog(dialog_items, width = 420.0)
-        # The menus present the shared commands, shortcuts and all.
-        let menus = Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.save, actions.save_as, Command("", divider = true), actions.close_document], font = font),
-                             Menu("Edit", [actions.undo, actions.redo, actions.free_transform, actions.fill, actions.fill_background, actions.clear, actions.swap_colors, actions.reset_colors, Command("", divider = true), actions.settings], font = font),
-                             Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
-                             Menu("Image", [actions.document_settings, Command("", divider = true), actions.crop, actions.canvas_size, actions.image_size], font = font),
-                             Menu("Adjust", actions.adjustments, font = font),
-                             Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
-                                            actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility, actions.rename_layer, actions.layer_style], font = font),
-                             Menu("Filter", [actions.blur], font = font),
-                             Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, Command("", divider = true), actions.show_rulers, actions.show_grid] + actions.units + [Command("", divider = true), actions.next_document, actions.previous_document], font = font),
-                             Spacer()], font = font)
-        let header = Toolbar([self.header_title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
-        # The tool rail, as eleusis's viewport rail: 32-point buttons, the active tool selected.
+        self.mask_prompt = Dialog([Text("Mask color", font = font), HStack([kit.button("Black · Hide", self.choose_mask_black),
+                                   kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
+        self.document_settings = DocumentSettings(workspace, font)
+        self.document_settings.applied = self.refresh
+        self.connect()
+        # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
+        # tool selected, and the palette below them.
         var rail_items: list[Widget] = []
         self.tool_buttons = []
         var index = 0
-        for command in actions.tools:
-            let button = self.tool_button(actions.tool_icons[index], command)
+        for tool in tools():
+            let button = kit.tool_button(tool.icon, actions.tools[index])
             self.tool_buttons.append(button)
             rail_items.append(button)
             index += 1
-        # Below the tools, the palette, as Compositor's rail.
         rail_items.append(Rule())
         rail_items.append(self.palette)
         let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
         rail.layout().set_limits(Size(44.0, 100.0), Size(44.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
-        # The layers panel: appearance, the list, and the footer.
-        self.layer_count = Text("", font = font)
-        self.layer_opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font, show_value = false)
-        self.layer_opacity_field = NumberField(100.0, 0.0, 100.0, 1.0, suffix = "%", font = font, cells = 6.0)
-        self.connections.append(self.layer_opacity.on_change(func (value: float) -> unit!:
-            self.workspace.set_opacity(value / 100.0)
-            self.layer_opacity_field.set_value(value)
-            self.layers.layout().invalidate()))
-        self.connections.append(self.layer_opacity_field.on_change(func (value: float) -> unit!:
-            self.workspace.set_opacity(value / 100.0)
-            self.layer_opacity.set_value(value)
-            self.layers.layout().invalidate()))
         # Layers: the list, with its actions on the shelf below (the destructive one alone at the right).
-        let layers_shelf = Shelf([self.shelf_button("plus", self.add_layer), self.shelf_button("duplicate", self.duplicate_layer),
-                                  self.shelf_button("layer-mask", self.toggle_mask), self.shelf_button("send-backward", self.toggle_clipped),
-                                  Spacer(), self.shelf_button("trash", self.delete_layer)])
+        let layers_shelf = Shelf([kit.shelf_button("plus", self.add_layer), kit.shelf_button("duplicate", self.duplicate_layer),
+                                  kit.shelf_button("layer-mask", self.toggle_mask), kit.shelf_button("send-backward", self.toggle_clipped),
+                                  Spacer(), kit.shelf_button("trash", self.delete_layer)])
         self.layers.layout().set_flex()
         self.layers_panel = Panel("Layers", self.layers, minimum = Size(220.0, 120.0), closable = false, footer = layers_shelf)
-        # Properties: what the selected layer is, one row each.
-        # The name is edited in place; committing it renames the layer.
-        self.layer_name = TextField("", font = font, placeholder = "Layer name", cells = 18.0)
-        self.connections.append(self.layer_name.on_commit(func (value: str) -> unit!:
-            if value.trim() != "":
-                self.workspace.rename(value.trim())
-            self.refresh()))
-        self.visible_box = self.checkbox("Visible", self.toggle_visibility)
-        self.clipped_box = self.checkbox("Clip", self.toggle_clipped)
-        self.mask_box = self.checkbox("Mask", self.toggle_mask)
-        self.styles_text = Text("None", font = font)
-        self.blend_menu = Menu("Normal ▾", actions.blends, font = font)
-        self.layer_opacity.layout().set_flex()
-        let properties = VStack([self.property_row("Layer", self.layer_name), self.property_row("Blend", self.blend_menu),
-                                 self.property_row("Opacity", HStack([self.layer_opacity, self.layer_opacity_field], spacing = 6.0)),
-                                 self.property_row("Flags", HStack([self.visible_box, self.clipped_box, self.mask_box], spacing = 10.0)),
-                                 self.property_row("Styles", HStack([self.styles_text, self.button("Edit…", self.layer_style)], spacing = 8.0)),
-                                 Spacer()], spacing = 0.0, padding = 0.0)
-        self.properties_panel = Panel("Properties", properties, minimum = Size(220.0, 100.0), closable = false)
-        # The viewport: the tool rail beside the canvas.
-        # A one-point backdrop rule separates the rail from the canvas, as eleusis's viewport does.
-        # Rulers around the canvas; right-click either for its units.
+        # The viewport: the tool rail beside the canvas, a one-point backdrop rule
+        # between them as eleusis's viewport has, and rulers around the canvas;
+        # right-click either ruler for its units.
         self.top_ruler = Ruler(workspace, self.view, font, true)
         self.left_ruler = Ruler(workspace, self.view, font, false)
         self.ruler_row = HStack([RulerCorner(), ContextMenu(self.top_ruler, actions.units, font = font)], spacing = 0.0)
@@ -329,311 +146,157 @@ pub class Panels:
         let viewport = VStack([self.tabs, canvas_row], spacing = 0.0)
         viewport.layout().set_flex()
         self.viewport_panel = Panel("Viewport", viewport, minimum = Size(320.0, 200.0), closable = false)
-        self.dock = DStack([self.viewport_panel, self.layers_panel, self.properties_panel], font = font)
+        self.dock = DStack([self.viewport_panel, self.layers_panel, self.properties.panel], font = font)
         self.dock.move(self.layers_panel, self.viewport_panel, DockPosition.right)
-        self.dock.move(self.properties_panel, self.layers_panel, DockPosition.bottom)
+        self.dock.move(self.properties.panel, self.layers_panel, DockPosition.bottom)
         self.dock.set_fraction(self.viewport_panel, 0.76)
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.settings_dialog.dialog, self.document_settings.dialog, self.crash_dialog], spacing = 0.0)
+        self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
+                            self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.settings_dialog.dialog,
+                            self.document_settings.dialog, self.crash.dialog], spacing = 0.0)
         self.body.layout().set_flex()
-        self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
-
-    ## One control of the adjust dialog, after Compositor's rows: a muted label
-    ## in a 64-point column, a slider, and a number field with its unit, both
-    ## showing one value. Every change re-previews the open adjustment.
-    func adjust_control(self, label: str, minimum: float, maximum: float, value: float, decimals: int = 0, suffix: str = "") -> Widget!:
-        let step = 0.01 if decimals == 2 else (0.1 if decimals == 1 else 1.0)
-        let slider = Slider("", minimum, maximum, value, step, decimals = decimals, font = self.font, show_value = false)
-        slider.layout().set_flex()
-        let field = NumberField(value, minimum, maximum, step, decimals, suffix = suffix, font = self.font, cells = 7.0)
-        self.connections.append(slider.on_change(func (changed: float) -> unit!:
-            field.set_value(changed)
-            self.preview()))
-        self.connections.append(field.on_change(func (changed: float) -> unit!:
-            slider.set_value(changed)
-            self.preview()))
-        self.built_sliders.append(slider)
-        self.built_fields.append(field)
-        let caption = Text(label, font = self.font, muted = true)
-        caption.layout().set_limits(Size(64.0, 0.0), Size(64.0, 16384.0))
-        return HStack([caption, slider, field], spacing = 10.0)
-
-    ## One adjustment's column of rows, hidden until it opens; the controls
-    ## built since the last row belong to it.
-    func adjust_row(self, items: list[Widget]) -> unit!:
-        let row = VStack(items, spacing = 10.0)
-        row.layout().set_visible(false)
-        self.adjust_rows.append(row)
-        self.adjust_sliders.append(self.built_sliders)
-        self.adjust_fields.append(self.built_fields)
-        self.built_sliders = []
-        self.built_fields = []
-
-    ## One effect of the Layer Style: its checkbox heading, then its rows.
-    func style_section(self, items: list[Widget], effect: int, name: str, controls: list[Widget]) -> unit!:
-        let box = Checkbox(name, font = self.font)
-        self.connections.append(box.on_change(func (value: bool) -> unit!:
-            discard(value)
-            self.toggle_style(effect)))
-        self.style_toggles.append(box)
-        items.append(box)
-        for control in controls:
-            items.append(control)
-
-    ## Set one control of row `kind` from code: the slider and its field together.
-    func set_control(self, kind: int, index: int, value: float) -> unit!:
-        self.adjust_sliders[kind][index].set_value(value)
-        self.adjust_fields[kind][index].set_value(value)
-
-    ## The open adjustment's slider values in the units the canvas takes.
-    func adjust_values(self) -> list[float]:
-        let kind = self.adjust_kind
-        let sliders = self.adjust_sliders[kind]
-        var values: list[float] = []
-        for slider in sliders:
-            values.append(slider.value())
-        if kind == 0:
-            return [values[0] / 100.0, values[1] / 100.0]
-        if kind == 1:
-            return [values[0] / 360.0, values[1] / 100.0, values[2] / 100.0]
-        if kind == 3:
-            return [values[0] / 255.0, values[1] / 255.0, values[2], values[3] / 255.0, values[4] / 255.0]
-        if kind == 5:
-            return [values[0] / 255.0]
-        return values
-
-    ## Show the open adjustment (the blur, row 8; the free transform, row 9) with the controls as they are.
-    pub func preview(self) -> unit!:
-        let kind = self.adjust_kind
-        if kind == 10:
-            self.apply_styles()
-            return
-        if kind < 0 or not self.workspace.previewing():
-            return
-        if kind == 8:
-            self.workspace.preview_blur(self.adjust_sliders[8][0].value())
-        elif kind == 9:
-            let sliders = self.adjust_sliders[9]
-            self.workspace.preview_transform(sliders[0].value() / 100.0, sliders[1].value() / 100.0, sliders[2].value(), sliders[3].value(), sliders[4].value())
-        else:
-            self.workspace.preview_adjust(kind, self.adjust_values())
-        self.view.layout().invalidate()
-
-    ## The editor's points become the canvas's curve for the shown channel, then re-preview.
-    pub func curve_changed(self) -> unit!:
-        let canvas = self.workspace.canvas
-        canvas.reset_curve(self.curve_channel)
-        var index = 0
-        while index < self.curve_editor.point_count():
-            canvas.add_curve_point(self.curve_channel, self.curve_editor.point_x(index), self.curve_editor.point_y(index))
-            index += 1
-        self.preview()
-
-    ## Load the canvas's curve for `channel` into the editor.
-    func show_curve_channel(self, channel: int) -> unit!:
-        self.curve_channel = channel
-        let canvas = self.workspace.canvas
-        self.curve_editor.reset()
-        var index = 0
-        while index < canvas.curve_point_count(channel):
-            self.curve_editor.add_point(canvas.curve_point_x(channel, index), canvas.curve_point_y(channel, index))
-            index += 1
-        self.curve_channel_label.set_text(["RGB", "Red", "Green", "Blue"][channel])
-
-    func reset_curve(self) -> unit!:
-        self.workspace.canvas.reset_curve(self.curve_channel)
-        self.show_curve_channel(self.curve_channel)
-        self.preview()
-
-    ## Layer styles are not destructive: the controls write straight to the layer.
-    func apply_styles(self) -> unit!:
-        let s = self.adjust_sliders[10]
-        self.workspace.set_styles(self.style_on[0], s[0].value(), s[1].value(), s[2].value(), s[3].value() / 100.0,
-                                  self.style_on[1], s[4].value(), s[5].value() / 100.0, self.style_on[2], s[6].value(), s[7].value() / 100.0)
-        self.view.layout().invalidate()
-        self.layers.layout().invalidate()
-
-    pub func toggle_style(self, effect: int) -> unit!:
-        self.style_on[effect] = not self.style_on[effect]
-        self.show_style_toggles()
-        self.apply_styles()
-
-    func show_style_toggles(self) -> unit!:
-        var effect = 0
-        while effect < 3:
-            self.style_toggles[effect].set_checked(self.style_on[effect])
-            effect += 1
-
-    ## Layer › Layer Style…: the dialog shows the selected layer's styles for editing.
-    pub func layer_style(self) -> unit!:
-        if self.workspace.previewing():
-            self.workspace.end_preview(false)
-        self.style_before = []
-        var field = 0
-        while field < 20:
-            self.style_before.append(self.workspace.style_value(field))
-            field += 1
-        let before = self.style_before
-        self.style_on = [before[0] != 0.0, before[8] != 0.0, before[14] != 0.0]
-        self.set_control(10, 0, before[1])
-        self.set_control(10, 1, before[2])
-        self.set_control(10, 2, before[3])
-        self.set_control(10, 3, before[7] * 100.0)
-        self.set_control(10, 4, before[9])
-        self.set_control(10, 5, before[13] * 100.0)
-        self.set_control(10, 6, before[15])
-        self.set_control(10, 7, before[19] * 100.0)
-        self.show_style_toggles()
-        self.adjust_kind = 10
-        var index = 0
-        for row in self.adjust_rows:
-            row.layout().set_visible(index == 10)
-            index += 1
-        self.adjust_title.set_text("Layer Style")
-        self.adjust_dialog.open()
-        self.refresh()
-
-    ## Open the adjust dialog for `kind` (8 for blur) with its controls at their defaults.
-    func open_preview(self, kind: int, title: str) -> unit!:
-        if self.workspace.previewing():
-            self.workspace.end_preview(false)
-        self.workspace.begin_preview() catch failure:
-            self.ask("", f"Cannot adjust: {failure.message}", "", "OK")
-            return
-        self.adjust_kind = kind
-        if kind == 7:
-            var channel = 0
-            while channel < 4:
-                self.workspace.canvas.reset_curve(channel)
-                channel += 1
-            self.show_curve_channel(0)
-        var index = 0
-        for row in self.adjust_rows:
-            row.layout().set_visible(index == kind)
-            index += 1
-        self.adjust_title.set_text(title)
-        self.adjust_dialog.open()
-        self.preview()
-        self.refresh()
-
-    func close_preview(self, keep: bool) -> unit!:
-        if self.adjust_kind == 10 and not keep and self.style_before.length == 20:
-            # Cancel puts the styles back as they were when the dialog opened.
-            let b = self.style_before
-            let id = self.workspace.selected_id()
-            self.workspace.canvas.set_shadow(id, b[0] != 0.0, b[1], b[2], b[3], b[4], b[5], b[6], b[7])
-            self.workspace.canvas.set_stroke(id, b[8] != 0.0, b[9], b[10], b[11], b[12], b[13])
-            self.workspace.canvas.set_glow(id, b[14] != 0.0, b[15], b[16], b[17], b[18], b[19])
-            self.workspace.touch()
-        if self.workspace.previewing():
-            self.workspace.end_preview(keep)
-        self.adjust_kind = -1
-        self.adjust_dialog.hide()
-        self.refresh()
-
-    pub func apply_preview(self) -> unit!:
-        self.close_preview(true)
-
-    pub func cancel_preview(self) -> unit!:
-        self.close_preview(false)
-
-    func button(self, text: str, callback: func() -> unit!) -> Button!:
-        let button = Button(text, font = self.font)
-        self.connections.append(button.on_click(callback))
-        return button
 
     ## Wire every shared command to what this window does for it.
     func connect(self) -> unit!:
         let actions = self.actions
-        self.bind(actions.new_document, self.new_document)
-        self.bind(actions.open_document, self.open_document)
-        self.bind(actions.save, self.save_document)
-        self.bind(actions.save_as, self.save_document_as)
-        self.bind(actions.undo, self.undo)
-        self.bind(actions.redo, self.redo)
-        self.bind(actions.fill, self.fill_selection)
-        self.bind(actions.document_settings, self.open_document_settings)
-        self.bind(actions.show_rulers, func () -> unit!:
+        let kit = self.kit
+        kit.bind(actions.new_document, self.new_document)
+        kit.bind(actions.open_document, self.open_document)
+        kit.bind(actions.save, self.save_document)
+        kit.bind(actions.save_as, self.save_document_as)
+        kit.bind(actions.close_document, self.close_document)
+        kit.bind(actions.next_document, func () -> unit!:
+            self.workspace.next_document(1)
+            self.refresh())
+        kit.bind(actions.previous_document, func () -> unit!:
+            self.workspace.next_document(-1)
+            self.refresh())
+        kit.bind(actions.document_settings, self.document_settings.open)
+        kit.bind(actions.settings, self.settings_dialog.open)
+        kit.bind(actions.undo, self.then_refresh(self.workspace.undo))
+        kit.bind(actions.redo, self.then_refresh(self.workspace.redo))
+        kit.bind(actions.fill, func () -> unit!:
+            self.workspace.fill_selection(false)
+            self.refresh())
+        kit.bind(actions.fill_background, func () -> unit!:
+            self.workspace.fill_selection(false, true)
+            self.refresh())
+        kit.bind(actions.clear, func () -> unit!:
+            self.workspace.fill_selection(true)
+            self.refresh())
+        kit.bind(actions.swap_colors, self.then_refresh(self.workspace.swap_colors))
+        kit.bind(actions.reset_colors, self.then_refresh(self.workspace.reset_colors))
+        kit.bind(actions.select_all, self.then_refresh(self.workspace.select_all))
+        kit.bind(actions.deselect, self.then_refresh(self.workspace.deselect))
+        kit.bind(actions.inverse, self.then_refresh(self.workspace.invert_selection))
+        kit.bind(actions.expand, func () -> unit!:
+            self.prompts.ask("expand", "Expand the selection by, in pixels (1..512)", "4", "Expand"))
+        kit.bind(actions.contract, func () -> unit!:
+            self.prompts.ask("contract", "Contract the selection by, in pixels (1..512)", "4", "Contract"))
+        kit.bind(actions.feather, func () -> unit!:
+            self.prompts.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather"))
+        kit.bind(actions.crop, self.crop)
+        kit.bind(actions.canvas_size, func () -> unit!:
+            self.prompts.ask("canvas", "Canvas size: width x height, then the old canvas's offset x y (e.g. 1920 x 1080 0 0)",
+                             f"{self.workspace.width()} x {self.workspace.height()} 0 0", "Resize"))
+        kit.bind(actions.image_size, func () -> unit!:
+            self.prompts.ask("image", "Image size: width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Resize"))
+        kit.bind(actions.blur, self.adjust.blur)
+        kit.bind(actions.free_transform, self.adjust.free_transform)
+        kit.bind(actions.layer_style, self.adjust.layer_style)
+        kit.bind(actions.rename_layer, func () -> unit!:
+            self.prompts.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename"))
+        kit.bind(actions.add_layer, self.add_layer)
+        kit.bind(actions.duplicate_layer, self.duplicate_layer)
+        kit.bind(actions.layer_up, func () -> unit!:
+            self.workspace.reorder(1)
+            self.refresh())
+        kit.bind(actions.layer_down, func () -> unit!:
+            self.workspace.reorder(-1)
+            self.refresh())
+        kit.bind(actions.merge_down, self.then_refresh(self.workspace.merge_down))
+        kit.bind(actions.delete_layer, self.delete_layer)
+        kit.bind(actions.toggle_mask, self.toggle_mask)
+        kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
+        kit.bind(actions.toggle_clipped, self.toggle_clipped)
+        kit.bind(actions.toggle_visibility, self.toggle_visibility)
+        kit.bind(actions.show_rulers, func () -> unit!:
             self.workspace.show_rulers = not self.workspace.show_rulers
             self.view_changed())
-        self.bind(actions.show_grid, func () -> unit!:
+        kit.bind(actions.show_grid, func () -> unit!:
             self.workspace.show_grid = not self.workspace.show_grid
             self.view_changed())
         var unit_index = 0
-        for unit_name in ["px", "mm", "in"]:
+        for unit_name in unit_ids():
             let chosen = unit_name
-            self.bind(actions.units[unit_index], func () -> unit!:
+            kit.bind(actions.units[unit_index], func () -> unit!:
                 self.workspace.units = chosen
                 self.view_changed())
             unit_index += 1
-        self.bind(actions.close_document, self.close_document)
-        self.bind(actions.next_document, func () -> unit!:
-            self.workspace.next_document(1)
+        kit.bind(actions.fit, func () -> unit!:
+            self.workspace.fitted = false
             self.refresh())
-        self.bind(actions.previous_document, func () -> unit!:
-            self.workspace.next_document(-1)
+        kit.bind(actions.actual_size, func () -> unit!:
+            let bounds = self.view.layout().bounds()
+            self.workspace.actual_size(bounds.width, bounds.height)
             self.refresh())
-        self.bind(actions.settings, self.settings_dialog.open)
-        self.bind(actions.fill_background, self.fill_background)
-        self.bind(actions.clear, self.clear_selection)
-        self.bind(actions.swap_colors, func () -> unit!:
-            self.workspace.swap_colors()
+        kit.bind(actions.zoom_in, func () -> unit!:
+            self.zoom_by(2.0))
+        kit.bind(actions.zoom_out, func () -> unit!:
+            self.zoom_by(0.5))
+        kit.bind(actions.bigger, func () -> unit!:
+            self.workspace.scale_brush(1.25)
             self.refresh())
-        self.bind(actions.reset_colors, func () -> unit!:
-            self.workspace.reset_colors()
+        kit.bind(actions.smaller, func () -> unit!:
+            self.workspace.scale_brush(0.8)
             self.refresh())
-        self.bind(actions.select_all, self.select_all)
-        self.bind(actions.deselect, self.deselect)
-        self.bind(actions.inverse, self.invert_selection)
-        self.bind(actions.expand, self.expand_selection)
-        self.bind(actions.contract, self.contract_selection)
-        self.bind(actions.feather, self.feather_selection)
-        self.bind(actions.crop, self.crop)
-        self.bind(actions.canvas_size, self.canvas_size)
-        self.bind(actions.image_size, self.image_size)
-        self.bind(actions.blur, self.blur)
-        self.bind(actions.free_transform, self.free_transform)
-        self.bind(actions.layer_style, self.layer_style)
-        self.bind(actions.rename_layer, self.rename_layer)
-        self.bind(actions.add_layer, self.add_layer)
-        self.bind(actions.duplicate_layer, self.duplicate_layer)
-        self.bind(actions.layer_up, self.layer_up)
-        self.bind(actions.layer_down, self.layer_down)
-        self.bind(actions.merge_down, self.merge_down)
-        self.bind(actions.delete_layer, self.delete_layer)
-        self.bind(actions.toggle_mask, self.toggle_mask)
-        self.bind(actions.toggle_mask_editing, self.toggle_mask_editing)
-        self.bind(actions.toggle_clipped, self.toggle_clipped)
-        self.bind(actions.toggle_visibility, self.toggle_visibility)
-        self.bind(actions.fit, self.fit)
-        self.bind(actions.actual_size, self.actual_size)
-        self.bind(actions.zoom_in, self.zoom_in)
-        self.bind(actions.zoom_out, self.zoom_out)
-        self.bind(actions.bigger, self.bigger)
-        self.bind(actions.smaller, self.smaller)
         var kind = 0
         for command in actions.adjustments:
             let selected = kind
-            self.bind(command, func () -> unit!:
-                self.adjust(selected))
+            kit.bind(command, func () -> unit!:
+                self.adjust_kind(selected))
             kind += 1
         var mode = 0
         for command in actions.blends:
             let chosen = mode
-            self.bind(command, func () -> unit!:
+            kit.bind(command, func () -> unit!:
                 self.set_blend(chosen))
             mode += 1
         for command in actions.tools:
             let tool = command.id()
-            self.bind(command, func () -> unit!:
+            kit.bind(command, func () -> unit!:
                 self.choose_tool(tool))
 
-    ## Layer › Rename…: ask for the selected layer's new name.
-    pub func rename_layer(self) -> unit!:
-        self.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename")
+    ## `change` to the workspace, then refresh the window.
+    func then_refresh(self, change: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            change()
+            self.refresh()
+
+    # -- Tools and colors.
+
+    ## A key let go over the canvas: if it is the current tool's key and the
+    ## tool was used while it was held, return to the tool before, as
+    ## Photoshop's spring-loaded tools do. A tap keeps the new tool.
+    pub func spring_back(self, key: Key) -> unit!:
+        let workspace = self.workspace
+        if not workspace.tool_used or workspace.tool_before == workspace.tool:
+            return
+        for command in self.actions.tools:
+            if command.id() == workspace.tool and command.shortcut().key == key:
+                self.choose_tool(workspace.tool_before)
+                return
+
+    pub func choose_tool(self, tool: str) -> unit!:
+        self.workspace.choose_tool(tool)
+        self.refresh()
+
+    ## Brush…: Brush Settings, floating the first time.
+    pub func open_brush(self) -> unit!:
+        self.brush.open(self.dock)
 
     ## A palette swatch clicked: the picker opens for that color — or, on a
     ## mask, the black/white choice.
@@ -656,281 +319,67 @@ pub class Panels:
         self.mask_prompt.hide()
         self.refresh()
 
-    pub func fill_background(self) -> unit!:
-        self.workspace.fill_selection(false, true)
-        self.refresh()
-
     ## The text tool clicked: ask for the text to set there.
     func place_text(self) -> unit!:
-        self.ask("text", "Text to set at the click, in the foreground color", "", "Set")
+        self.prompts.ask("text", "Text to set at the click, in the foreground color", "", "Set")
 
-    func toggle_contiguous(self) -> unit!:
-        self.workspace.contiguous = not self.workspace.contiguous
-        self.contiguous_button.set_text("Contiguous ✓" if self.workspace.contiguous else "Contiguous")
-
-    func bind(self, command: Command, callback: func() -> unit!) -> unit!:
-        self.connections.append(command.on_trigger(callback))
-
-    ## A square icon button that triggers a tool command: 32 points, the rail's content width.
-    func tool_button(self, icon: str, command: Command) -> Button!:
-        let button = Button(icon = icon, font = self.font)
-        self.connections.append(button.on_click(func () -> unit!:
-            command.trigger()))
-        button.layout().set_size(32.0, 32.0)
-        return button
-
-    ## A shelf button: 25 points square, plain, so only the icon shows at rest.
-    func shelf_button(self, icon: str, callback: func() -> unit!) -> Button!:
-        let button = Button(icon = icon, font = self.font)
-        button.set_style(ButtonStyle.plain)
-        self.connections.append(button.on_click(callback))
-        button.layout().set_size(25.0, 25.0)
-        return button
-
-    ## Brush Settings…: Photoshop's sections — Tip Shape, Shape Dynamics,
-    ## Scattering, Texture, Color Dynamics, Transfer — as an accordion, one
-    ## open at a time, each rows of a slider and a number field. Edits go
-    ## straight to the workspace; the next stroke paints with them. A panel,
-    ## so it floats or docks wherever the user puts it.
-    func build_brush_panel(self, font: Font) -> Panel!:
-        var tip: list[Widget] = []
-        tip.append(self.brush_row("Spacing", 1.0, 500.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.spacing = value / 100.0))
-        tip.append(self.brush_row("Angle", -180.0, 180.0, 0, "°", func (value: float) -> unit!:
-            self.workspace.angle = value))
-        tip.append(self.brush_row("Roundness", 5.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.roundness = value / 100.0))
-        tip.append(self.brush_row("Smoothing", 0.0, 100.0, 0, " px", func (value: float) -> unit!:
-            self.workspace.smoothing = value))
-        var shape: list[Widget] = []
-        shape.append(self.brush_row("Size Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.size_jitter = value / 100.0))
-        shape.append(self.brush_row("Angle Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.angle_jitter = value / 100.0))
-        shape.append(self.brush_row("Roundness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.roundness_jitter = value / 100.0))
-        shape.append(self.brush_check("Pen pressure controls size", func () -> unit!:
-            self.workspace.pressure_size = not self.workspace.pressure_size))
-        var scattering: list[Widget] = []
-        scattering.append(self.brush_row("Scatter", 0.0, 1000.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.scatter = value / 100.0))
-        scattering.append(self.brush_row("Count", 1.0, 16.0, 0, "", func (value: float) -> unit!:
-            self.workspace.scatter_count = int(value)))
-        var texture: list[Widget] = [self.dialog_row("Pattern", self.texture_menu)]
-        texture.append(self.brush_row("Scale", 10.0, 1000.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.texture_scale = value / 100.0))
-        texture.append(self.brush_row("Depth", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.texture_depth = value / 100.0))
-        var color_rows: list[Widget] = []
-        color_rows.append(self.brush_row("Hue Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.hue_jitter = value / 100.0))
-        color_rows.append(self.brush_row("Saturation Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.saturation_jitter = value / 100.0))
-        color_rows.append(self.brush_row("Brightness Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.brightness_jitter = value / 100.0))
-        var transfer: list[Widget] = []
-        transfer.append(self.brush_row("Flow Jitter", 0.0, 100.0, 0, "%", func (value: float) -> unit!:
-            self.workspace.flow_jitter = value / 100.0))
-        transfer.append(self.brush_check("Pen pressure controls flow", func () -> unit!:
-            self.workspace.pressure_flow = not self.workspace.pressure_flow))
-        var sections: list[Widget] = []
-        for rows in [tip, shape, scattering, texture, color_rows, transfer]:
-            sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
-        let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = font, open = 0)
-        return Panel("Brush Settings", VStack([stack, Spacer()], spacing = 0.0, padding = 6.0), minimum = Size(320.0, 240.0))
-
-    ## The texture menu's entries: picking one sets the pattern.
-    func texture_commands(self) -> list[Command]!:
-        var kinds: list[Command] = []
-        var kind = 0
-        for name in ["None", "Grain", "Canvas", "Dots"]:
-            let chosen = kind
-            let command = Command(name, id = f"texture_{kind}")
-            self.connections.append(command.on_trigger(func () -> unit!:
-                self.workspace.texture = chosen
-                self.show_brush()))
-            kinds.append(command)
-            kind += 1
-        return kinds
-
-    ## A dialog row: a muted label in a 140-point column, then the control.
-    func dialog_row(self, label: str, control: Widget) -> Widget!:
-        let caption = Text(label, font = self.font, muted = true)
-        caption.layout().set_limits(Size(140.0, 0.0), Size(140.0, 16384.0))
-        return HStack([caption, control], spacing = 10.0)
-
-    ## A brush setting: slider and number field in step, `apply` taking the value.
-    func brush_row(self, label: str, minimum: float, maximum: float, decimals: int, suffix: str, apply: func(float) -> unit!) -> Widget!:
-        let step = 1.0 if decimals == 0 else 0.1
-        let slider = Slider("", minimum, maximum, minimum, step, decimals = decimals, font = self.font, show_value = false)
-        slider.layout().set_flex()
-        let field = NumberField(minimum, minimum, maximum, step, decimals, suffix = suffix, font = self.font, cells = 7.0)
-        self.connections.append(slider.on_change(func (value: float) -> unit!:
-            field.set_value(value)
-            apply(value)
-            self.workspace.touch()))
-        self.connections.append(field.on_change(func (value: float) -> unit!:
-            slider.set_value(value)
-            apply(value)
-            self.workspace.touch()))
-        self.brush_sliders.append(slider)
-        self.brush_fields.append(field)
-        return self.dialog_row(label, HStack([slider, field], spacing = 10.0))
-
-    func brush_check(self, label: str, toggle: func() -> unit!) -> Widget!:
-        let box = Checkbox(label, font = self.font)
-        self.connections.append(box.on_change(func (value: bool) -> unit!:
-            discard(value)
-            toggle()
-            self.workspace.touch()))
-        self.brush_checks.append(box)
-        return box
-
-    ## Set one brush row from code, slider and field together.
-    func set_brush_row(self, index: int, value: float) -> unit!:
-        self.brush_sliders[index].set_value(value)
-        self.brush_fields[index].set_value(value)
-
-    ## Show the workspace's brush in the dialog, in the rows' order.
-    func show_brush(self) -> unit!:
-        let w = self.workspace
-        self.set_brush_row(0, w.spacing * 100.0)
-        self.set_brush_row(1, w.angle)
-        self.set_brush_row(2, w.roundness * 100.0)
-        self.set_brush_row(3, w.smoothing)
-        self.set_brush_row(4, w.size_jitter * 100.0)
-        self.set_brush_row(5, w.angle_jitter * 100.0)
-        self.set_brush_row(6, w.roundness_jitter * 100.0)
-        self.set_brush_row(7, w.scatter * 100.0)
-        self.set_brush_row(8, float(w.scatter_count))
-        self.set_brush_row(9, w.texture_scale * 100.0)
-        self.set_brush_row(10, w.texture_depth * 100.0)
-        self.set_brush_row(11, w.hue_jitter * 100.0)
-        self.set_brush_row(12, w.saturation_jitter * 100.0)
-        self.set_brush_row(13, w.brightness_jitter * 100.0)
-        self.set_brush_row(14, w.flow_jitter * 100.0)
-        self.brush_checks[0].set_checked(w.pressure_size)
-        self.brush_checks[1].set_checked(w.pressure_flow)
-        self.texture_menu.set_text(["None", "Grain", "Canvas", "Dots"][w.texture] + " ▾")
-
-    ## Show Brush Settings: floating the first time, else brought forward
-    ## wherever it was left, floating or docked.
-    pub func open_brush(self) -> unit!:
-        self.show_brush()
-        if self.dock.contains(self.brush_panel):
-            self.dock.select(self.brush_panel)
-        else:
-            self.dock.float(self.brush_panel)
-
-    ## A properties row after eleusis: a muted label in a fixed column, the
-    ## control, and a one-point rule beneath.
-    func property_row(self, label: str, control: Widget) -> VStack!:
-        let caption = Text(label, font = self.font, muted = true)
-        caption.layout().set_limits(Size(64.0, 0.0), Size(64.0, 16384.0))
-        let row = HStack([caption, control], spacing = 6.0, padding = 4.0)
-        return VStack([row, Rule()], spacing = 0.0)
-
-    ## A header control with its muted caption before it.
-    func labelled(self, label: str, control: Widget) -> HStack!:
-        return HStack([Text(label, font = self.font, muted = true), control], spacing = 4.0)
-
-    ## A flag checkbox; the state itself comes from the layer on refresh, so the
-    ## callback toggles the flag rather than copying the box's value.
-    func checkbox(self, label: str, callback: func() -> unit!) -> Checkbox!:
-        let box = Checkbox(label, font = self.font)
-        self.connections.append(box.on_change(func (value: bool) -> unit!:
-            discard(value)
-            callback()))
-        return box
-
-    func icon_button(self, icon: str, callback: func() -> unit!) -> Button!:
-        let button = Button(icon = icon, font = self.font)
-        self.connections.append(button.on_click(callback))
-        return button
-
-    ## A key let go over the canvas: if it is the current tool's key and the
-    ## tool was used while it was held, return to the tool before, as
-    ## Photoshop's spring-loaded tools do. A tap keeps the new tool.
-    pub func spring_back(self, key: Key) -> unit!:
-        let workspace = self.workspace
-        if not workspace.tool_used or workspace.tool_before == workspace.tool:
+    ## Open the adjustment's sliders with a live preview, or apply the ones
+    ## that take no parameters (invert, desaturate) at once.
+    pub func adjust_kind(self, kind: int) -> unit!:
+        if kind == 2 or kind == 4:
+            self.workspace.adjust(kind, [])
+            self.refresh()
             return
-        for command in self.actions.tools:
-            if command.id() == workspace.tool and command.shortcut().key == key:
-                self.choose_tool(workspace.tool_before)
-                return
+        let titles = ["Brightness / Contrast", "Hue / Saturation / Lightness", "", "Levels", "", "Threshold", "Posterize", "Curves"]
+        self.adjust.open(kind, titles[kind])
 
-    pub func choose_tool(self, tool: str) -> unit!:
-        self.workspace.choose_tool(tool)
+    pub func crop(self) -> unit!:
+        self.workspace.crop() catch failure:
+            self.prompts.tell(f"Cannot crop: {failure.message}")
+            return
         self.refresh()
 
-    pub func blur(self) -> unit!:
-        self.open_preview(8, "Gaussian Blur")
+    # -- Layers.
 
-    pub func free_transform(self) -> unit!:
-        var index = 0
-        while index < 5:
-            self.set_control(9, index, 100.0 if index < 2 else 0.0)
-            index += 1
-        self.open_preview(9, "Free Transform")
-
-    pub func select_all(self) -> unit!:
-        self.workspace.select_all()
+    pub func add_layer(self) -> unit!:
+        self.workspace.add_layer()
         self.refresh()
 
-    pub func invert_selection(self) -> unit!:
-        self.workspace.invert_selection()
+    pub func duplicate_layer(self) -> unit!:
+        self.workspace.duplicate()
         self.refresh()
 
-    pub func expand_selection(self) -> unit!:
-        self.ask("expand", "Expand the selection by, in pixels (1..512)", "4", "Expand")
-
-    pub func contract_selection(self) -> unit!:
-        self.ask("contract", "Contract the selection by, in pixels (1..512)", "4", "Contract")
-
-    pub func feather_selection(self) -> unit!:
-        self.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather")
-
-    pub func deselect(self) -> unit!:
-        self.workspace.deselect()
+    pub func delete_layer(self) -> unit!:
+        self.workspace.delete_layer()
         self.refresh()
 
-    pub func fill_selection(self) -> unit!:
-        self.workspace.fill_selection(false)
+    pub func select_layer(self, index: int) -> unit!:
+        self.workspace.select(index)
         self.refresh()
 
-    pub func clear_selection(self) -> unit!:
-        self.workspace.fill_selection(true)
+    pub func toggle_visibility(self) -> unit!:
+        self.workspace.toggle_visibility()
         self.refresh()
 
-    func cancel_prompt(self):
-        self.prompt_mode = ""
-        self.prompt.layout().set_visible(false)
+    pub func toggle_mask(self) -> unit!:
+        self.workspace.toggle_mask()
+        self.refresh()
 
-    func ask(self, mode: str, title: str, value: str, accept: str) -> unit!:
-        self.prompt.open(title, value, accept = accept)
-        self.prompt_mode = mode
+    pub func toggle_clipped(self) -> unit!:
+        self.workspace.toggle_clipped()
+        self.refresh()
 
-    ## Show a crash report the last run left.
-    pub func show_crash(self, report: str) -> unit!:
-        self.crash_report = report
-        self.crash_text.set_text(report)
-        self.crash_copy.set_text("Copy")
-        self.crash_dialog.open()
+    pub func set_blend(self, mode: int) -> unit!:
+        self.workspace.set_blend(mode)
+        self.refresh()
 
-    ## Copy: the whole report to the clipboard, and the button says so.
-    func copy_crash(self) -> unit!:
-        clipboard.write_text(self.crash_report)
-        self.crash_copy.set_text("Copied")
-
-    func close_crash(self) -> unit!:
-        self.crash_dialog.hide()
+    # -- Documents and files.
 
     ## Files dropped on the canvas: each opens in its own tab.
     pub func open_files(self, files: list[str]) -> unit!:
         for path in files:
             self.workspace.open(path) catch failure:
-                self.ask("", f"Could not open {path}: {failure.message}", "", "OK")
+                self.prompts.tell(f"Could not open {path}: {failure.message}")
                 continue
         self.refresh()
 
@@ -938,17 +387,8 @@ pub class Panels:
     pub func place_files(self, files: list[str]) -> unit!:
         for path in files:
             self.workspace.place_file(path, float(self.workspace.width()) * 0.5, float(self.workspace.height()) * 0.5) catch failure:
-                self.ask("", f"Could not place {path}: {failure.message}", "", "OK")
+                self.prompts.tell(f"Could not place {path}: {failure.message}")
                 continue
-        self.refresh()
-
-    ## Image › Document Settings…
-    pub func open_document_settings(self) -> unit!:
-        self.document_settings.open()
-
-    ## A view aid changed: keep it and redraw.
-    func view_changed(self) -> unit!:
-        self.settings_dialog.remember_view()
         self.refresh()
 
     pub func switch_document(self, index: int) -> unit!:
@@ -965,20 +405,20 @@ pub class Panels:
         self.close_document_at(self.workspace.current)
 
     pub func new_document(self) -> unit!:
-        self.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
+        self.prompts.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
 
     pub func open_document(self) -> unit!:
         if let app = self.app:
             let chosen = app.open_file("Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF or EXR picture") catch failure:
-                self.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
                 return
             if chosen != "":
                 self.workspace.open(chosen) catch failure:
-                    self.ask("open", f"Could not open: {failure.message}", chosen, "Open")
+                    self.prompts.ask("open", f"Could not open: {failure.message}", chosen, "Open")
                     return
                 self.refresh()
             return
-        self.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
 
     pub func save_document(self) -> unit!:
         if self.workspace.path == "":
@@ -988,301 +428,60 @@ pub class Panels:
         self.refresh()
 
     pub func save_document_as(self) -> unit!:
+        let fallback = "Save the flattened document as (extension picks the format)"
         if let app = self.app:
             let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.l2d"
             let chosen = app.save_file("Save as .l2d to keep the layers, or as PNG, JPEG or TIFF for a flattened picture", suggested) catch failure:
-                self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
+                self.prompts.ask("save", fallback, self.workspace.path, "Save")
                 return
             if chosen != "":
                 self.workspace.save(chosen) catch failure:
-                    self.ask("save", f"Could not save: {failure.message}", chosen, "Save")
+                    self.prompts.ask("save", f"Could not save: {failure.message}", chosen, "Save")
                     return
                 self.refresh()
             return
-        self.ask("save", "Save the flattened document as (extension picks the format)", self.workspace.path, "Save")
+        self.prompts.ask("save", fallback, self.workspace.path, "Save")
 
-    ## Open the adjustment's sliders with a live preview, or apply the ones
-    ## that take no parameters at once.
-    pub func adjust(self, kind: int) -> unit!:
-        if kind == 2 or kind == 4:
-            self.workspace.adjust(kind, [])
-            self.refresh()
-            return
-        var title = "Brightness / Contrast"
-        if kind == 1:
-            title = "Hue / Saturation / Lightness"
-        elif kind == 3:
-            title = "Levels"
-        elif kind == 5:
-            title = "Threshold"
-        elif kind == 6:
-            title = "Posterize"
-        elif kind == 7:
-            title = "Curves"
-        self.open_preview(kind, title)
+    ## Show a crash report the last run left.
+    pub func show_crash(self, report: str) -> unit!:
+        self.crash.show(report)
 
-    pub func crop(self) -> unit!:
-        self.workspace.crop() catch failure:
-            self.ask("", f"Cannot crop: {failure.message}", "", "OK")
-            return
+    # -- Showing the state.
+
+    ## A view aid changed: keep it and redraw.
+    func view_changed(self) -> unit!:
+        self.settings_dialog.remember_view()
         self.refresh()
-
-    pub func canvas_size(self) -> unit!:
-        self.ask("canvas", "Canvas size: width x height, then the old canvas's offset x y (e.g. 1920 x 1080 0 0)", f"{self.workspace.width()} x {self.workspace.height()} 0 0", "Resize")
-
-    pub func image_size(self) -> unit!:
-        self.ask("image", "Image size: width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Resize")
-
-    func parse_size(self, text: str) -> list[int]!:
-        var numbers: list[int] = []
-        for part in text.replace("x", " ").split(" "):
-            let piece = part.trim()
-            if piece == "":
-                continue
-            let number = int(piece) catch failure:
-                return []
-            numbers.append(number)
-        return numbers
-
-    pub func fit(self) -> unit!:
-        self.workspace.fitted = false
-        self.refresh()
-
-    pub func actual_size(self) -> unit!:
-        let bounds = self.view.layout().bounds()
-        self.workspace.actual_size(bounds.width, bounds.height)
-        self.refresh()
-
-    pub func zoom_in(self) -> unit!:
-        self.zoom_by(2.0)
-
-    pub func zoom_out(self) -> unit!:
-        self.zoom_by(0.5)
 
     func zoom_by(self, factor: float) -> unit!:
         let bounds = self.view.layout().bounds()
         self.workspace.zoom_about(factor, bounds.width * 0.5, bounds.height * 0.5)
         self.refresh()
 
-    pub func undo(self) -> unit!:
-        self.workspace.undo()
-        self.refresh()
-
-    pub func redo(self) -> unit!:
-        self.workspace.redo()
-        self.refresh()
-
-    pub func bigger(self) -> unit!:
-        self.workspace.scale_brush(1.25)
-        self.refresh()
-
-    pub func smaller(self) -> unit!:
-        self.workspace.scale_brush(0.8)
-        self.refresh()
-
-    pub func add_layer(self) -> unit!:
-        self.workspace.add_layer()
-        self.refresh()
-
-    pub func duplicate_layer(self) -> unit!:
-        self.workspace.duplicate()
-        self.refresh()
-
-    pub func layer_up(self) -> unit!:
-        self.workspace.reorder(1)
-        self.refresh()
-
-    pub func layer_down(self) -> unit!:
-        self.workspace.reorder(-1)
-        self.refresh()
-
-    pub func merge_down(self) -> unit!:
-        self.workspace.merge_down()
-        self.refresh()
-
-    pub func delete_layer(self) -> unit!:
-        self.workspace.delete_layer()
-        self.refresh()
-
-    pub func toggle_visibility(self) -> unit!:
-        self.workspace.toggle_visibility()
-        self.refresh()
-
-    pub func set_blend(self, mode: int) -> unit!:
-        let workspace = self.workspace
-        workspace.canvas.set_layer(workspace.selected_id(), workspace.canvas.layer_visible(workspace.selected), workspace.canvas.layer_opacity(workspace.selected), mode)
-        workspace.touch()
-        self.refresh()
-
-    pub func cycle_blend(self, step: int) -> unit!:
-        self.workspace.cycle_blend(step)
-        self.refresh()
-
-    pub func toggle_mask(self) -> unit!:
-        self.workspace.toggle_mask()
-        self.refresh()
-
-    pub func toggle_mask_editing(self) -> unit!:
-        self.workspace.toggle_mask_editing()
-        self.refresh()
-
-    pub func toggle_clipped(self) -> unit!:
-        self.workspace.toggle_clipped()
-        self.refresh()
-
-    pub func select_layer(self, index: int) -> unit!:
-        self.workspace.select(index)
-        self.refresh()
-
-    func reject(self, text: str, message: str) -> unit!:
-        self.prompt.open(message, text, accept = "Retry")
-
-    pub func apply(self, text: str) -> unit!:
-        let mode = self.prompt_mode
-        let trimmed = text.trim()
-        if mode == "":
-            return
-        if mode == "open":
-            self.workspace.open(trimmed) catch failure:
-                self.reject(text, f"Could not open: {failure.message}")
-                return
-        elif mode == "rename":
-            if trimmed == "":
-                return
-            self.workspace.rename(trimmed) catch failure:
-                self.reject(text, f"Could not rename: {failure.message}")
-                return
-        elif mode == "text":
-            if trimmed == "":
-                return
-            self.workspace.draw_text(trimmed) catch failure:
-                self.reject(text, f"Could not set text: {failure.message}")
-                return
-        elif mode == "save":
-            if trimmed == "":
-                self.reject(text, "Enter a file name with an extension")
-                return
-            self.workspace.save(trimmed) catch failure:
-                self.reject(text, f"Could not save: {failure.message}")
-                return
-        elif mode == "new":
-            let parts = trimmed.split("x")
-            if parts.length != 2:
-                self.reject(text, "Enter a size like 1920 x 1080")
-                return
-            let width = int(parts[0].trim()) catch failure:
-                self.reject(text, "Enter a size like 1920 x 1080")
-                return
-            let height = int(parts[1].trim()) catch failure:
-                self.reject(text, "Enter a size like 1920 x 1080")
-                return
-            if width < 1 or height < 1 or width > 16384 or height > 16384:
-                self.reject(text, "Each side must be 1..16384 pixels")
-                return
-            self.workspace.create(width, height)
-        elif mode == "canvas":
-            let numbers = self.parse_size(trimmed)
-            if numbers.length != 4 and numbers.length != 2:
-                self.reject(text, "Enter: width x height offset_x offset_y")
-                return
-            let ox = numbers[2] if numbers.length == 4 else 0
-            let oy = numbers[3] if numbers.length == 4 else 0
-            self.workspace.resize_canvas(numbers[0], numbers[1], ox, oy) catch failure:
-                self.reject(text, f"Could not resize: {failure.message}")
-                return
-        elif mode == "image":
-            let numbers = self.parse_size(trimmed)
-            if numbers.length != 2:
-                self.reject(text, "Enter: width x height")
-                return
-            self.workspace.resize_image(numbers[0], numbers[1]) catch failure:
-                self.reject(text, f"Could not resize: {failure.message}")
-                return
-        elif mode == "expand" or mode == "contract" or mode == "feather":
-            let amount = int(trimmed) catch failure:
-                self.reject(text, "Enter a whole number: 1..512")
-                return
-            if amount < 1 or amount > 512:
-                self.reject(text, "Enter a whole number: 1..512")
-                return
-            let pixels = amount if mode == "expand" else (-amount if mode == "contract" else 0)
-            self.workspace.adjust_selection(pixels, amount if mode == "feather" else 0) catch failure:
-                self.reject(text, f"Could not adjust: {failure.message}")
-                return
-        self.cancel_prompt()
-        self.refresh()
+    ## The document's pixels changed without a structural change: redraw the
+    ## canvas and the layer thumbnails.
+    func document_changed(self) -> unit!:
+        self.view.layout().invalidate()
+        self.layers.layout().invalidate()
 
     pub func refresh(self) -> unit!:
         let workspace = self.workspace
-        let name = workspace.path if workspace.path != "" else "Untitled"
-        let percent = int(workspace.zoom * 100.0 + 0.5)
-        var tool = workspace.tool_name()
-        if workspace.canvas.editing_mask() and (workspace.tool == "brush" or workspace.tool == "eraser"):
-            tool = tool + " on mask"
-        self.header_title.set_text(tool)
-        self.brush_controls.layout().set_visible(workspace.tool == "brush" or workspace.tool == "eraser" or workspace.tool == "gradient")
-        self.wand_controls.layout().set_visible(workspace.tool == "wand")
-        self.text_controls.layout().set_visible(workspace.tool == "text")
+        self.header.show(self.picker.is_open())
         self.palette.layout().invalidate()
         self.picker.sync()
-        self.size_field.set_value(workspace.diameter)
-        self.hardness_field.set_value(workspace.hardness * 100.0)
-        self.opacity_field.set_value(workspace.opacity * 100.0)
-        self.flow_field.set_value(workspace.flow * 100.0)
-        self.spacing_field.set_value(workspace.spacing * 100.0)
-        self.preset_menu.set_text(workspace.preset + " ▾")
-        if self.dock.contains(self.brush_panel):
-            self.show_brush()
-        var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
-        if self.picker.is_open():
-            hint = "Click the canvas to sample a color · X swaps · D resets"
-        elif workspace.tool == "move":
-            hint = "Drag to move the layer · arrows nudge 1 px, shift 10 px"
-        elif workspace.tool == "lasso":
-            hint = "Drag around the area to select · shift adds · alt subtracts · cmd-D deselect"
-        elif workspace.tool == "marquee" or workspace.tool == "ellipse":
-            hint = "Drag to select · shift adds, alt subtracts · shift while dragging squares, alt centers · cmd-A all · cmd-D deselect"
-        elif workspace.tool == "wand":
-            hint = "Click a color to select it · shift adds · alt subtracts"
-        elif workspace.tool == "text":
-            hint = "Click where the text starts, then type it"
-        elif workspace.tool == "eyedropper":
-            hint = "Click a color to make it the foreground color"
-        elif workspace.tool == "gradient":
-            hint = "Drag from the foreground color to the background color · fills the selection"
-        elif workspace.tool == "hand":
-            hint = "Drag to pan"
-        elif workspace.tool == "zoom":
-            hint = "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool"
-        self.header_hint.set_text(hint)
+        if self.dock.contains(self.brush.panel):
+            self.brush.show()
+        self.properties.show()
+        let name = workspace.path if workspace.path != "" else "Untitled"
+        let percent = int(workspace.zoom * 100.0 + 0.5)
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
         self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
-        self.layer_count.set_text(f"{workspace.layer_count()}")
         self.layers_panel.set_text(f"Layers · {workspace.layer_count()}")
-        if not self.layer_name.layout().is_focused():
-            self.layer_name.set_text(workspace.canvas.layer_name(workspace.selected))
-        self.blend_menu.set_text(Canvas.blend_mode_name(workspace.canvas.layer_blend(workspace.selected)) + " ▾")
-        self.visible_box.set_checked(workspace.canvas.layer_visible(workspace.selected))
-        self.clipped_box.set_checked(workspace.canvas.layer_clipped(workspace.selected))
-        self.mask_box.set_checked(workspace.canvas.layer_masked(workspace.selected))
-        var styled = ""
-        if workspace.canvas.layer_styled(workspace.selected):
-            if workspace.style_value(0) != 0.0:
-                styled = styled + "Shadow "
-            if workspace.style_value(8) != 0.0:
-                styled = styled + "Stroke "
-            if workspace.style_value(14) != 0.0:
-                styled = styled + "Glow"
-        self.styles_text.set_text(styled if styled != "" else "None")
         var slot = 0
         for command in self.actions.tools:
             self.tool_buttons[slot].set_style(ButtonStyle.selected if command.id() == workspace.tool else ButtonStyle.sunken)
             slot += 1
         self.actions.update(workspace)
-        self.layer_opacity.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
-        self.layer_opacity_field.set_value(workspace.canvas.layer_opacity(workspace.selected) * 100.0)
-        self.layers.layout().invalidate()
-        self.tabs.layout().invalidate()
         # The view aids, with their state in the View menu.
         self.ruler_row.layout().set_visible(workspace.show_rulers)
         self.left_ruler_menu.layout().set_visible(workspace.show_rulers)
@@ -1291,20 +490,20 @@ pub class Panels:
         self.actions.show_rulers.set_text("Show Rulers ✓" if workspace.show_rulers else "Show Rulers")
         self.actions.show_grid.set_text("Show Grid ✓" if workspace.show_grid else "Show Grid")
         var shown = 0
-        for unit_name in ["px", "mm", "in"]:
-            let label = ["Pixels", "Millimeters", "Inches"][shown]
+        for unit_name in unit_ids():
+            let label = unit_label(unit_name)
             self.actions.units[shown].set_text(label + " ✓" if workspace.units == unit_name else label)
             shown += 1
+        self.layers.layout().invalidate()
+        self.tabs.layout().invalidate()
         self.view.layout().invalidate()
 
     pub func close(self):
-        self.cancel_prompt()
+        self.prompts.cancel()
         self.settings_dialog.close()
         self.picker.close()
         self.document_settings.close()
         if self.workspace.previewing():
             self.workspace.end_preview(false) catch failure:
                 discard(failure)
-        for connection in self.connections:
-            connection.disconnect()
-        self.connections.clear()
+        self.kit.close()

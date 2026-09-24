@@ -1,0 +1,46 @@
+## Every tool on the rail, in rail order, in one table: the id the workspace
+## keeps, the menu name and the shorter title the header shows, its
+## luciaos-assets icon, its key (with Shift for the second tool on a key, as
+## Photoshop's Shift-M), and the hint the status line shows while it is active.
+from input import Key
+
+pub class Tool:
+    pub let id: str
+    pub let name: str
+    pub let title: str
+    pub let icon: str
+    pub let key: Key
+    pub let shift: bool
+    pub let hint: str
+
+    pub func init(self, id: str, name: str, title: str, icon: str, key: Key, hint: str, shift: bool = false):
+        self.id = id
+        self.name = name
+        self.title = title
+        self.icon = icon
+        self.key = key
+        self.shift = shift
+        self.hint = hint
+
+pub func tools() -> list[Tool]!:
+    return [Tool("move", "Move", "Move", "move-tool", Key.v, "Drag to move the layer · arrows nudge 1 px, shift 10 px"),
+            Tool("marquee", "Rectangular Marquee", "Marquee", "selection-tool", Key.m,
+                 "Drag to select · shift adds, alt subtracts · shift while dragging squares, alt centers · cmd-A all · cmd-D deselect"),
+            Tool("ellipse", "Elliptical Marquee", "Ellipse", "ellipse-select-tool", Key.m,
+                 "Drag to select · shift adds, alt subtracts · shift while dragging makes a circle, alt centers · cmd-D deselect", shift = true),
+            Tool("lasso", "Lasso", "Lasso", "lasso-tool", Key.l, "Drag around the area to select · shift adds · alt subtracts · cmd-D deselect"),
+            Tool("wand", "Magic Wand", "Magic Wand", "magic-wand-tool", Key.w, "Click a color to select it · shift adds · alt subtracts"),
+            Tool("text", "Text", "Text", "text-tool", Key.t, "Click where the text starts, then type it"),
+            Tool("eyedropper", "Eyedropper", "Eyedropper", "eyedropper-tool", Key.i, "Click a color to make it the foreground color"),
+            Tool("gradient", "Gradient", "Gradient", "gradient-tool", Key.g, "Drag from the foreground color to the background color · fills the selection"),
+            Tool("brush", "Brush", "Brush", "brush-tool", Key.b, "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"),
+            Tool("eraser", "Eraser", "Eraser", "eraser-tool", Key.e, "Drag to erase · [ ] size · Space to pan"),
+            Tool("hand", "Hand", "Hand", "pan-tool", Key.h, "Drag to pan"),
+            Tool("zoom", "Zoom", "Zoom", "zoom-in", Key.z, "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool")]
+
+## The tool whose id is `id`; the brush for an unknown one.
+pub func tool_by_id(id: str) -> Tool!:
+    for tool in tools():
+        if tool.id == id:
+            return tool
+    return tool_by_id("brush")

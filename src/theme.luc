@@ -1,24 +1,18 @@
-from ui import Theme
-from gpu import Color
-import math
-
 ## The look: brutalist, grey, one orange, square. Values are eleusis-layout's,
 ## authored in sRGB bytes and converted to the linear light the GPU blends in.
+from ui import Theme
+from gpu import Color
+from hex_color import parse_hex
+import transfer
+
 func linear(byte: float) -> float:
-    let value = byte / 255.0
-    return value / 12.92 if value <= 0.04045 else math.pow((value + 0.055) / 1.055, 2.4)
+    return transfer.srgb_decode(byte / 255.0)
 
 pub func grey(byte: float) -> Color:
     return Color(linear(byte), linear(byte), linear(byte))
 
 pub func srgb(red: float, green: float, blue: float) -> Color:
     return Color(linear(red), linear(green), linear(blue))
-
-## #E7A03F. Everything the eye is meant to go to. Text on it is black.
-pub func accent() -> Color:
-    return srgb(231.0, 160.0, 63.0)
-pub func selection_inactive() -> Color:
-    return srgb(120.0, 84.0, 40.0)
 
 ## The part of the look Settings can change: the accent, as sRGB hex, and the
 ## control radius. The unfocused selection is the accent at about half its
@@ -29,25 +23,15 @@ pub class Look:
     pub var control_radius: float = 5.0
 
     pub func init(self, hex: str = "#e7a03f", radius: float = 5.0) -> unit!:
-        let components = hex_bytes(hex) else [231.0, 160.0, 63.0]
-        self.accent = srgb(components[0], components[1], components[2])
-        self.selection_inactive = srgb(components[0] * 0.52, components[1] * 0.525, components[2] * 0.635)
+        # The default accent is #E7A03F, everything the eye is meant to go to; text on it is black.
+        let components = parse_hex(hex) else [231.0 / 255.0, 160.0 / 255.0, 63.0 / 255.0]
+        let channel = [components[0] * 255.0, components[1] * 255.0, components[2] * 255.0]
+        self.accent = srgb(channel[0], channel[1], channel[2])
+        self.selection_inactive = srgb(channel[0] * 0.52, channel[1] * 0.525, channel[2] * 0.635)
         self.control_radius = radius
 
-## The sRGB bytes of "#rrggbb", or none for anything else.
-pub func hex_bytes(hex: str) -> list[float]?:
-    let digits = "0123456789abcdef"
-    let lowered = hex.trim().lower()
-    if lowered.length != 7 or lowered[..<1] != "#":
-        return none
-    var values: list[float] = []
-    var index = 1
-    while index < 7:
-        let high = digits.index_of(lowered[index..<index + 1]) else return none
-        let low = digits.index_of(lowered[index + 1..<index + 2]) else return none
-        values.append(float(high * 16 + low))
-        index += 2
-    return values
+## eleusis-layout's greys, darkest to lightest where they stack: the window
+## backdrop, the tab strip, a pane's surface, a raised surface and a border.
 pub func backdrop() -> Color:
     return grey(26.0)
 pub func tab_strip() -> Color:

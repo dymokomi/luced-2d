@@ -1,0 +1,89 @@
+## The Properties pane, after eleusis: what the selected layer is, one row
+## each — its name (edited in place), blend mode, opacity, flags and styles.
+## The flags and the style editor are the window's commands; opacity and the
+## name write to the workspace directly.
+from ui import Text, HStack, VStack, Size, Spacer, Menu, Command, Slider, NumberField, TextField, Checkbox, Panel
+from workspace import Workspace
+from canvas import Canvas
+from kit import Kit
+
+pub class Properties:
+    pub let panel: Panel
+    pub let layer_name: TextField
+    pub let blend_menu: Menu
+    pub let opacity: Slider
+    pub let opacity_field: NumberField
+    pub let visible_box: Checkbox
+    pub let clipped_box: Checkbox
+    pub let mask_box: Checkbox
+    pub let styles_text: Text
+    ## The layer's pixels changed in a way the layer list shows (its opacity).
+    pub var changed: func() -> unit!? = none
+    pub var refreshed: func() -> unit!? = none
+    let workspace: Workspace
+
+    ## `blends` are the blend-mode commands; the other callbacks toggle a flag
+    ## of the selected layer or open its Layer Style.
+    pub func init(self, workspace: Workspace, kit: Kit, blends: list[Command], toggle_visibility: func() -> unit!,
+                  toggle_clipped: func() -> unit!, toggle_mask: func() -> unit!, layer_style: func() -> unit!) -> unit!:
+        self.workspace = workspace
+        let font = kit.font
+        # The name is edited in place; committing it renames the layer.
+        self.layer_name = TextField("", font = font, placeholder = "Layer name", cells = 18.0)
+        kit.keep(self.layer_name.on_commit(func (value: str) -> unit!:
+            if value.trim() != "":
+                self.workspace.rename(value.trim())
+            self.refresh()))
+        self.opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font, show_value = false)
+        self.opacity.layout().set_flex()
+        self.opacity_field = NumberField(100.0, 0.0, 100.0, 1.0, suffix = "%", font = font, cells = 6.0)
+        kit.keep(self.opacity.on_change(func (value: float) -> unit!:
+            self.workspace.set_opacity(value / 100.0)
+            self.opacity_field.set_value(value)
+            self.notify()))
+        kit.keep(self.opacity_field.on_change(func (value: float) -> unit!:
+            self.workspace.set_opacity(value / 100.0)
+            self.opacity.set_value(value)
+            self.notify()))
+        self.visible_box = kit.checkbox("Visible", toggle_visibility)
+        self.clipped_box = kit.checkbox("Clip", toggle_clipped)
+        self.mask_box = kit.checkbox("Mask", toggle_mask)
+        self.styles_text = Text("None", font = font)
+        self.blend_menu = Menu("Normal ▾", blends, font = font)
+        let rows = VStack([kit.property_row("Layer", self.layer_name), kit.property_row("Blend", self.blend_menu),
+                           kit.property_row("Opacity", HStack([self.opacity, self.opacity_field], spacing = 6.0)),
+                           kit.property_row("Flags", HStack([self.visible_box, self.clipped_box, self.mask_box], spacing = 10.0)),
+                           kit.property_row("Styles", HStack([self.styles_text, kit.button("Edit…", layer_style)], spacing = 8.0)),
+                           Spacer()], spacing = 0.0, padding = 0.0)
+        self.panel = Panel("Properties", rows, minimum = Size(220.0, 100.0), closable = false)
+
+    ## Show the selected layer.
+    pub func show(self) -> unit!:
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        let selected = workspace.selected
+        if not self.layer_name.layout().is_focused():
+            self.layer_name.set_text(canvas.layer_name(selected))
+        self.blend_menu.set_text(Canvas.blend_mode_name(canvas.layer_blend(selected)) + " ▾")
+        self.visible_box.set_checked(canvas.layer_visible(selected))
+        self.clipped_box.set_checked(canvas.layer_clipped(selected))
+        self.mask_box.set_checked(canvas.layer_masked(selected))
+        var styled: list[str] = []
+        if canvas.layer_styled(selected):
+            if workspace.style_value(0) != 0.0:
+                styled.append("Shadow")
+            if workspace.style_value(8) != 0.0:
+                styled.append("Stroke")
+            if workspace.style_value(14) != 0.0:
+                styled.append("Glow")
+        self.styles_text.set_text(styled.join(" ") if styled.length > 0 else "None")
+        self.opacity.set_value(canvas.layer_opacity(selected) * 100.0)
+        self.opacity_field.set_value(canvas.layer_opacity(selected) * 100.0)
+
+    func notify(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

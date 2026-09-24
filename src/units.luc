@@ -1,0 +1,25 @@
+## The units rulers, the grid and sizes are shown in: pixels, or millimeters
+## and inches through the document's resolution (pixels per inch).
+
+## Every unit's id, in menu order.
+pub func unit_ids() -> list[str]:
+    return ["px", "mm", "in"]
+
+## A unit's menu name: "Pixels", "Millimeters" or "Inches".
+pub func unit_label(id: str) -> str:
+    return "Millimeters" if id == "mm" else ("Inches" if id == "in" else "Pixels")
+
+## A unit's suffix after a number: " px", " mm" or " in".
+pub func unit_suffix(id: str) -> str:
+    return " " + id if is_unit(id) else " px"
+
+pub func is_unit(id: str) -> bool:
+    return id == "px" or id == "mm" or id == "in"
+
+## Document pixels per one of unit `id` at `resolution` pixels per inch.
+pub func pixels_per(id: str, resolution: float) -> float:
+    if id == "mm":
+        return resolution / 25.4
+    if id == "in":
+        return resolution
+    return 1.0

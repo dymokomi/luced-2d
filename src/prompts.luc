@@ -1,0 +1,117 @@
+## One text prompt across the top of the window stands in for the small
+## dialogs luced-2d does not have yet: it asks for a line of text — a size, a
+## name, a path, an amount — and `apply` carries out what was asked for, or
+## asks again with what was wrong. A mode of "" only shows a message.
+from ui import TextPrompt, Font
+from workspace import Workspace
+
+pub class Prompts:
+    pub let prompt: TextPrompt
+    pub var mode: str = ""
+    ## After a prompt is carried out, the window refreshes.
+    pub var refreshed: func() -> unit!? = none
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.prompt = TextPrompt(font = font)
+
+    ## Ask for `mode`'s text under `title`, starting from `value`.
+    pub func ask(self, mode: str, title: str, value: str, accept: str) -> unit!:
+        self.prompt.open(title, value, accept = accept)
+        self.mode = mode
+
+    ## Show a message with nothing to carry out.
+    pub func tell(self, message: str) -> unit!:
+        self.ask("", message, "", "OK")
+
+    pub func cancel(self):
+        self.mode = ""
+        self.prompt.layout().set_visible(false)
+
+    func reject(self, text: str, message: str) -> unit!:
+        self.prompt.open(message, text, accept = "Retry")
+
+    ## The prompt submitted `text`: carry out its mode.
+    pub func apply(self, text: str) -> unit!:
+        let mode = self.mode
+        let trimmed = text.trim()
+        if mode == "":
+            return
+        let workspace = self.workspace
+        if mode == "open":
+            workspace.open(trimmed) catch failure:
+                self.reject(text, f"Could not open: {failure.message}")
+                return
+        elif mode == "rename" or mode == "text":
+            if trimmed == "":
+                return
+            if mode == "rename":
+                workspace.rename(trimmed) catch failure:
+                    self.reject(text, f"Could not rename: {failure.message}")
+                    return
+            else:
+                workspace.draw_text(trimmed) catch failure:
+                    self.reject(text, f"Could not set text: {failure.message}")
+                    return
+        elif mode == "save":
+            if trimmed == "":
+                self.reject(text, "Enter a file name with an extension")
+                return
+            workspace.save(trimmed) catch failure:
+                self.reject(text, f"Could not save: {failure.message}")
+                return
+        elif mode == "new":
+            let numbers = parse_numbers(trimmed)
+            if numbers.length != 2:
+                self.reject(text, "Enter a size like 1920 x 1080")
+                return
+            if numbers[0] < 1 or numbers[1] < 1 or numbers[0] > 16384 or numbers[1] > 16384:
+                self.reject(text, "Each side must be 1..16384 pixels")
+                return
+            workspace.create(numbers[0], numbers[1])
+        elif mode == "canvas":
+            let numbers = parse_numbers(trimmed)
+            if numbers.length != 4 and numbers.length != 2:
+                self.reject(text, "Enter: width x height offset_x offset_y")
+                return
+            let ox = numbers[2] if numbers.length == 4 else 0
+            let oy = numbers[3] if numbers.length == 4 else 0
+            workspace.resize_canvas(numbers[0], numbers[1], ox, oy) catch failure:
+                self.reject(text, f"Could not resize: {failure.message}")
+                return
+        elif mode == "image":
+            let numbers = parse_numbers(trimmed)
+            if numbers.length != 2:
+                self.reject(text, "Enter: width x height")
+                return
+            workspace.resize_image(numbers[0], numbers[1]) catch failure:
+                self.reject(text, f"Could not resize: {failure.message}")
+                return
+        elif mode == "expand" or mode == "contract" or mode == "feather":
+            let amount = int(trimmed) catch failure:
+                self.reject(text, "Enter a whole number: 1..512")
+                return
+            if amount < 1 or amount > 512:
+                self.reject(text, "Enter a whole number: 1..512")
+                return
+            let pixels = amount if mode == "expand" else (-amount if mode == "contract" else 0)
+            workspace.adjust_selection(pixels, amount if mode == "feather" else 0) catch failure:
+                self.reject(text, f"Could not adjust: {failure.message}")
+                return
+        self.cancel()
+        if let refresh = self.refreshed:
+            refresh()
+
+## The whole numbers in `text`, separated by spaces or an "x" ("1920 x 1080 0 0");
+## none when any part is not a number.
+pub func parse_numbers(text: str) -> list[int]:
+    var numbers: list[int] = []
+    for part in text.replace("x", " ").split(" "):
+        let piece = part.trim()
+        if piece == "":
+            continue
+        let number = int(piece) catch failure:
+            return []
+        numbers.append(number)
+    return numbers

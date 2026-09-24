@@ -1,0 +1,108 @@
+## The contextual tool header across the top, after Compositor's: the active
+## tool's name and only its options — the brush's preset, size, hardness,
+## opacity, flow and spacing (eleusis scrubbers: drag to change, click to
+## type), the wand's tolerance, the text size — and the tool's hint, shown at
+## the right of the status line.
+from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Button
+from workspace import Workspace
+from kit import Kit
+from brush import preset_names
+from tools import tool_by_id
+
+pub class ToolHeader:
+    pub let bar: Toolbar
+    pub let title: Text
+    pub let hint: Text
+    pub let size_field: NumberField
+    pub let hardness_field: NumberField
+    pub let opacity_field: NumberField
+    pub let flow_field: NumberField
+    pub let spacing_field: NumberField
+    pub let preset_menu: Menu
+    pub let brush_controls: HStack
+    pub let tolerance_slider: Slider
+    pub let contiguous_button: Button
+    pub let wand_controls: HStack
+    pub let text_size_slider: Slider
+    pub let text_controls: HStack
+    ## Brush…: the window opens Brush Settings; a preset picked: the window refreshes.
+    pub var brush_settings: func() -> unit!? = none
+    pub var refreshed: func() -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        let font = kit.font
+        self.title = Text("Brush", font = font)
+        self.title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
+        self.hint = Text("", font = font)
+        self.size_field = self.scrubber(workspace.brush.diameter, 1.0, 500.0, " px", func (value: float) -> unit!:
+            self.workspace.brush.diameter = value)
+        self.hardness_field = self.scrubber(workspace.brush.hardness * 100.0, 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.hardness = value / 100.0)
+        self.opacity_field = self.scrubber(workspace.brush.opacity * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.opacity = value / 100.0)
+        self.flow_field = self.scrubber(workspace.brush.flow * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.flow = value / 100.0)
+        self.spacing_field = self.scrubber(workspace.brush.spacing * 100.0, 1.0, 500.0, "%", func (value: float) -> unit!:
+            self.workspace.brush.spacing = value / 100.0)
+        var presets: list[Command] = []
+        for name in preset_names():
+            let chosen = name
+            let command = Command(name, id = "preset_" + name)
+            kit.bind(command, func () -> unit!:
+                self.workspace.apply_preset(chosen)
+                if let refresh = self.refreshed:
+                    refresh())
+            presets.append(command)
+        self.preset_menu = Menu(workspace.brush.preset + " ▾", presets, font = font)
+        self.brush_controls = HStack([self.preset_menu, kit.labelled("Size", self.size_field), kit.labelled("Hardness", self.hardness_field),
+                                      kit.labelled("Opacity", self.opacity_field), kit.labelled("Flow", self.flow_field),
+                                      kit.labelled("Spacing", self.spacing_field), kit.button("Brush…", self.open_brush_settings)], spacing = 12.0)
+        self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
+        kit.keep(self.tolerance_slider.on_change(func (value: float) -> unit!:
+            self.workspace.tolerance = value))
+        self.contiguous_button = kit.button("Contiguous ✓", self.toggle_contiguous)
+        self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
+        self.text_size_slider = Slider("Size", 8.0, 256.0, workspace.text_size, 1.0, font = font)
+        kit.keep(self.text_size_slider.on_change(func (value: float) -> unit!:
+            self.workspace.text_size = value))
+        self.text_controls = HStack([self.text_size_slider], spacing = 12.0)
+        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
+
+    ## A brush setting's scrubber; `apply` takes each edit.
+    func scrubber(self, value: float, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
+        let field = NumberField(value, minimum, maximum, 1.0, suffix = suffix, font = self.kit.font)
+        self.kit.keep(field.on_change(func (changed: float) -> unit!:
+            apply(changed)
+            self.workspace.touch()))
+        return field
+
+    func open_brush_settings(self) -> unit!:
+        if let open = self.brush_settings:
+            open()
+
+    func toggle_contiguous(self) -> unit!:
+        self.workspace.contiguous = not self.workspace.contiguous
+        self.contiguous_button.set_text("Contiguous ✓" if self.workspace.contiguous else "Contiguous")
+
+    ## Show the active tool's name, options and hint; `sampling` while the
+    ## color picker takes clicks on the canvas.
+    pub func show(self, sampling: bool) -> unit!:
+        let workspace = self.workspace
+        let tool = workspace.tool
+        let active = tool_by_id(tool)
+        let on_mask = workspace.canvas.editing_mask() and (tool == "brush" or tool == "eraser")
+        self.title.set_text(active.title + " on mask" if on_mask else active.title)
+        self.brush_controls.layout().set_visible(tool == "brush" or tool == "eraser" or tool == "gradient")
+        self.wand_controls.layout().set_visible(tool == "wand")
+        self.text_controls.layout().set_visible(tool == "text")
+        self.size_field.set_value(workspace.brush.diameter)
+        self.hardness_field.set_value(workspace.brush.hardness * 100.0)
+        self.opacity_field.set_value(workspace.brush.opacity * 100.0)
+        self.flow_field.set_value(workspace.brush.flow * 100.0)
+        self.spacing_field.set_value(workspace.brush.spacing * 100.0)
+        self.preset_menu.set_text(workspace.brush.preset + " ▾")
+        self.hint.set_text("Click the canvas to sample a color · X swaps · D resets" if sampling else active.hint)

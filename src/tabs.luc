@@ -1,3 +1,4 @@
+## The document tabs across the top of the viewport.
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point
 from gpu import RenderTarget, Rect
 from input import EventKind, Cursor
