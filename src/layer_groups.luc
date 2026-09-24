@@ -9,6 +9,10 @@ from workspace import Workspace
 ## Layer › Group Layers: the selected layers, in their order, into a new group
 ## placed where the top-most of them is.
 pub func group_selected(workspace: Workspace) -> unit!:
+    workspace.as_one("Group Layers", func () -> unit!:
+        gather(workspace))
+
+func gather(workspace: Workspace) -> unit!:
     let canvas = workspace.canvas
     let ids = workspace.selected_ids()
     if ids.length == 0:
@@ -29,6 +33,10 @@ pub func group_selected(workspace: Workspace) -> unit!:
 ## Layer › Ungroup: the selected group's layers out where it was, in order,
 ## and the empty group gone.
 pub func ungroup(workspace: Workspace) -> unit!:
+    workspace.as_one("Ungroup", func () -> unit!:
+        scatter(workspace))
+
+func scatter(workspace: Workspace) -> unit!:
     let canvas = workspace.canvas
     let index = workspace.selected
     if not canvas.layer_is_group(index):

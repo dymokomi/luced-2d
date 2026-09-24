@@ -239,9 +239,10 @@ pub class Workspace:
     ## Put the picture at `path` on a new layer named after the file, centred on
     ## document point (`x`, `y`), and select it.
     pub func place_file(self, path: str, x: float, y: float) -> unit!:
-        let id = self.canvas.add_layer(paths.stem(path))
-        self.canvas.place_layer(id, path, int(x), int(y))
-        self.place_above_selected(id)
+        self.as_one("Place", func () -> unit!:
+            let id = self.canvas.add_layer(paths.stem(path))
+            self.canvas.place_layer(id, path, int(x), int(y))
+            self.place_above_selected(id))
 
     # -- Units and the grid.
 
@@ -344,7 +345,16 @@ pub class Workspace:
     ## A new empty layer just above the selected one, in its group, selected.
     pub func add_layer(self) -> unit!:
         self.next_name += 1
-        self.place_above_selected(self.canvas.add_layer(f"Layer {self.next_name}"))
+        self.as_one("New Layer", func () -> unit!:
+            self.place_above_selected(self.canvas.add_layer(f"Layer {self.next_name}")))
+
+    ## Make `change` one undo step named `name`, however many changes it makes.
+    pub func as_one(self, name: str, change: func() -> unit!) -> unit!:
+        self.canvas.begin_edit(name)
+        change() catch failure:
+            self.canvas.end_edit()
+            error(failure.code, failure.message)
+        self.canvas.end_edit()
 
     ## Put the new layer `id` just above the selected layer, in the same group,
     ## and select it — or, above a group, just above the whole group.
@@ -400,9 +410,10 @@ pub class Workspace:
     pub func paste(self, x: float, y: float) -> unit!:
         let parent = self.canvas.layer_parent(self.selected)
         let position = self.canvas.layer_position(self.selected)
-        let id = self.canvas.paste(int(x), int(y))
-        self.canvas.move_into(id, parent, position + 1)
-        self.select_id(id)
+        self.as_one("Paste", func () -> unit!:
+            let id = self.canvas.paste(int(x), int(y))
+            self.canvas.move_into(id, parent, position + 1)
+            self.select_id(id))
 
     ## Layer via Copy (via Cut with `cut`): a new layer of the selected pixels, selected.
     pub func layer_via_copy(self, cut: bool) -> unit!:
@@ -640,13 +651,29 @@ pub class Workspace:
 
     pub func undo(self) -> unit!:
         if self.canvas.can_undo() and not self.canvas.previewing():
+            let width = self.width()
+            let height = self.height()
             self.canvas.undo()
-            self.touch()
+            self.after_history(width, height)
 
     pub func redo(self) -> unit!:
         if self.canvas.can_redo() and not self.canvas.previewing():
+            let width = self.width()
+            let height = self.height()
             self.canvas.redo()
-            self.touch()
+            self.after_history(width, height)
+
+    ## Undo or redo may have changed the layers under the selection — keep it
+    ## in range — or the canvas size from `width` × `height`: fit it again.
+    func after_history(self, width: int, height: int):
+        self.picked = []
+        if self.selected >= self.layer_count():
+            self.selected = self.layer_count() - 1
+        if self.selected < 0:
+            self.selected = 0
+        if self.width() != width or self.height() != height:
+            self.fitted = false
+        self.touch()
 
     ## Start showing edits live on the selected layer; `end_preview` keeps or drops them.
     pub func begin_preview(self) -> unit!:

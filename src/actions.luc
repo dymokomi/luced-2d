@@ -202,6 +202,9 @@ pub class Actions:
         let layers = workspace.layer_count()
         self.undo.set_enabled(canvas.can_undo() and not previewing)
         self.redo.set_enabled(canvas.can_redo() and not previewing)
+        # The Edit menu says which step: "Undo Brush Stroke".
+        self.undo.set_text("Undo " + canvas.undo_name() if canvas.can_undo() else "Undo")
+        self.redo.set_text("Redo " + canvas.redo_name() if canvas.can_redo() else "Redo")
         self.deselect.set_enabled(selection)
         self.cut.set_enabled(selection and not previewing)
         self.layer_via_cut.set_enabled(selection and not previewing)
