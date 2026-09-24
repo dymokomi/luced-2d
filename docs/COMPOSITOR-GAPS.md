@@ -39,9 +39,9 @@ Found beyond the old list, and first because they lose work:
 6. [x] Real dialogs (0.1.35): New Canvas (size from the clipboard image), Canvas
    Size (anchor grid, relative, units, extension color; Opt-Cmd-C), Image Size
    (aspect lock, resolution, resampling; Opt-Cmd-I), Trim.
-7. [ ] Polygonal lasso; selection header: mode control, Feather, anti-alias;
-   wand Sample Size and all layers; Cmd-arrows move selected pixels; marquee
-   autoscroll; selection changes undoable.
+7. [x] Selection (0.1.36): Polygonal Lasso (Shift-L); header with the four modes,
+   Feather and Anti-alias; wand Sample Size and All Layers; Cmd-arrows move
+   selected pixels; marquee autoscroll; selection changes undoable (0.1.30).
 8. [ ] Guides (drag from rulers) and snapping to guides, grid, layers and
    bounds; Show Guides (Cmd-;), Snap (Shift-Cmd-;), Lock and Clear Guides.
 9. [ ] Live, editable text layers: fonts and faces, color, alignment, tracking,

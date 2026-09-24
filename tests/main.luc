@@ -9,6 +9,7 @@ from transform_box import TransformBox, grab_move, grab_turn
 from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
 from size_fields import SizeFields
+from polygon_lasso import PolygonLasso
 from adjustments import adjustments
 from settings import Settings
 from ui import Event
@@ -32,6 +33,7 @@ pub func main(arguments: list[str]) -> int!:
     unsaved_changes(arguments)
     layer_panel_ops()
     size_dialogs()
+    selection_tools()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -89,15 +91,15 @@ func contents() -> unit!:
     assert(not actions.undo.is_enabled() and not actions.crop.is_enabled())
     actions.select_all.trigger()
     assert(actions.crop.is_enabled())
-    actions.tools[9].trigger()
+    actions.tools[10].trigger()
     assert(workspace.tool == "brush")
-    actions.tools[4].trigger()
+    actions.tools[5].trigger()
     assert(workspace.tool == "wand")
     # The Crop tool's box starts around the whole canvas and goes with the tool.
-    actions.tools[5].trigger()
+    actions.tools[6].trigger()
     let crop = workspace.crop_box else trap("the crop tool shows its box")
     assert(workspace.tool == "crop" and crop.width() == 300 and crop.height() == 200)
-    actions.tools[4].trigger()
+    actions.tools[5].trigger()
     assert(workspace.crop_box == none)
     # Brush Settings opens floating, once; docked, it stays where it was put.
     panels.open_brush()
@@ -477,3 +479,30 @@ func size_dialogs() -> unit!:
     workspace.canvas.undo()
     assert(workspace.width() == 60)
     panels.close()
+
+## The Polygonal Lasso and the selection options: corners clicked and closed
+## on the first, the header's mode used without modifiers, feathered shapes.
+func selection_tools() -> unit!:
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let lasso = PolygonLasso()
+    lasso.click(workspace, 10.0, 10.0, false, false, 2.0, 0)
+    lasso.click(workspace, 40.0, 10.0, false, false, 2.0, 1000)
+    lasso.click(workspace, 40.0, 40.0, false, false, 2.0, 2000)
+    lasso.take_back()
+    lasso.click(workspace, 40.0, 40.0, false, false, 2.0, 3000)
+    assert(lasso.active and not workspace.canvas.has_selection())
+    # A click on the first corner closes it: a triangle.
+    lasso.click(workspace, 11.0, 10.5, false, false, 2.0, 4000)
+    assert(not lasso.active and workspace.canvas.selected_at(35, 15) == 255 and workspace.canvas.selected_at(15, 35) == 0)
+    assert(workspace.canvas.undo_name() == "Lasso")
+    # Esc lets a shape go.
+    lasso.click(workspace, 50.0, 5.0, false, false, 2.0, 5000)
+    lasso.cancel()
+    assert(not lasso.active)
+    # The header's mode applies without modifiers; the modifiers still win.
+    workspace.selecting.mode = 1
+    assert(workspace.selecting.mode_for(false, false) == 1 and workspace.selecting.mode_for(false, true) == 2 and workspace.selecting.mode_for(true, true) == 3)
+    workspace.selecting.feather = 3
+    workspace.select_shape(50.0, 30.0, 62.0, 46.0, false, workspace.selecting.mode_for(false, false))
+    assert(workspace.canvas.selected_at(35, 15) == 255 and workspace.canvas.selected_at(56, 38) > 200 and workspace.canvas.selected_at(50, 38) < 255)

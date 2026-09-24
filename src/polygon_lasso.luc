@@ -1,0 +1,96 @@
+## The Polygonal Lasso, as Photoshop's: each click sets a corner and a line
+## follows the pointer from the last one; clicking the first corner again,
+## double-clicking or Enter closes the shape and selects it, Delete takes the
+## last corner back and Esc lets it go. Shift or Alt at the first click picks
+## how it combines with the selection, as the other selection tools.
+from ui import Painter, Point
+from gpu import Rect, Color
+from workspace import Workspace
+import math
+
+pub class PolygonLasso:
+    pub var active: bool = false
+    ## The corners so far (document pixels) and the pointer, for the line following it.
+    var xs: list[float]
+    var ys: list[float]
+    var pointer_x: float = 0.0
+    var pointer_y: float = 0.0
+    var mode: int = 0
+    ## The last click, for a double-click: when (ms).
+    var last_click: int = -1000
+
+    pub func init(self):
+        self.xs = []
+        self.ys = []
+
+    ## A click at document point (`x`, `y`) at `now` ms; `reach` document
+    ## pixels round the first corner close the shape.
+    pub func click(self, workspace: Workspace, x: float, y: float, shift: bool, alt: bool, reach: float, now: int) -> unit!:
+        let double = now - self.last_click <= 400
+        self.last_click = now
+        if not self.active:
+            self.active = true
+            self.mode = workspace.selecting.mode_for(shift, alt)
+            self.xs = [x]
+            self.ys = [y]
+            self.pointer_x = x
+            self.pointer_y = y
+            return
+        let near_first = math.abs(x - self.xs[0]) <= reach and math.abs(y - self.ys[0]) <= reach
+        if (near_first or double) and self.xs.length >= 3:
+            self.close(workspace)
+            return
+        self.xs.append(x)
+        self.ys.append(y)
+
+    pub func hover(self, x: float, y: float):
+        self.pointer_x = x
+        self.pointer_y = y
+
+    ## Take the last corner back; the first going lets the shape go.
+    pub func take_back(self):
+        if self.xs.length <= 1:
+            self.cancel()
+            return
+        discard(self.xs.pop())
+        discard(self.ys.pop())
+
+    pub func cancel(self):
+        self.active = false
+        self.xs = []
+        self.ys = []
+
+    ## Close the shape and select it; fewer than three corners select nothing.
+    pub func close(self, workspace: Workspace) -> unit!:
+        let xs = self.xs
+        let ys = self.ys
+        self.cancel()
+        if xs.length < 3:
+            return
+        let canvas = workspace.canvas
+        canvas.clear_points()
+        var index = 0
+        while index < xs.length:
+            canvas.add_point(xs[index], ys[index])
+            index += 1
+        workspace.selecting.apply(canvas, false)
+        canvas.select_polygon(self.mode)
+        workspace.touch()
+
+    ## The corners joined, and the line to the pointer, at screen resolution.
+    pub func draw(self, painter: Painter, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        if not self.active:
+            return
+        var index = 0
+        while index < self.xs.length:
+            let a = Point(self.xs[index] * zoom + left, self.ys[index] * zoom + top)
+            let last = index == self.xs.length - 1
+            let b = Point(self.pointer_x * zoom + left, self.pointer_y * zoom + top) if last else Point(self.xs[index + 1] * zoom + left, self.ys[index + 1] * zoom + top)
+            painter.line(a, b, 3.0, backing)
+            painter.line(a, b, 1.0, ink)
+            index += 1
+        # The first corner, where a click closes the shape.
+        let fx = math.floor(self.xs[0] * zoom + left)
+        let fy = math.floor(self.ys[0] * zoom + top)
+        painter.rectangle(Rect(fx - 3.0, fy - 3.0, 7.0, 7.0), ink)
+        painter.rectangle(Rect(fx - 2.0, fy - 2.0, 5.0, 5.0), backing)

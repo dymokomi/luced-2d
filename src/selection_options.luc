@@ -1,0 +1,33 @@
+## The selection tools' options, as Compositor's selection header has them:
+## how a new shape combines with the selection when no modifier is held
+## (new, add, subtract, intersect), its feather and anti-aliasing, and the
+## wand's sample size and whether it samples every layer.
+from canvas import Canvas
+
+pub class SelectionOptions:
+    ## 0 new, 1 add, 2 subtract, 3 intersect.
+    pub var mode: int = 0
+    ## Pixels, 0..250.
+    pub var feather: int = 0
+    pub var antialias: bool = true
+    ## The wand's sample: 1, 3 or 5 pixels square.
+    pub var sample: int = 1
+    pub var all_layers: bool = false
+
+    pub func init(self):
+        self.mode = 0
+
+    ## The mode a press takes: Shift adds, Alt subtracts, both intersect, as
+    ## in Photoshop; with neither, the header's choice.
+    pub func mode_for(self, shift: bool, alt: bool) -> int:
+        if shift and alt:
+            return 3
+        if shift:
+            return 1
+        if alt:
+            return 2
+        return self.mode
+
+    ## Tell the canvas how the next shape is made; a rectangle is never soft.
+    pub func apply(self, canvas: Canvas, rectangle: bool) -> unit!:
+        canvas.set_selection_shape(self.feather, self.antialias or rectangle)

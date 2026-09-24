@@ -11,6 +11,7 @@ from kit import Kit
 from brush import preset_names
 from tools import tool_by_id
 from transform_controls import TransformControls
+from selection_controls import SelectionControls
 
 pub class ToolHeader:
     pub let bar: Toolbar
@@ -40,6 +41,7 @@ pub class ToolHeader:
     pub let gradient_controls: HStack
     pub let box_controls: HStack
     pub let transform_controls: TransformControls
+    pub let selection_controls: SelectionControls
     pub let controls_box: Checkbox
     ## Brush…: the window opens Brush Settings; a preset picked: the window
     ## refreshes; Apply or Cancel: the window finishes the box, keeping it or not.
@@ -54,7 +56,7 @@ pub class ToolHeader:
         self.kit = kit
         let font = kit.font
         self.title = Text("Brush", font = font)
-        self.title.layout().set_limits(Size(120.0, 0.0), Size(120.0, 16384.0))
+        self.title.layout().set_limits(Size(150.0, 0.0), Size(150.0, 16384.0))
         self.hint = Text("", font = font)
         self.size_field = self.scrubber(workspace.brush.diameter, 1.0, 500.0, " px", func (value: float) -> unit!:
             self.workspace.brush.diameter = value)
@@ -84,6 +86,7 @@ pub class ToolHeader:
             self.workspace.tolerance = value))
         self.contiguous_button = kit.button("Contiguous ✓", self.toggle_contiguous)
         self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
+        self.selection_controls = SelectionControls(workspace, kit)
         self.text_size_slider = Slider("Size", 8.0, 256.0, workspace.text_size, 1.0, font = font)
         kit.keep(self.text_size_slider.on_change(func (value: float) -> unit!:
             self.workspace.text_size = value))
@@ -128,7 +131,7 @@ pub class ToolHeader:
         self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
             self.workspace.gradient_transparent = not self.workspace.gradient_transparent)
         self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
-        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.wand_controls, self.text_controls, self.move_controls,
+        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.wand_controls, self.text_controls, self.move_controls,
                             self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
@@ -183,6 +186,9 @@ pub class ToolHeader:
         self.reverse_box.set_checked(workspace.gradient_reverse)
         self.transparent_box.set_checked(workspace.gradient_transparent)
         self.wand_controls.layout().set_visible(not transforming and tool == "wand")
+        let selecting = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "wand"
+        self.selection_controls.row.layout().set_visible(not transforming and selecting)
+        self.selection_controls.show(tool)
         self.text_controls.layout().set_visible(not transforming and tool == "text")
         self.move_controls.layout().set_visible(not transforming and tool == "move")
         self.controls_box.set_checked(workspace.show_transform_controls)

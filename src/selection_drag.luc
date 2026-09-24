@@ -30,6 +30,9 @@ pub class SelectionDrag:
     ## again constrains rather than repeating the mode.
     var shift_free: bool = false
     var alt_free: bool = false
+    ## The modifiers at the last drag, for a drag again as the view scrolls.
+    var held_shift: bool = false
+    var held_alt: bool = false
     ## The lasso's points so far and the last one kept.
     var points: int = 0
     var last_x: float = 0.0
@@ -40,7 +43,7 @@ pub class SelectionDrag:
         self.active = true
         self.lasso = lasso
         self.ellipse = ellipse
-        self.mode = mode_of(shift, alt)
+        self.mode = workspace.selecting.mode_for(shift, alt)
         # The marquee snaps to whole pixels, so a square stays square.
         self.start_x = x if lasso else math.floor(x + 0.5)
         self.start_y = y if lasso else math.floor(y + 0.5)
@@ -58,6 +61,8 @@ pub class SelectionDrag:
 
     ## The pointer at document point `x`, `y` with the modifiers held.
     pub func drag(self, workspace: Workspace, x: float, y: float, shift: bool, alt: bool) -> unit!:
+        self.held_shift = shift
+        self.held_alt = alt
         self.shape_to(x, y, shift, alt)
         if not self.lasso:
             return
@@ -70,6 +75,10 @@ pub class SelectionDrag:
             self.last_x = x
             self.last_y = y
 
+    ## The pointer, still, at a document point the view scrolled under it.
+    pub func drag_again(self, workspace: Workspace, x: float, y: float) -> unit!:
+        self.drag(workspace, x, y, self.held_shift, self.held_alt)
+
     ## Shift or Alt pressed or let go without moving: reshape the marquee at once.
     pub func modifiers(self, shift: bool, alt: bool):
         if self.active and not self.lasso:
@@ -80,6 +89,7 @@ pub class SelectionDrag:
         self.active = false
         if self.lasso:
             if self.points >= 3:
+                workspace.selecting.apply(workspace.canvas, false)
                 workspace.canvas.select_polygon(self.mode)
                 workspace.touch()
             else:

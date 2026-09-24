@@ -5,10 +5,11 @@ from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point
 from gpu import RenderTarget, Rect, Region, Filter, Color
 from input import EventKind, Cursor, Key, ScrollUnit
 from workspace import Workspace
-from selection_drag import SelectionDrag, mode_of
+from selection_drag import SelectionDrag
 from kit import outline, dropped_paths
 from transform_box import grab_move
 from layer_ops import OpacityKeys, set_opacity_all
+from polygon_lasso import PolygonLasso
 import theme
 import math
 import time
@@ -53,6 +54,8 @@ pub class CanvasView: Widget:
     var stroke_y: float = 0.0
     ## The digits typed, so two quick ones give an exact opacity.
     let opacity_keys: OpacityKeys
+    ## The Polygonal Lasso's shape while its corners are clicked.
+    pub let polygon: PolygonLasso
     let selection: SelectionDrag
     ## A gradient drag in progress, from a document point.
     var gradient_dragging: bool = false
@@ -93,6 +96,7 @@ pub class CanvasView: Widget:
         self.workspace = workspace
         self.selection = SelectionDrag()
         self.opacity_keys = OpacityKeys()
+        self.polygon = PolygonLasso()
         self.checker = Image(256, 256)
         for y in 0..<256:
             for x in 0..<256:
@@ -151,6 +155,10 @@ pub class CanvasView: Widget:
                 ants_top += float(self.move_shown_y) * workspace.zoom
             workspace.canvas.draw_selection(target, whole, workspace.zoom, ants_left, ants_top, self.ants)
         self.selection.draw(painter, workspace.zoom, left, top, theme.text())
+        # Another tool chosen mid-shape lets the polygon go.
+        if self.polygon.active and workspace.tool != "polygon":
+            self.polygon.cancel()
+        self.polygon.draw(painter, workspace.zoom, left, top, theme.text(), theme.backdrop())
         self.draw_box(painter, size.width, size.height)
         if self.pointer_inside and not self.panning and brushed(workspace.tool):
             self.draw_brush_outline(painter)
@@ -239,6 +247,22 @@ pub class CanvasView: Widget:
         if self.workspace.canvas.has_selection():
             self.ants += 1.0
             self.box.invalidate()
+        self.autoscroll()
+
+    ## A marquee or lasso dragged past the view's edge pans toward the pointer
+    ## each frame, faster the further past, and goes on growing.
+    func autoscroll(self):
+        if not self.selection.active:
+            return
+        let size = self.box.bounds()
+        let dx = past_edge(self.pointer_x, size.width)
+        let dy = past_edge(self.pointer_y, size.height)
+        if dx == 0.0 and dy == 0.0:
+            return
+        self.workspace.pan(-dx, -dy)
+        self.selection.drag_again(self.workspace, self.document_x(self.pointer_x), self.document_y(self.pointer_y)) catch failure:
+            discard(failure)
+        self.box.invalidate()
 
     ## Document coordinates of a view point.
     func document_x(self, x: float) -> float:
@@ -273,6 +297,8 @@ pub class CanvasView: Widget:
             self.pointer_x = event.x
             self.pointer_y = event.y
             self.pointer_inside = event.inside
+            if self.polygon.active:
+                self.polygon.hover(self.document_x(event.x), self.document_y(event.y))
             self.drag(event)
         elif kind == EventKind.pointer_up:
             self.release(event)
@@ -298,6 +324,16 @@ pub class CanvasView: Widget:
                 # Esc drops the stroke in progress.
                 self.painting = false
                 self.workspace.cancel_stroke()
+            elif self.polygon.active and (event.key == Key.enter or event.key == Key.escape or event.key == Key.backspace or event.key == Key.delete):
+                # The Polygonal Lasso's keys: Enter closes, Esc lets go, Delete takes a corner back.
+                if event.key == Key.enter:
+                    self.polygon.close(self.workspace)
+                elif event.key == Key.escape:
+                    self.polygon.cancel()
+                else:
+                    self.polygon.take_back()
+                if let changed = self.on_changed:
+                    changed()
             elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and (self.workspace.transform != none or self.workspace.crop_box != none):
                 # Enter applies a free transform or crops; Esc drops it.
                 if self.workspace.transform != none:
@@ -412,7 +448,9 @@ pub class CanvasView: Widget:
             if let place = self.on_text:
                 place()
         elif tool == "wand":
-            workspace.select_wand(x, y, mode_of(event.shift, event.alt))
+            workspace.select_wand(x, y, workspace.selecting.mode_for(event.shift, event.alt))
+        elif tool == "polygon":
+            self.polygon.click(workspace, x, y, event.shift, event.alt, 6.0 / workspace.zoom, time.now() // 1000000)
         elif tool == "marquee" or tool == "ellipse" or tool == "lasso":
             self.selection.begin(workspace, x, y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
         else:
@@ -510,7 +548,8 @@ pub class CanvasView: Widget:
         return int(math.floor(points / self.workspace.zoom + 0.5))
 
     ## Arrows nudge a pixel, Shift ten: the selected pixels with the Move tool
-    ## (or the layer with no selection), the outline with a selection tool.
+    ## or Cmd held with any tool (or the layer with no selection), the outline
+    ## with a selection tool.
     func nudge(self, event: Event) -> unit!:
         let step = 10 if event.shift else 1
         let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
@@ -518,12 +557,12 @@ pub class CanvasView: Widget:
         let workspace = self.workspace
         let tool = workspace.tool
         let selection = workspace.canvas.has_selection()
-        if tool == "move":
+        if tool == "move" or event.meta or event.control:
             if selection:
                 workspace.move_selected_pixels(dx, dy, false)
             else:
                 workspace.move_layer(dx, dy)
-        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"):
+        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "wand"):
             workspace.move_selection(dx, dy)
 
     ## A free transform's or the Crop tool's box dragged to a document point.
@@ -707,3 +746,12 @@ pub func texel_span(start: int, end: int) -> int:
     if span < 1:
         return 1
     return span if span <= 256 - start else 256 - start
+
+## How far to pan this frame for a pointer at `at` along a view `length`
+## long: nothing inside, a fifth of the overshoot past an edge, at most 40.
+func past_edge(at: float, length: float) -> float:
+    if at < 0.0:
+        return math.max(-40.0, at * 0.2)
+    if at > length:
+        return math.min(40.0, (at - length) * 0.2)
+    return 0.0

@@ -1,0 +1,62 @@
+## The tool header's options for the marquees, lassos and wand, after
+## Compositor's: the four modes (new, add, subtract, intersect) as buttons,
+## Feather, Anti-alias, and for the wand its Sample Size and All Layers.
+from ui import HStack, Button, ButtonStyle, NumberField, Checkbox, Menu, Command
+from workspace import Workspace
+from kit import Kit
+
+pub class SelectionControls:
+    pub let row: HStack
+    let modes: list[Button]
+    let feather_field: NumberField
+    let antialias_box: Checkbox
+    let sample_menu: Menu
+    let all_box: Checkbox
+    let wand_extras: HStack
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.modes = []
+        var index = 0
+        for icon in ["selection-tool", "add-to-selection", "subtract-from-selection", "boolean-intersect"]:
+            let mode = index
+            let button = kit.icon_button(icon, func () -> unit!:
+                self.workspace.selecting.mode = mode
+                self.show(self.workspace.tool))
+            button.layout().set_size(26.0, 24.0)
+            self.modes.append(button)
+            index += 1
+        self.feather_field = NumberField(0.0, 0.0, 250.0, 1.0, suffix = " px", font = kit.font, cells = 7.0)
+        kit.keep(self.feather_field.on_change(func (value: float) -> unit!:
+            self.workspace.selecting.feather = int(value + 0.5)))
+        self.antialias_box = kit.checkbox("Anti-alias", func () -> unit!:
+            self.workspace.selecting.antialias = not self.workspace.selecting.antialias)
+        var samples: list[Command] = []
+        for size in [1, 3, 5]:
+            let chosen = size
+            let command = Command("Point Sample" if size == 1 else f"{size} by {size} Average", id = f"wand_sample_{size}")
+            kit.bind(command, func () -> unit!:
+                self.workspace.selecting.sample = chosen
+                self.show(self.workspace.tool))
+            samples.append(command)
+        self.sample_menu = Menu("Point Sample ▾", samples, font = kit.font)
+        self.all_box = kit.checkbox("All Layers", func () -> unit!:
+            self.workspace.selecting.all_layers = not self.workspace.selecting.all_layers)
+        self.wand_extras = HStack([kit.labelled("Sample", self.sample_menu), self.all_box], spacing = 12.0)
+        self.row = HStack([HStack([self.modes[0], self.modes[1], self.modes[2], self.modes[3]], spacing = 2.0), kit.labelled("Feather", self.feather_field),
+                           self.antialias_box, self.wand_extras], spacing = 12.0)
+
+    ## The options as they are, for `tool`.
+    pub func show(self, tool: str) -> unit!:
+        let options = self.workspace.selecting
+        var index = 0
+        for button in self.modes:
+            button.set_style(ButtonStyle.selected if index == options.mode else ButtonStyle.plain)
+            index += 1
+        self.feather_field.set_value(float(options.feather))
+        self.antialias_box.set_checked(options.antialias)
+        self.antialias_box.layout().set_visible(tool != "marquee")
+        self.wand_extras.layout().set_visible(tool == "wand")
+        self.sample_menu.set_text(("Point Sample" if options.sample == 1 else f"{options.sample} by {options.sample} Average") + " ▾")
+        self.all_box.set_checked(options.all_layers)

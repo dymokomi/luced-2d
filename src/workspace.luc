@@ -13,6 +13,7 @@ import transfer
 import paths
 from units import pixels_per
 from free_transform import FreeTransform, begin_free_transform, box_around
+from selection_options import SelectionOptions
 from transform_box import TransformBox
 from crop_box import CropBox
 
@@ -95,6 +96,8 @@ pub class Workspace:
     ## id; and the groups folded shut in the Layers panel, by id.
     pub var picked: list[int]
     pub var collapsed: list[int]
+    ## The selection tools' options (selection_options.luc).
+    pub let selecting: SelectionOptions
     var next_name: int = 1
     pub var next_group: int = 1
 
@@ -105,6 +108,7 @@ pub class Workspace:
         self.recent = []
         self.picked = []
         self.collapsed = []
+        self.selecting = SelectionOptions()
         self.documents = [Document(self.canvas, "")]
         self.touch()
 
@@ -997,6 +1001,7 @@ pub class Workspace:
         let bottom = int(math.ceil(math.max(y0, y1)))
         if right <= left or bottom <= top:
             return
+        self.selecting.apply(self.canvas, not ellipse)
         if ellipse:
             self.canvas.select_ellipse(left, top, right - left, bottom - top, mode)
         else:
@@ -1009,7 +1014,8 @@ pub class Workspace:
         let py = int(math.floor(y))
         if px < 0 or py < 0 or px >= self.width() or py >= self.height():
             return
-        self.canvas.select_wand(self.selected_id(), px, py, self.tolerance, self.contiguous, mode)
+        self.selecting.apply(self.canvas, false)
+        self.canvas.select_wand(self.selected_id(), px, py, self.tolerance, self.contiguous, mode, self.selecting.sample, self.selecting.all_layers)
         self.touch()
 
     # -- The view.
