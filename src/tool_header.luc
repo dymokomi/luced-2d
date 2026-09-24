@@ -1,9 +1,9 @@
 ## The contextual tool header across the top, after Compositor's: the active
 ## tool's name and only its options — the brush's preset, size, hardness,
 ## opacity, flow and spacing (eleusis scrubbers: drag to change, click to
-## type), the wand's tolerance, the text size — and the tool's hint, shown at
-## the right of the status line.
-from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Button
+## type), the wand's tolerance, the text size, the Move tool's Auto-Select —
+## and the tool's hint, shown at the right of the status line.
+from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Button, Checkbox
 from workspace import Workspace
 from kit import Kit
 from brush import preset_names
@@ -25,6 +25,8 @@ pub class ToolHeader:
     pub let wand_controls: HStack
     pub let text_size_slider: Slider
     pub let text_controls: HStack
+    pub let auto_select_box: Checkbox
+    pub let move_controls: HStack
     ## Brush…: the window opens Brush Settings; a preset picked: the window refreshes.
     pub var brush_settings: func() -> unit!? = none
     pub var refreshed: func() -> unit!? = none
@@ -70,7 +72,10 @@ pub class ToolHeader:
         kit.keep(self.text_size_slider.on_change(func (value: float) -> unit!:
             self.workspace.text_size = value))
         self.text_controls = HStack([self.text_size_slider], spacing = 12.0)
-        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, Spacer()], font = font)
+        self.auto_select_box = kit.checkbox("Auto-Select", func () -> unit!:
+            self.workspace.auto_select = not self.workspace.auto_select)
+        self.move_controls = HStack([self.auto_select_box], spacing = 12.0)
+        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer()], font = font)
 
     ## A brush setting's scrubber; `apply` takes each edit.
     func scrubber(self, value: float, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
@@ -99,6 +104,8 @@ pub class ToolHeader:
         self.brush_controls.layout().set_visible(tool == "brush" or tool == "eraser" or tool == "gradient")
         self.wand_controls.layout().set_visible(tool == "wand")
         self.text_controls.layout().set_visible(tool == "text")
+        self.move_controls.layout().set_visible(tool == "move")
+        self.auto_select_box.set_checked(workspace.auto_select)
         self.size_field.set_value(workspace.brush.diameter)
         self.hardness_field.set_value(workspace.brush.hardness * 100.0)
         self.opacity_field.set_value(workspace.brush.opacity * 100.0)

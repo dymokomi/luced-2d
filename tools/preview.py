@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -265,6 +265,52 @@ SCENES = {
             # Invert only inside the selection.
             editor.workspace.adjust(2, [])
             print(f"SELMOVE selection at {editor.workspace.canvas.selection_left()},{editor.workspace.canvas.selection_top()} undo {editor.workspace.canvas.can_undo()}")
+            editor.panels.refresh()''',
+    'movetool': '''            editor.workspace.add_layer()
+            editor.workspace.choose_tool("move")
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            # An orange block on a new layer.
+            editor.workspace.set_color(0.9, 0.35, 0.05)
+            editor.workspace.canvas.select_rectangle(100, 100, 200, 150, 0)
+            editor.workspace.canvas.fill(editor.workspace.selected_id(), false)
+            editor.workspace.canvas.deselect()
+            let top = editor.workspace.selected
+            # Alt-Shift-drag: a copy of the layer, kept to the horizontal axis.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 150.0 * zoom, y = oy + 150.0 * zoom, button = 0, alt = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 400.0 * zoom, y = oy + 190.0 * zoom, alt = true, shift = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 450.0 * zoom, y = oy + 210.0 * zoom, button = 0, alt = true, shift = true))
+            print(f"MOVETOOL layers {editor.workspace.layer_count()} copy at {editor.workspace.canvas.layer_at(420, 120)} original at {editor.workspace.canvas.layer_at(120, 120)} below {editor.workspace.canvas.layer_at(420, 300)}")
+            # Cmd-click on the original picks its layer.
+            editor.workspace.select(0)
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 150.0 * zoom, y = oy + 150.0 * zoom, button = 0, meta = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 150.0 * zoom, y = oy + 150.0 * zoom, button = 0, meta = true))
+            print(f"MOVETOOL picked {editor.workspace.selected} expected {top}")
+            editor.panels.refresh()''',
+    'ellipsedrag': '''            editor.workspace.choose_tool("ellipse")
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            # Mid-drag: the outline is the ellipse, not its bounding box.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 200.0 * zoom, y = oy + 150.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 700.0 * zoom, y = oy + 500.0 * zoom))
+            editor.panels.refresh()''',
+    'selmovedrag': '''            editor.workspace.select(0)
+            editor.workspace.choose_tool("move")
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            # Mid-drag of selected pixels: the ants go with them.
+            editor.workspace.canvas.select_rectangle(100, 100, 300, 250, 0)
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 200.0 * zoom, y = oy + 200.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 500.0 * zoom, y = oy + 350.0 * zoom))
             editor.panels.refresh()''',
     'clipboard': '''            let saved = clipboard.read_text()
             editor.workspace.select(0)

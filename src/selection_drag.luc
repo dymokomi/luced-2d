@@ -3,7 +3,7 @@
 ## press picks the mode (add, subtract; both: intersect); pressed during the
 ## drag, or let go and pressed again, Shift makes the marquee square or
 ## circular and Alt draws it out from its center.
-from ui import Painter
+from ui import Painter, Point
 from gpu import Rect, Color
 from workspace import Workspace
 from kit import outline
@@ -12,6 +12,8 @@ import math
 pub class SelectionDrag:
     pub var active: bool = false
     pub var lasso: bool = false
+    ## An elliptical marquee rather than a rectangular one.
+    pub var ellipse: bool = false
     ## 0 replace, 1 add, 2 subtract, 3 intersect.
     pub var mode: int = 0
     ## Where the drag started and where the pointer is now.
@@ -34,9 +36,10 @@ pub class SelectionDrag:
     var last_y: float = 0.0
 
     ## Start at document point `x`, `y`; a replacing marquee drops the old selection now.
-    pub func begin(self, workspace: Workspace, x: float, y: float, lasso: bool, shift: bool, alt: bool) -> unit!:
+    pub func begin(self, workspace: Workspace, x: float, y: float, lasso: bool, ellipse: bool, shift: bool, alt: bool) -> unit!:
         self.active = true
         self.lasso = lasso
+        self.ellipse = ellipse
         self.mode = mode_of(shift, alt)
         # The marquee snaps to whole pixels, so a square stays square.
         self.start_x = x if lasso else math.floor(x + 0.5)
@@ -73,7 +76,7 @@ pub class SelectionDrag:
             self.shape_to(self.now_x, self.now_y, shift, alt)
 
     ## Let go at document point `x`, `y`: combine the shape with the selection.
-    pub func finish(self, workspace: Workspace, x: float, y: float, shift: bool, alt: bool, ellipse: bool) -> unit!:
+    pub func finish(self, workspace: Workspace, x: float, y: float, shift: bool, alt: bool) -> unit!:
         self.active = false
         if self.lasso:
             if self.points >= 3:
@@ -83,9 +86,10 @@ pub class SelectionDrag:
                 workspace.canvas.clear_points()
             return
         self.shape_to(x, y, shift, alt)
-        workspace.select_shape(self.x0, self.y0, self.x1, self.y1, ellipse, self.mode)
+        workspace.select_shape(self.x0, self.y0, self.x1, self.y1, self.ellipse, self.mode)
 
-    ## The marquee's outline while dragged, plainly, at screen resolution.
+    ## The marquee's outline while dragged, plainly, at screen resolution: the
+    ## rectangle, or the ellipse inside it as a polygon fine enough to look round.
     pub func draw(self, painter: Painter, zoom: float, left: float, top: float, ink: Color) -> unit!:
         if not self.active or self.lasso:
             return
@@ -93,7 +97,21 @@ pub class SelectionDrag:
         let sy0 = math.min(self.y0, self.y1) * zoom + top
         let sx1 = math.max(self.x0, self.x1) * zoom + left
         let sy1 = math.max(self.y0, self.y1) * zoom + top
-        outline(painter, Rect(sx0, sy0, sx1 - sx0, sy1 - sy0), ink)
+        if not self.ellipse:
+            outline(painter, Rect(sx0, sy0, sx1 - sx0, sy1 - sy0), ink)
+            return
+        let cx = (sx0 + sx1) * 0.5
+        let cy = (sy0 + sy1) * 0.5
+        let rx = (sx1 - sx0) * 0.5
+        let ry = (sy1 - sy0) * 0.5
+        # About one segment per four points of circumference, 16 at least.
+        let segments = int(math.max(16.0, math.min(256.0, (rx + ry) * 1.6)))
+        var previous = Point(cx + rx, cy)
+        for index in 1..<segments + 1:
+            let angle = 2.0 * math.pi * float(index) / float(segments)
+            let next = Point(cx + rx * math.cos(angle), cy + ry * math.sin(angle))
+            painter.line(previous, next, 1.0, ink)
+            previous = next
 
     func shape_to(self, x: float, y: float, shift: bool, alt: bool):
         if not shift:

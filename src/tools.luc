@@ -23,7 +23,7 @@ pub class Tool:
         self.hint = hint
 
 pub func tools() -> list[Tool]!:
-    return [Tool("move", "Move", "Move", "move-tool", Key.v, "Drag to move the layer, or the selected pixels · alt copies them · arrows nudge 1 px, shift 10 px · cmd moves with any tool"),
+    return [Tool("move", "Move", "Move", "move-tool", Key.v, "Drag moves the layer or selection · alt copies · shift locks axis · cmd-click picks"),
             Tool("marquee", "Rectangular Marquee", "Marquee", "selection-tool", Key.m,
                  "Drag to select · shift adds, alt subtracts, both intersect · drag inside to move the outline · shift while dragging squares, alt centers"),
             Tool("ellipse", "Elliptical Marquee", "Ellipse", "ellipse-select-tool", Key.m,

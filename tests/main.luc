@@ -224,6 +224,12 @@ func tool_gestures() -> unit!:
     panels.choose_tool("move")
     view.event(Event(kind = EventKind.key_down, key = Key.digit_3))
     assert(math.abs(workspace.canvas.layer_opacity(workspace.selected) - 0.3) < 0.001)
+    # The Move tool's Auto-Select checkbox in the header toggles the setting.
+    assert(not workspace.auto_select)
+    panels.header.auto_select_box.event(Event(kind = EventKind.key_down, key = Key.space))
+    assert(workspace.auto_select)
+    panels.header.auto_select_box.event(Event(kind = EventKind.key_down, key = Key.space))
+    assert(not workspace.auto_select)
     # Shift ] and Shift [ step the hardness; ] and [ always change the size, even at one pixel.
     workspace.brush.hardness = 0.5
     panels.actions.harder.trigger()
