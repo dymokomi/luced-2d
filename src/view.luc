@@ -622,8 +622,10 @@ pub class CanvasView: Widget:
                     workspace.deselect()
         elif self.gradient_dragging:
             self.gradient_dragging = false
-            if math.abs(x - self.gradient_x) + math.abs(y - self.gradient_y) >= 1.0:
-                workspace.fill_gradient(self.gradient_x, self.gradient_y, x, y)
+            # Shift keeps the gradient to 45° steps, as Photoshop's.
+            let end = snapped(self.gradient_x, self.gradient_y, x, y) if event.shift else Point(x, y)
+            if math.abs(end.x - self.gradient_x) + math.abs(end.y - self.gradient_y) >= 1.0:
+                workspace.fill_gradient(self.gradient_x, self.gradient_y, end.x, end.y)
         elif self.selection.active:
             self.selection.finish(workspace, x, y, event.shift, event.alt)
         elif self.painting:
@@ -634,6 +636,15 @@ pub class CanvasView: Widget:
             self.stroke_end_x = point.x
             self.stroke_end_y = point.y
             self.has_stroke_end = true
+
+## (`x`, `y`) turned about (`x0`, `y0`) to the nearest 45° step, as far away.
+func snapped(x0: float, y0: float, x: float, y: float) -> Point:
+    let dx = x - x0
+    let dy = y - y0
+    let length = math.hypot(dx, dy)
+    let step = math.pi / 4.0
+    let angle = math.round(math.atan2(dy, dx) / step) * step
+    return Point(x0 + math.cos(angle) * length, y0 + math.sin(angle) * length)
 
 ## Whether `tool` paints with the brush's tip, and so shows its outline.
 func brushed(tool: str) -> bool:

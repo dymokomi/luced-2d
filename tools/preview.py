@@ -25,13 +25,19 @@ SCENES = {
     'style': '''            editor.panels.style.open()
             editor.workspace.choose_tool("brush")
             editor.panels.refresh()
-            editor.panels.style.toggle(0)
-            editor.panels.style.controls[0].set_value(14.0)
-            editor.panels.style.controls[1].set_value(14.0)
-            editor.panels.style.controls[2].set_value(10.0)
-            editor.panels.style.toggle(1)
-            editor.panels.style.controls[4].set_value(6.0)
-            editor.panels.style.write()
+            # A shadow, an inside orange stroke, and a blue inner shadow.
+            editor.workspace.set_style_value(0, 1.0)
+            editor.workspace.set_style_value(1, 14.0)
+            editor.workspace.set_style_value(2, 14.0)
+            editor.workspace.set_style_value(3, 10.0)
+            editor.workspace.set_style_value(8, 1.0)
+            editor.workspace.set_style_value(9, 8.0)
+            editor.workspace.set_style_value(10, 1.0)
+            editor.workspace.set_style_value(11, 0.3)
+            editor.workspace.set_style_value(20, 2.0)
+            editor.workspace.set_style_value(26, 1.0)
+            editor.workspace.set_style_value(32, 1.0)
+            editor.panels.style.open()
             editor.panels.refresh()''',
     # A Black & White adjustment layer over the picture, a Levels layer clipped
     # and masked above it; the layers panel shows their icons.

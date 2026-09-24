@@ -104,6 +104,8 @@ pub class Panels:
         self.style = StyleDialog(workspace, kit)
         self.style.changed = self.document_changed
         self.style.refreshed = self.refresh
+        self.style.pick_color = func (title: str, hex: str, changed: func(str) -> unit!) -> unit!:
+            self.picker.open_for(title, hex, changed)
         self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.style.open)
         self.properties.changed = self.document_changed
         self.properties.refreshed = self.refresh

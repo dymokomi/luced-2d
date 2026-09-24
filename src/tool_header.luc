@@ -33,6 +33,10 @@ pub class ToolHeader:
     pub let sample_menu: Menu
     pub let clone_controls: HStack
     pub let smear_menu: Menu
+    pub let gradient_menu: Menu
+    pub let reverse_box: Checkbox
+    pub let transparent_box: Checkbox
+    pub let gradient_controls: HStack
     pub let box_controls: HStack
     ## Brush…: the window opens Brush Settings; a preset picked: the window
     ## refreshes; Apply or Cancel: the window finishes the box, keeping it or not.
@@ -104,7 +108,17 @@ pub class ToolHeader:
         let liquify = self.choice("Liquify", "smear_liquify", func () -> unit!:
             self.workspace.smear_mode = 2)
         self.smear_menu = Menu("Smudge ▾", [smudge, blur, liquify], font = font)
-        self.bar = Toolbar([self.title, self.smear_menu, self.brush_controls, self.clone_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer(), self.box_controls],
+        let linear = self.choice("Linear", "gradient_linear", func () -> unit!:
+            self.workspace.gradient_radial = false)
+        let radial = self.choice("Radial", "gradient_radial", func () -> unit!:
+            self.workspace.gradient_radial = true)
+        self.gradient_menu = Menu("Linear ▾", [linear, radial], font = font)
+        self.reverse_box = kit.checkbox("Reverse", func () -> unit!:
+            self.workspace.gradient_reverse = not self.workspace.gradient_reverse)
+        self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
+            self.workspace.gradient_transparent = not self.workspace.gradient_transparent)
+        self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
+        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
@@ -153,6 +167,10 @@ pub class ToolHeader:
         self.aligned_box.set_checked(workspace.clone_aligned)
         self.sample_menu.set_text("All Layers ▾" if workspace.clone_all else "This Layer ▾")
         self.smear_menu.set_text(["Smudge ▾", "Blur ▾", "Liquify ▾"][workspace.smear_mode])
+        self.gradient_controls.layout().set_visible(not transforming and tool == "gradient")
+        self.gradient_menu.set_text("Radial ▾" if workspace.gradient_radial else "Linear ▾")
+        self.reverse_box.set_checked(workspace.gradient_reverse)
+        self.transparent_box.set_checked(workspace.gradient_transparent)
         self.wand_controls.layout().set_visible(not transforming and tool == "wand")
         self.text_controls.layout().set_visible(not transforming and tool == "text")
         self.move_controls.layout().set_visible(not transforming and tool == "move")

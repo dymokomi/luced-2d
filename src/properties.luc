@@ -91,6 +91,10 @@ pub class Properties:
                 styled.append("Stroke")
             if workspace.style_value(14) != 0.0:
                 styled.append("Glow")
+            if workspace.style_value(21) != 0.0:
+                styled.append("Overlay")
+            if workspace.style_value(26) != 0.0:
+                styled.append("Inner")
         self.styles_text.set_text(styled.join(" ") if styled.length > 0 else "None")
         self.opacity.set_value(canvas.layer_opacity(selected) * 100.0)
         self.opacity_field.set_value(canvas.layer_opacity(selected) * 100.0)

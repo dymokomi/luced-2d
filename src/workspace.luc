@@ -50,6 +50,12 @@ pub class Workspace:
     pub var clone_aligned: bool = true
     pub var clone_all: bool = false
     pub var smear_mode: int = 0
+    ## The Gradient tool's options: radial rather than linear, the colors
+    ## reversed, and from the foreground to transparent instead of to the
+    ## background.
+    pub var gradient_radial: bool = false
+    pub var gradient_reverse: bool = false
+    pub var gradient_transparent: bool = false
     ## The free transform under way on the canvas, if any.
     pub var transform: TransformBox? = none
     ## The Crop tool's box while the tool is active.
@@ -615,7 +621,14 @@ pub class Workspace:
     ## document point to the background color at another, within the selection.
     pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
         let opacity = self.brush.opacity
-        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, self.red, self.green, self.blue, opacity, self.back_red, self.back_green, self.back_blue, opacity)
+        # From the foreground to the background, or to the foreground faded out.
+        var first = [self.red, self.green, self.blue, opacity]
+        var second = [self.red, self.green, self.blue, 0.0] if self.gradient_transparent else [self.back_red, self.back_green, self.back_blue, opacity]
+        if self.gradient_reverse:
+            let swap = first
+            first = second
+            second = swap
+        self.canvas.fill_gradient(self.selected_id(), x0, y0, x1, y1, first[0], first[1], first[2], first[3], second[0], second[1], second[2], second[3], self.gradient_radial)
         self.touch()
 
     ## Set `text` on the selected layer at the remembered text position, in the foreground color.
@@ -755,13 +768,9 @@ pub class Workspace:
 
     # -- Layer styles.
 
-    ## Layer styles on the selected layer; colors: shadow black, stroke the foreground color, glow white.
-    pub func set_styles(self, shadow: bool, shadow_x: float, shadow_y: float, shadow_blur: float, shadow_opacity: float,
-                        stroke: bool, stroke_size: float, stroke_opacity: float, glow: bool, glow_size: float, glow_opacity: float) -> unit!:
-        let id = self.selected_id()
-        self.canvas.set_shadow(id, shadow, shadow_x, shadow_y, shadow_blur, 0.0, 0.0, 0.0, shadow_opacity)
-        self.canvas.set_stroke(id, stroke, stroke_size, self.red, self.green, self.blue, stroke_opacity)
-        self.canvas.set_glow(id, glow, glow_size, 1.0, 1.0, 1.0, glow_opacity)
+    ## Set one style setting of the selected layer, by field (see Canvas.style_value).
+    pub func set_style_value(self, field: int, value: float) -> unit!:
+        self.canvas.set_style_value(self.selected_id(), field, value)
         self.touch()
 
     ## One style setting of the selected layer (see Canvas.style_value).

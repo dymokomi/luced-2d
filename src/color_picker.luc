@@ -153,6 +153,9 @@ pub class ColorPicker:
     pub var closed: func() -> unit!? = none
     ## Called with the hex the user committed with OK.
     pub var committed: func(str) -> unit!? = none
+    ## Editing some other color than the palette's (`open_for`): every change
+    ## goes here, and Cancel sends the color it started from.
+    var target: func(str) -> unit!? = none
 
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
@@ -212,8 +215,20 @@ pub class ColorPicker:
     pub func is_open(self) -> bool:
         return self.dialog.is_open()
 
+    ## Open for any color, `hex` to start from, titled `title`: each change is
+    ## sent to `changed` at once (a layer style's color), Cancel sends `hex`.
+    pub func open_for(self, title: str, hex: str, changed: func(str) -> unit!) -> unit!:
+        self.target = changed
+        self.before = hex
+        self.title.set_text(title)
+        let original = srgb_of(hex)
+        self.preview.original = linear_of(original)
+        self.show(original)
+        self.dialog.open()
+
     ## Open for the foreground or the background color, seeded from the palette.
     pub func open(self, background: bool) -> unit!:
+        self.target = none
         self.background = background
         self.before = self.workspace.color_hex(background)
         self.title.set_text("Background Color" if background else "Foreground Color")
@@ -230,7 +245,11 @@ pub class ColorPicker:
             self.show(srgb_of(self.workspace.color_hex(self.background)))
 
     func finish(self, keep: bool) -> unit!:
-        if not keep:
+        if let send = self.target:
+            if not keep:
+                send(self.before)
+            self.target = none
+        elif not keep:
             self.workspace.set_color_hex(self.before, self.background)
         self.workspace.sampling = false
         self.dialog.hide()
@@ -380,7 +399,11 @@ pub class ColorPicker:
         if self.syncing:
             return
         let clamped = space.clamp(color)
-        self.workspace.set_color_hex(hex_of(Color(clamped.red, clamped.green, clamped.blue)), self.background)
+        let hex = hex_of(Color(clamped.red, clamped.green, clamped.blue))
+        if let send = self.target:
+            send(hex)
+        else:
+            self.workspace.set_color_hex(hex, self.background)
         self.show(clamped)
 
     func choose_mode(self, mode: int) -> unit!:
