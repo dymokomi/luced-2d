@@ -4,7 +4,7 @@
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
-from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Application, Widget, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, Dialog, ContextMenu, Button
+from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, DockPosition, Shelf, ButtonStyle, Rule, Dialog, ContextMenu, Button
 from input import Key
 from workspace import Workspace
 from actions import Actions
@@ -25,6 +25,7 @@ from style_dialog import StyleDialog
 from adjustments import adjustments, applies_at_once, gradient_map
 from properties import Properties
 from prompts import Prompts
+from document_files import DocumentFiles
 from crash_dialog import CrashDialog
 from menus import menu_bar
 from tools import tools
@@ -66,7 +67,7 @@ pub class Panels:
     var mask_background: bool = false
     pub let document_settings: DocumentSettings
     pub let settings_dialog: SettingsDialog
-    pub var app: Application? = none
+    pub let files: DocumentFiles
     let kit: Kit
 
     pub func init(self, workspace: Workspace, actions: Actions, font: Font, store: Store? = none) -> unit!:
@@ -79,16 +80,18 @@ pub class Panels:
         self.prompts = Prompts(workspace, font)
         self.prompts.refreshed = self.refresh
         kit.keep(self.prompts.prompt.on_submit(self.prompts.apply))
+        self.files = DocumentFiles(workspace, self.prompts, kit)
+        self.files.refreshed = self.refresh
         self.view = CanvasView(workspace)
-        self.view.on_open_files = self.open_files
+        self.view.on_open_files = self.files.open_files
         self.view.on_key_up = self.spring_back
         self.view.on_changed = self.refresh
         self.view.on_text = self.place_text
         self.view.on_refused = self.prompts.tell
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
-        self.tabs.on_close = self.close_document_at
-        self.tabs.on_new = self.new_document
+        self.tabs.on_close = self.files.close_document_at
+        self.tabs.on_new = self.files.new_document
         self.layers = LayerList(workspace, font)
         self.layers.on_place_files = self.place_files
         self.status = Text("", font = font)
@@ -169,7 +172,7 @@ pub class Panels:
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
-                            self.document_settings.dialog, self.crash.dialog], spacing = 0.0)
+                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 
@@ -177,11 +180,13 @@ pub class Panels:
     func connect(self) -> unit!:
         let actions = self.actions
         let kit = self.kit
-        kit.bind(actions.new_document, self.new_document)
-        kit.bind(actions.open_document, self.open_document)
-        kit.bind(actions.save, self.save_document)
-        kit.bind(actions.save_as, self.save_document_as)
-        kit.bind(actions.close_document, self.close_document)
+        kit.bind(actions.new_document, self.files.new_document)
+        kit.bind(actions.open_document, self.files.open_document)
+        kit.bind(actions.save, self.files.save)
+        kit.bind(actions.save_as, self.files.save_as)
+        kit.bind(actions.export_png, self.files.export_png)
+        kit.bind(actions.export_jpeg, self.files.export_jpeg)
+        kit.bind(actions.close_document, self.files.close_document)
         kit.bind(actions.next_document, func () -> unit!:
             self.workspace.next_document(1)
             self.refresh())
@@ -489,15 +494,7 @@ pub class Panels:
         self.workspace.set_blend(mode)
         self.refresh()
 
-    # -- Documents and files.
-
-    ## Files dropped on the canvas: each opens in its own tab.
-    pub func open_files(self, files: list[str]) -> unit!:
-        for path in files:
-            self.workspace.open(path) catch failure:
-                self.prompts.tell(f"Could not open {path}: {failure.message}")
-                continue
-        self.refresh()
+    # -- Documents.
 
     ## Pictures dropped on the layer list: each becomes a layer, centred.
     pub func place_files(self, files: list[str]) -> unit!:
@@ -510,53 +507,6 @@ pub class Panels:
     pub func switch_document(self, index: int) -> unit!:
         self.workspace.switch_document(index)
         self.refresh()
-
-    pub func close_document_at(self, index: int) -> unit!:
-        if self.workspace.previewing():
-            self.workspace.end_preview(false)
-        self.workspace.close_document(index)
-        self.refresh()
-
-    pub func close_document(self) -> unit!:
-        self.close_document_at(self.workspace.current)
-
-    pub func new_document(self) -> unit!:
-        self.prompts.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
-
-    pub func open_document(self) -> unit!:
-        if let app = self.app:
-            let chosen = app.open_file("Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF or EXR picture") catch failure:
-                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
-                return
-            if chosen != "":
-                self.workspace.open(chosen) catch failure:
-                    self.prompts.ask("open", f"Could not open: {failure.message}", chosen, "Open")
-                    return
-                self.refresh()
-            return
-        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
-
-    pub func save_document(self) -> unit!:
-        if self.workspace.path == "":
-            self.save_document_as()
-            return
-        self.workspace.save(self.workspace.path)
-        self.refresh()
-
-    pub func save_document_as(self) -> unit!:
-        let fallback = "Save the flattened document as (extension picks the format)"
-        if let app = self.app:
-            let suggested = self.workspace.path if self.workspace.path != "" else "Untitled.l2d"
-            let chosen = app.save_file("Save as .l2d to keep the layers, or as PNG, JPEG or TIFF for a flattened picture", suggested) catch failure:
-                self.prompts.ask("save", fallback, self.workspace.path, "Save")
-                return
-            if chosen != "":
-                self.workspace.save(chosen) catch failure:
-                    self.prompts.ask("save", f"Could not save: {failure.message}", chosen, "Save")
-                    return
-                self.refresh()
-            return
-        self.prompts.ask("save", fallback, self.workspace.path, "Save")
 
     ## Show a crash report the last run left.
     pub func show_crash(self, report: str) -> unit!:

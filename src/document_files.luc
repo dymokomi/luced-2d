@@ -1,0 +1,186 @@
+## Documents and their files: new, open, save, export and close, and asking
+## before unsaved work is lost. Save always writes the layered `.l2d` package
+## and makes it the document's file; flattened PNG and JPEG pictures are
+## exported, which leaves the document's file alone (Compositor's split). A
+## tab with unsaved changes asks Save / Don't Save / Cancel before it closes,
+## and quitting asks about each one in turn.
+from ui import Application, ConfirmDialog
+from workspace import Workspace
+from prompts import Prompts
+from export_dialog import ExportDialog
+from kit import Kit
+
+pub class DocumentFiles:
+    pub let confirm: ConfirmDialog
+    pub let export_dialog: ExportDialog
+    pub var app: Application? = none
+    pub var refreshed: func() -> unit!? = none
+    ## The tab the confirm dialog is asking about (-1 when it is not), and
+    ## whether closing it is part of quitting.
+    var asking: int = -1
+    var quitting: bool = false
+    let workspace: Workspace
+    let prompts: Prompts
+
+    pub func init(self, workspace: Workspace, prompts: Prompts, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.prompts = prompts
+        self.confirm = ConfirmDialog(font = kit.font)
+        self.export_dialog = ExportDialog(kit)
+        kit.keep(self.confirm.on_choose(self.choose))
+        self.export_dialog.chosen = self.export_jpeg_with
+
+    pub func new_document(self) -> unit!:
+        self.prompts.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
+
+    pub func open_document(self) -> unit!:
+        if let app = self.app:
+            let chosen = app.open_file("Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF or EXR picture") catch failure:
+                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+                return
+            if chosen != "":
+                self.workspace.open(chosen) catch failure:
+                    self.prompts.ask("open", f"Could not open: {failure.message}", chosen, "Open")
+                    return
+                self.refresh()
+            return
+        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+
+    ## Files dropped on the canvas: each opens in its own tab.
+    pub func open_files(self, files: list[str]) -> unit!:
+        for path in files:
+            self.workspace.open(path) catch failure:
+                self.prompts.tell(f"Could not open {path}: {failure.message}")
+                continue
+        self.refresh()
+
+    # -- Saving and exporting.
+
+    ## Save to the document's own `.l2d`; one that has none (new, or opened
+    ## from a picture) is asked for a name. Whether it was saved.
+    pub func save_document(self) -> bool!:
+        if not self.workspace.path.lower().ends_with(".l2d"):
+            return self.save_document_as()
+        self.workspace.save(self.workspace.path)
+        self.refresh()
+        return true
+
+    pub func save_document_as(self) -> bool!:
+        let chosen = self.choose_file("save", "Save the document with its layers as .l2d", self.workspace.export_name(".l2d")) catch failure:
+            return false
+        if chosen == "":
+            return false
+        self.workspace.save(chosen) catch failure:
+            self.prompts.ask("save", f"Could not save: {failure.message}", chosen, "Save")
+            return false
+        self.refresh()
+        return true
+
+    pub func save(self) -> unit!:
+        discard(self.save_document())
+
+    pub func save_as(self) -> unit!:
+        discard(self.save_document_as())
+
+    ## File › Export PNG…: the flattened picture, transparency kept.
+    pub func export_png(self) -> unit!:
+        self.prompts.export_quality = 90
+        self.prompts.export_matte = 1.0
+        self.export_to(self.choose_file("export", "Export the flattened picture as PNG", self.workspace.export_name(".png")), ".png", 90, 1.0)
+
+    ## File › Export JPEG…: the quality and matte first, then the file.
+    pub func export_jpeg(self) -> unit!:
+        self.export_dialog.open()
+
+    func export_jpeg_with(self, quality: int, matte: float) -> unit!:
+        self.prompts.export_quality = quality
+        self.prompts.export_matte = matte
+        self.export_to(self.choose_file("export", "Export the flattened picture as JPEG", self.workspace.export_name(".jpg")), ".jpg", quality, matte)
+
+    func export_to(self, path: str, extension: str, quality: int, matte: float) -> unit!:
+        if path == "":
+            return
+        let lowered = path.lower()
+        let named = path if lowered.ends_with(extension) or (extension == ".jpg" and lowered.ends_with(".jpeg")) else path + extension
+        self.workspace.export(named, quality, matte) catch failure:
+            self.prompts.tell(f"Could not export: {failure.message}")
+            return
+        self.refresh()
+
+    ## A file to write, from the native save panel starting at `name`; "" when
+    ## it was cancelled. Without the panel the prompt asks in `mode` instead
+    ## and carries it out itself, and this answers "".
+    func choose_file(self, mode: str, message: str, name: str) -> str!:
+        if let app = self.app:
+            let chosen = app.save_file(message, name) catch failure:
+                self.prompts.ask(mode, message, name, "Save")
+                return ""
+            return chosen
+        self.prompts.ask(mode, message, name, "Save")
+        return ""
+
+    # -- Closing.
+
+    pub func close_document(self) -> unit!:
+        self.close_document_at(self.workspace.current)
+
+    ## Close tab `index`, asking first when it has unsaved changes.
+    pub func close_document_at(self, index: int) -> unit!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        if self.workspace.document_dirty(index):
+            self.ask(index, false)
+            return
+        self.workspace.close_document(index)
+        self.refresh()
+
+    ## The window's close button and Quit: close now when nothing is unsaved;
+    ## otherwise ask about each document with changes, then quit.
+    pub func can_quit(self) -> bool!:
+        if self.workspace.previewing():
+            self.workspace.end_preview(false)
+        let index = self.first_dirty()
+        if index < 0:
+            return true
+        self.ask(index, true)
+        return false
+
+    func first_dirty(self) -> int:
+        var index = 0
+        while index < self.workspace.document_count():
+            if self.workspace.document_dirty(index):
+                return index
+            index += 1
+        return -1
+
+    func ask(self, index: int, quitting: bool) -> unit!:
+        self.asking = index
+        self.quitting = quitting
+        let title = self.workspace.document_title(index)
+        let when = "quitting" if quitting else "closing"
+        self.confirm.open(f"Save changes to “{title}” before {when}?", "Save", "Don't Save")
+
+    ## The confirm dialog's answer: 0 saves then closes, 1 closes without
+    ## saving, 2 keeps the document open (and stops quitting).
+    func choose(self, role: int) -> unit!:
+        let index = self.asking
+        let quitting = self.quitting
+        self.asking = -1
+        self.quitting = false
+        if role == 2 or index < 0 or index >= self.workspace.document_count():
+            return
+        if role == 0:
+            self.workspace.switch_document(index)
+            if not self.save_document():
+                self.refresh()
+                return
+        self.workspace.close_document(index)
+        self.refresh()
+        if quitting:
+            if self.can_quit():
+                if let app = self.app:
+                    app.stop()
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

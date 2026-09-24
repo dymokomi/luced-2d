@@ -17,7 +17,6 @@ import window
 ## Headless checks of the workspace and the window contents, without a device:
 ## drawing on a standalone frame records nothing but must not fail.
 pub func main(arguments: list[str]) -> int!:
-    discard(arguments)
     layers()
     picking()
     viewing()
@@ -28,6 +27,7 @@ pub func main(arguments: list[str]) -> int!:
     boxes()
     adjustment_table()
     retouch_tools()
+    unsaved_changes(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -366,3 +366,25 @@ func retouch_tools() -> unit!:
     assert(workspace.retouch_kind() == 5)
     workspace.set_clone_source(10.0, 12.0)
     assert(workspace.canvas.has_clone_source() and workspace.canvas.clone_sample_x(40.0) == 10.0)
+
+## Unsaved work: a changed tab asks before it closes and quitting asks too;
+## Save writes an .l2d and clears the mark; exporting leaves both alone.
+func unsaved_changes(arguments: list[str]) -> unit!:
+    # The runner passes a scratch folder to write in.
+    let folder = arguments[arguments.length - 1]
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    assert(not workspace.document_dirty(0) and panels.files.can_quit())
+    workspace.add_layer()
+    assert(workspace.document_dirty(0))
+    panels.files.close_document_at(0)
+    assert(panels.files.confirm.is_open() and workspace.document_count() == 1 and workspace.layer_count() == 2)
+    assert(not panels.files.can_quit())
+    assert(workspace.export_name(".png") == "Untitled.png")
+    workspace.save(folder + "/unsaved")
+    assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0))
+    assert(workspace.export_name(".jpg") == "unsaved.jpg")
+    workspace.export(folder + "/unsaved.png")
+    assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0) and panels.files.can_quit())
+    panels.close()

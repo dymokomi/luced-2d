@@ -27,7 +27,7 @@ pub class Document:
 
     ## Whether it has work its file does not.
     pub func dirty(self) -> bool:
-        return self.canvas.can_undo()
+        return self.canvas.modified()
 
 ## A tab's name for a document saved at `path`, or Untitled for none.
 pub func title_of(path: str) -> str:

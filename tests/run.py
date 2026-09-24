@@ -31,4 +31,4 @@ with tempfile.TemporaryDirectory(prefix='luced-2d-tests-') as temp:
     (project / 'package.prisma').write_text('#prisma 4.0\ndef package "luced-2d-tests" {\n    str owner = "dymokomi"\n    str version = "0.0.0"\n    str kind = "tool"\n    str language = "luce"\n    str entry = "src/main.luc"\n' + dependencies + '}\n')
     binary = Path(temp) / ('tests.exe' if os.name == 'nt' else 'tests')
     subprocess.run([str(arguments.luce.resolve()), 'build', str(project / 'src/main.luc'), '--native', '--opt', '0', '-o', str(binary)], env=environment, check=True, timeout=180)
-    subprocess.run([str(binary)], env=environment, check=True, timeout=90)
+    subprocess.run([str(binary), temp], env=environment, check=True, timeout=90)

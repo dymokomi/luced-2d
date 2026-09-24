@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -104,6 +104,11 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 1130.0 * zoom, y = oy + 900.0 * zoom))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 1130.0 * zoom, y = oy + 900.0 * zoom, button = 0))
             print(f"RETOUCH undo {editor.workspace.canvas.can_undo()}")
+            editor.panels.refresh()''',
+    'closeprompt': '''            editor.workspace.add_layer()
+            editor.panels.files.close_document()
+            editor.panels.refresh()''',
+    'jpeg': '''            editor.panels.files.export_jpeg()
             editor.panels.refresh()''',
     'noise': '''            editor.workspace.select(0)
             editor.panels.adjust.add_noise()

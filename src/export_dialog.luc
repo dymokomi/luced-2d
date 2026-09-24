@@ -1,0 +1,48 @@
+## File › Export JPEG…: the quality and the matte before the file is chosen, as
+## Compositor's JPEG export sheet. JPEG keeps no transparency, so what is
+## see-through is laid over the matte: white, 50% gray or black.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command
+from kit import Kit, SliderField
+
+pub class ExportDialog:
+    pub let dialog: Dialog
+    let quality: SliderField
+    let matte_menu: Menu
+    ## The matte's gray, 0 black .. 1 white.
+    var matte: float = 1.0
+    ## Export was pressed: the quality (1..100) and the matte gray.
+    pub var chosen: func(int, float) -> unit!? = none
+    let kit: Kit
+
+    pub func init(self, kit: Kit) -> unit!:
+        self.kit = kit
+        self.quality = kit.slider_field(1.0, 100.0, 90.0, 0, "", func (moved: float) -> unit!:
+            discard(moved))
+        let white = Command("White", id = "jpeg_matte_white")
+        let gray = Command("50% Gray", id = "jpeg_matte_gray")
+        let black = Command("Black", id = "jpeg_matte_black")
+        kit.bind(white, func () -> unit!:
+            self.set_matte(1.0, "White"))
+        kit.bind(gray, func () -> unit!:
+            self.set_matte(0.5, "50% Gray"))
+        kit.bind(black, func () -> unit!:
+            self.set_matte(0.0, "Black"))
+        self.matte_menu = Menu("White ▾", [white, gray, black], font = kit.font)
+        self.dialog = Dialog([Text("Export JPEG", font = kit.font), kit.dialog_row("Quality", self.quality.row, 80.0),
+                              kit.dialog_row("Matte", self.matte_menu, 80.0),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Export…", self.export)], spacing = 8.0)], width = 360.0)
+
+    pub func open(self) -> unit!:
+        self.dialog.open()
+
+    func set_matte(self, gray: float, name: str) -> unit!:
+        self.matte = gray
+        self.matte_menu.set_text(name + " ▾")
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    func export(self) -> unit!:
+        self.dialog.hide()
+        if let chosen = self.chosen:
+            chosen(int(self.quality.value() + 0.5), self.matte)

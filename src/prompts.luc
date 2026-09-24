@@ -8,6 +8,10 @@ from workspace import Workspace
 pub class Prompts:
     pub let prompt: TextPrompt
     pub var mode: str = ""
+    ## What an "export" asks for when the save panel is unavailable: JPEG's
+    ## quality and matte.
+    pub var export_quality: int = 90
+    pub var export_matte: float = 1.0
     ## After a prompt is carried out, the window refreshes.
     pub var refreshed: func() -> unit!? = none
     let workspace: Workspace
@@ -60,6 +64,13 @@ pub class Prompts:
                 return
             workspace.save(trimmed) catch failure:
                 self.reject(text, f"Could not save: {failure.message}")
+                return
+        elif mode == "export":
+            if trimmed == "":
+                self.reject(text, "Enter a file name ending .png or .jpg")
+                return
+            workspace.export(trimmed, self.export_quality, self.export_matte) catch failure:
+                self.reject(text, f"Could not export: {failure.message}")
                 return
         elif mode == "new":
             let numbers = parse_numbers(trimmed)

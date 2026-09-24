@@ -197,7 +197,7 @@ pub class Workspace:
 
     ## Whether document `index` has unsaved work, the live one read live.
     pub func document_dirty(self, index: int) -> bool:
-        return self.canvas.can_undo() if index == self.current else self.documents[index].dirty()
+        return self.canvas.modified() if index == self.current else self.documents[index].dirty()
 
     pub func width(self) -> int:
         return self.canvas.width()
@@ -213,15 +213,32 @@ pub class Workspace:
     pub func open(self, path: str) -> unit!:
         self.adopt(Document(Canvas.open(path), path))
 
-    ## Save to `path`: an `.l2d` package keeps every layer; any other extension
-    ## writes the flattened picture in that format.
+    ## Save the document to `path` as an `.l2d` package, which keeps every
+    ## layer (a name without the extension gets it); it is the document's file
+    ## from now on. Flattened pictures are `export`ed instead, so a later Save
+    ## never overwrites a picture with the flattened document by surprise.
     pub func save(self, path: str) -> unit!:
-        if path.lower().ends_with(".l2d"):
-            self.canvas.save_package(path)
-        else:
-            self.canvas.save(path)
-        self.path = path
+        let package = path if path.lower().ends_with(".l2d") else path + ".l2d"
+        self.canvas.save_package(package)
+        self.path = package
         self.touch()
+
+    ## File › Export: the flattened picture to `path`, its format by the
+    ## extension. JPEG has no transparency, so it is written at `quality`
+    ## (1..100) over the `matte` gray (0 black .. 1 white). The document keeps
+    ## its own file.
+    pub func export(self, path: str, quality: int = 90, matte: float = 1.0) -> unit!:
+        let lowered = path.lower()
+        let jpeg = lowered.ends_with(".jpg") or lowered.ends_with(".jpeg")
+        self.canvas.save(path, quality, matte if jpeg else -1.0, matte, matte)
+
+    ## A file name for an exported picture: the document's, its extension
+    ## replaced by `extension`.
+    pub func export_name(self, extension: str) -> str:
+        let pieces = title_of(self.path).split(".")
+        if pieces.length == 1:
+            return pieces[0] + extension
+        return pieces[..<(pieces.length - 1)].join(".") + extension
 
     ## Whether `path` is a file luced-2d opens: a picture, a Photoshop document or
     ## its own .l2d package.
