@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -216,6 +216,32 @@ SCENES = {
     'pickerwhite': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(1.0, 1.0, 1.0)
             editor.panels.pick_color(false)
+            editor.panels.refresh()''',
+    'strokes': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.set_color(0.9, 0.05, 0.05)
+            editor.workspace.brush.diameter = 18.0
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            let x0 = area.x + 150.0
+            let y0 = area.y + 150.0
+            # A short stroke, then a Shift-click: a straight line from its end.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = x0, y = y0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = x0 + 40.0, y = y0 + 10.0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = x0 + 40.0, y = y0 + 10.0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = x0 + 400.0, y = y0 + 200.0, button = 0, shift = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = x0 + 400.0, y = y0 + 200.0, button = 0, shift = true))
+            # A Shift-drag that wobbles keeps to the horizontal it started along.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = x0, y = y0 + 320.0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = x0, y = y0 + 320.0, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = x0 + 20.0, y = y0 + 360.0, button = 0, shift = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = x0 + 120.0, y = y0 + 370.0, shift = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = x0 + 260.0, y = y0 + 330.0, shift = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = x0 + 420.0, y = y0 + 400.0, shift = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = x0 + 420.0, y = y0 + 400.0, button = 0, shift = true))
+            # Alt-click with the brush samples the color under it.
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = area.x + area.width - 200.0, y = area.y + 200.0, button = 0, alt = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = area.x + area.width - 200.0, y = area.y + 200.0, button = 0, alt = true))
+            print(f"STROKES color after alt-click {editor.workspace.color_hex()}")
             editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)

@@ -9,6 +9,7 @@ from selection_drag import SelectionDrag, mode_of
 from kit import outline, dropped_paths
 import theme
 import math
+import time
 
 ## The document on screen: backdrop, checkerboard under transparent pixels,
 ## the flattened document at the workspace's zoom and offset, and a hairline
@@ -24,6 +25,8 @@ pub class CanvasView: Widget:
     pub var on_open_files: func(list[str]) -> unit!? = none
     ## A key let go over the canvas, for spring-loaded tools.
     pub var on_key_up: func(Key) -> unit!? = none
+    ## Something the window shows changed from the keyboard (an opacity by digit).
+    pub var on_changed: func() -> unit!? = none
     pub var pointer_x: float = 0.0
     pub var pointer_y: float = 0.0
     pub var pointer_inside: bool = false
@@ -35,6 +38,18 @@ pub class CanvasView: Widget:
     var last_x: float = 0.0
     var last_y: float = 0.0
     var painting: bool = false
+    ## Where the last stroke ended, in document pixels, for Shift-click lines.
+    var stroke_end_x: float = 0.0
+    var stroke_end_y: float = 0.0
+    var has_stroke_end: bool = false
+    ## A Shift-drag stroke keeps to the axis it first moves along: 0 not yet
+    ## chosen, 1 horizontal, 2 vertical; -1 when Shift was not held.
+    var axis: int = -1
+    var stroke_x: float = 0.0
+    var stroke_y: float = 0.0
+    ## The last digit typed and when, so two quick digits give an exact opacity.
+    var digit: int = -1
+    var digit_at: int = 0
     let selection: SelectionDrag
     ## A gradient drag in progress, from a document point.
     var gradient_dragging: bool = false
@@ -239,6 +254,12 @@ pub class CanvasView: Widget:
         if event.kind == EventKind.key_down:
             if event.key == Key.space:
                 self.space_held = true
+            elif event.key == Key.escape and self.painting:
+                # Esc drops the stroke in progress.
+                self.painting = false
+                self.workspace.cancel_stroke()
+            elif not event.meta and not event.control and not event.repeated and digit_value(event.key) >= 0:
+                self.type_digit(digit_value(event.key))
             elif self.workspace.tool == "move" and (event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down):
                 # Arrows nudge the layer a pixel, shift ten.
                 let step = 10 if event.shift else 1
@@ -259,8 +280,8 @@ pub class CanvasView: Widget:
         if event.kind == EventKind.magnify:
             # A touchpad pinch: the magnification change, about the pointer.
             self.workspace.zoom_about(1.0 + event.scroll_y, event.x, event.y)
-        elif event.scroll_unit == ScrollUnit.lines or event.meta or event.control:
-            # A notched mouse wheel zooms about the pointer; so does any scroll with cmd/ctrl held.
+        elif event.scroll_unit == ScrollUnit.lines or event.meta or event.control or event.alt:
+            # A notched mouse wheel zooms about the pointer; so does any scroll with cmd, ctrl or alt held.
             let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
             self.workspace.zoom_about(math.pow(1.0025, event.scroll_y * step), event.x, event.y)
         else:
@@ -296,6 +317,9 @@ pub class CanvasView: Widget:
             self.move_y = event.y
             self.move_now_x = event.x
             self.move_now_y = event.y
+        elif (tool == "brush" or tool == "gradient") and event.alt:
+            # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
+            workspace.pick(x, y)
         elif tool == "gradient":
             self.gradient_dragging = true
             self.gradient_x = x
@@ -312,8 +336,57 @@ pub class CanvasView: Widget:
         elif tool == "marquee" or tool == "ellipse" or tool == "lasso":
             self.selection.begin(workspace, x, y, tool == "lasso", event.shift, event.alt)
         else:
-            workspace.begin_stroke(x, y, event.pressure)
-            self.painting = workspace.canvas.painting()
+            self.begin_painting(x, y, event.shift, event.pressure)
+
+    ## Start painting at a document point. With Shift, a straight line first
+    ## runs from where the last stroke ended, and the stroke keeps to one axis.
+    func begin_painting(self, x: float, y: float, shift: bool, pressure: float) -> unit!:
+        let workspace = self.workspace
+        if shift and self.has_stroke_end:
+            workspace.begin_stroke(self.stroke_end_x, self.stroke_end_y, pressure)
+            workspace.extend_stroke(x, y, pressure)
+        else:
+            workspace.begin_stroke(x, y, pressure)
+        self.painting = workspace.canvas.painting()
+        self.axis = 0 if shift else -1
+        self.stroke_x = x
+        self.stroke_y = y
+
+    ## A stroke point kept to the stroke's axis once it has one: Shift-drag
+    ## chooses horizontal or vertical by the first few pixels of travel.
+    func on_axis(self, x: float, y: float) -> Point:
+        if self.axis == 0:
+            let dx = math.abs(x - self.stroke_x)
+            let dy = math.abs(y - self.stroke_y)
+            if (dx + dy) * self.workspace.zoom >= 4.0:
+                self.axis = 1 if dx >= dy else 2
+        if self.axis == 1:
+            return Point(x, self.stroke_y)
+        if self.axis == 2:
+            return Point(self.stroke_x, y)
+        return Point(x, y)
+
+    ## A number key, as Photoshop's: 1..9 set 10%..90% and 0 sets 100%; two
+    ## digits within half a second set that exact percentage (0 then 5: 5%).
+    ## Painting tools take it as the brush's opacity, the others as the layer's.
+    func type_digit(self, value: int) -> unit!:
+        let now = time.now() // 1000000
+        var percent = 100 if value == 0 else value * 10
+        if self.digit >= 0 and now - self.digit_at < 500:
+            percent = self.digit * 10 + value
+            self.digit = -1
+        else:
+            self.digit = value
+        self.digit_at = now
+        let workspace = self.workspace
+        let fraction = math.max(0.01, float(percent) / 100.0)
+        if workspace.tool == "brush" or workspace.tool == "eraser" or workspace.tool == "gradient":
+            workspace.brush.opacity = fraction
+            workspace.touch()
+        else:
+            workspace.set_opacity(fraction)
+        if let changed = self.on_changed:
+            changed()
 
     ## The pointer moved: carry on the gesture in progress.
     func drag(self, event: Event) -> unit!:
@@ -322,7 +395,8 @@ pub class CanvasView: Widget:
             self.last_x = event.x
             self.last_y = event.y
         elif self.painting:
-            self.workspace.extend_stroke(self.document_x(event.x), self.document_y(event.y), event.pressure)
+            let point = self.on_axis(self.document_x(event.x), self.document_y(event.y))
+            self.workspace.extend_stroke(point.x, point.y, event.pressure)
         elif self.zooming:
             # Scrubby zoom: every 100 points right doubles, left halves.
             let dx = event.x - self.zoom_x
@@ -359,8 +433,36 @@ pub class CanvasView: Widget:
             self.selection.finish(workspace, x, y, event.shift, event.alt, workspace.tool == "ellipse")
         elif self.painting:
             self.painting = false
-            workspace.extend_stroke(x, y, event.pressure)
+            let point = self.on_axis(x, y)
+            workspace.extend_stroke(point.x, point.y, event.pressure)
             workspace.end_stroke()
+            self.stroke_end_x = point.x
+            self.stroke_end_y = point.y
+            self.has_stroke_end = true
+
+## The digit a number key types, or -1.
+func digit_value(key: Key) -> int:
+    if key == Key.digit_0:
+        return 0
+    if key == Key.digit_1:
+        return 1
+    if key == Key.digit_2:
+        return 2
+    if key == Key.digit_3:
+        return 3
+    if key == Key.digit_4:
+        return 4
+    if key == Key.digit_5:
+        return 5
+    if key == Key.digit_6:
+        return 6
+    if key == Key.digit_7:
+        return 7
+    if key == Key.digit_8:
+        return 8
+    if key == Key.digit_9:
+        return 9
+    return -1
 
 ## A texel index kept inside a 256-texel checker tile, leaving room for one texel.
 pub func clamp_texel(value: int) -> int:

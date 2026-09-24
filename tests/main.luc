@@ -1,6 +1,7 @@
 from ui import Font
 from gpu import Frame
 from workspace import Workspace
+from canvas import Canvas
 from panels import Panels
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
@@ -193,4 +194,39 @@ func tool_gestures() -> unit!:
     release(view, 220.0, 150.0, shift = true)
     assert(workspace.canvas.selection_left() == 80 and workspace.canvas.selection_top() == 20)
     assert(workspace.canvas.selection_width() == 140 and workspace.canvas.selection_height() == 130)
+    # Shift+Alt held at the press intersects: only the strip's part inside 200..300 x 100..200 stays.
+    press(view, 150.0, 100.0, shift = true, alt = true)
+    drag_to(view, 300.0, 200.0, shift = true, alt = true)
+    release(view, 300.0, 200.0, shift = true, alt = true)
+    assert(workspace.canvas.selection_left() == 200 and workspace.canvas.selection_top() == 100)
+    assert(workspace.canvas.selection_width() == 20 and workspace.canvas.selection_height() == 50)
+    # Number keys: 4 then 5 at once is 45% brush opacity; after a pair a single
+    # digit starts afresh: with the move tool, 3 is the layer's 30%.
+    panels.choose_tool("brush")
+    view.event(Event(kind = EventKind.key_down, key = Key.digit_4))
+    assert(math.abs(workspace.brush.opacity - 0.4) < 0.001)
+    view.event(Event(kind = EventKind.key_down, key = Key.digit_5))
+    assert(math.abs(workspace.brush.opacity - 0.45) < 0.001)
+    panels.choose_tool("move")
+    view.event(Event(kind = EventKind.key_down, key = Key.digit_3))
+    assert(math.abs(workspace.canvas.layer_opacity(workspace.selected) - 0.3) < 0.001)
+    # Shift ] and Shift [ step the hardness; ] and [ always change the size, even at one pixel.
+    workspace.brush.hardness = 0.5
+    panels.actions.harder.trigger()
+    assert(math.abs(workspace.brush.hardness - 0.75) < 0.001)
+    panels.actions.softer.trigger()
+    panels.actions.softer.trigger()
+    panels.actions.softer.trigger()
+    assert(workspace.brush.hardness == 0.0)
+    workspace.brush.diameter = 1.0
+    panels.actions.bigger.trigger()
+    assert(workspace.brush.diameter == 2.0)
+    panels.actions.smaller.trigger()
+    assert(workspace.brush.diameter == 1.0)
+    # Shift + and Shift - step the layer's blend mode, wrapping.
+    panels.actions.next_blend.trigger()
+    assert(workspace.canvas.layer_blend(workspace.selected) == 1)
+    panels.actions.previous_blend.trigger()
+    panels.actions.previous_blend.trigger()
+    assert(workspace.canvas.layer_blend(workspace.selected) == Canvas.blend_mode_count() - 1)
     panels.close()

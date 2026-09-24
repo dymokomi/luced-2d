@@ -13,7 +13,7 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
                     Menu("Adjust", actions.adjustments, font = font),
                     Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
                                    actions.toggle_mask, actions.toggle_mask_editing, actions.toggle_clipped, actions.toggle_visibility,
-                                   actions.rename_layer, actions.layer_style], font = font),
+                                   actions.rename_layer, actions.layer_style, divider(), actions.next_blend, actions.previous_blend], font = font),
                     Menu("Filter", [actions.blur], font = font),
                     Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, divider(), actions.show_rulers, actions.show_grid]
                                  + actions.units + [divider(), actions.next_document, actions.previous_document], font = font),

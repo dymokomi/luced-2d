@@ -361,6 +361,11 @@ pub class Workspace:
         self.brush.scale(factor)
         self.touch()
 
+    ## Shift ] and Shift [: the brush's hardness by `step`, within 0..1.
+    pub func harden_brush(self, step: float):
+        self.brush.hardness = math.max(0.0, math.min(1.0, self.brush.hardness + step))
+        self.touch()
+
     ## Start a stroke on the selected layer at a document point; `pressure` is
     ## the stylus's, 0..1, or zero from a mouse. A hidden layer takes no paint.
     pub func begin_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
@@ -374,6 +379,13 @@ pub class Workspace:
     pub func extend_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
         if self.canvas.painting():
             self.canvas.extend_stroke(x, y, pressure if pressure > 0.0 else 1.0)
+            self.touch()
+
+    ## Esc mid-stroke: end the stroke and take back what it painted.
+    pub func cancel_stroke(self) -> unit!:
+        if self.canvas.painting():
+            self.canvas.end_stroke()
+            self.canvas.undo()
             self.touch()
 
     ## End the stroke in progress, keeping what it painted.

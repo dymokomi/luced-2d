@@ -55,6 +55,9 @@ pub class Actions:
     pub let layer_style: Command
     pub let rename_layer: Command
     pub let blends: list[Command]
+    ## Shift + and Shift -: the selected layer's blend mode, one step through Photoshop's list.
+    pub let next_blend: Command
+    pub let previous_blend: Command
     # View
     pub let fit: Command
     pub let show_rulers: Command
@@ -69,6 +72,9 @@ pub class Actions:
     pub let tools: list[Command]
     pub let bigger: Command
     pub let smaller: Command
+    ## Shift ] and Shift [: the brush's hardness by a quarter.
+    pub let harder: Command
+    pub let softer: Command
     pub let all: list[Command]
 
     pub func init(self) -> unit!:
@@ -97,7 +103,7 @@ pub class Actions:
         self.crop = Command("Crop to Selection", id = "crop")
         self.canvas_size = Command("Canvas Size…", id = "canvas_size")
         self.image_size = Command("Image Size…", id = "image_size")
-        self.adjustments = [Command("Brightness / Contrast…", id = "adjust_0"), Command("Hue / Saturation / Lightness…", id = "adjust_1"),
+        self.adjustments = [Command("Brightness / Contrast…", id = "adjust_0"), Command("Hue / Saturation / Lightness…", Shortcut(Key.u, primary = true), id = "adjust_1"),
                             Command("Invert", Shortcut(Key.i, primary = true), id = "adjust_2"), Command("Levels…", Shortcut(Key.l, primary = true), id = "adjust_3"),
                             Command("Desaturate", Shortcut(Key.u, primary = true, shift = true), id = "adjust_4"),
                             Command("Threshold…", id = "adjust_5"), Command("Posterize…", id = "adjust_6"),
@@ -120,6 +126,8 @@ pub class Actions:
         while mode < Canvas.blend_mode_count():
             self.blends.append(Command(Canvas.blend_mode_name(mode), id = f"blend_{mode}"))
             mode += 1
+        self.next_blend = Command("Next Blend Mode", Shortcut(Key.equal, shift = true), id = "next_blend")
+        self.previous_blend = Command("Previous Blend Mode", Shortcut(Key.minus, shift = true), id = "previous_blend")
         self.fit = Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit")
         self.show_rulers = Command("Show Rulers", Shortcut(Key.r, primary = true), id = "show_rulers")
         self.show_grid = Command("Show Grid", Shortcut(Key.apostrophe, primary = true), id = "show_grid")
@@ -135,12 +143,14 @@ pub class Actions:
             self.tools.append(Command(tool.name, Shortcut(tool.key, shift = tool.shift), id = tool.id))
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
+        self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
+        self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
         self.all = [self.new_document, self.open_document, self.save, self.save_as, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.canvas_size, self.image_size, self.blur,
                     self.add_layer, self.duplicate_layer, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.document_settings, self.bigger, self.smaller] + self.adjustments + self.blends + self.tools + self.units
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:

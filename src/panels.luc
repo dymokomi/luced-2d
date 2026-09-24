@@ -78,6 +78,7 @@ pub class Panels:
         self.view = CanvasView(workspace)
         self.view.on_open_files = self.open_files
         self.view.on_key_up = self.spring_back
+        self.view.on_changed = self.refresh
         self.view.on_text = self.place_text
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
@@ -252,6 +253,18 @@ pub class Panels:
             self.refresh())
         kit.bind(actions.smaller, func () -> unit!:
             self.workspace.scale_brush(0.8)
+            self.refresh())
+        kit.bind(actions.harder, func () -> unit!:
+            self.workspace.harden_brush(0.25)
+            self.refresh())
+        kit.bind(actions.softer, func () -> unit!:
+            self.workspace.harden_brush(-0.25)
+            self.refresh())
+        kit.bind(actions.next_blend, func () -> unit!:
+            self.workspace.cycle_blend(1)
+            self.refresh())
+        kit.bind(actions.previous_blend, func () -> unit!:
+            self.workspace.cycle_blend(-1)
             self.refresh())
         var kind = 0
         for command in actions.adjustments:
