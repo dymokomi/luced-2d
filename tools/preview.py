@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -116,6 +116,10 @@ SCENES = {
     'rename': '''            editor.workspace.select(1)
             editor.panels.refresh()
             editor.panels.actions.rename_layer.trigger()
+            editor.panels.refresh()''',
+    'canvassize': '''            editor.panels.actions.canvas_size.trigger()
+            editor.panels.refresh()''',
+    'imagesize': '''            editor.panels.actions.image_size.trigger()
             editor.panels.refresh()''',
     'closeprompt': '''            editor.workspace.add_layer()
             editor.panels.files.close_document()

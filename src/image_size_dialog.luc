@@ -1,0 +1,89 @@
+## Image › Image Size… (Opt-Cmd-I), as Compositor's sheet: the new size in
+## any unit, the ratio kept if asked, the resolution, and whether the pixels
+## are resampled (nearest or smooth) — without it only the resolution, and so
+## the printed size, changes. One undo step.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command, NumberField, Checkbox
+from interop import Connection
+from workspace import Workspace
+from kit import Kit
+from size_fields import SizeFields
+
+pub class ImageSizeDialog:
+    pub let dialog: Dialog
+    let sizes: SizeFields
+    let now_text: Text
+    let resolution_field: NumberField
+    let resample_box: Checkbox
+    let sampling_menu: Menu
+    var smooth: bool = true
+    let connections: list[Connection]
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.connections = []
+        let font = kit.font
+        self.sizes = SizeFields(font, false, true)
+        self.now_text = Text("", font = font, muted = true)
+        self.resolution_field = NumberField(72.0, 1.0, 9600.0, 1.0, suffix = " px/in", font = font, cells = 11.0)
+        self.connections.append(self.resolution_field.on_change(func (value: float) -> unit!:
+            self.sizes.set_resolution(value)))
+        self.resample_box = Checkbox("Resample the pixels", true, font = font)
+        let nearest = Command("Nearest", id = "image_size_nearest")
+        let smooth = Command("Smooth", id = "image_size_smooth")
+        kit.bind(nearest, func () -> unit!:
+            self.choose_smooth(false))
+        kit.bind(smooth, func () -> unit!:
+            self.choose_smooth(true))
+        self.sampling_menu = Menu("Smooth ▾", [nearest, smooth], font = font)
+        self.dialog = Dialog([Text("Image Size", font = font), self.now_text, self.sizes.rows,
+                              kit.dialog_row("Resolution", self.resolution_field, 110.0), kit.dialog_row("", self.resample_box, 110.0),
+                              kit.dialog_row("Sampling", self.sampling_menu, 110.0),
+                              Text("Unchecked, only the resolution changes.", font = font, muted = true),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Resize", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+
+    pub func open(self) -> unit!:
+        let workspace = self.workspace
+        let resolution = workspace.canvas.resolution()
+        self.resolution_field.set_value(resolution)
+        self.sizes.reset(workspace.width(), workspace.height(), resolution)
+        self.now_text.set_text(f"Now: {workspace.width()} × {workspace.height()} px at {int(resolution + 0.5)} px/in")
+        self.dialog.open()
+
+    func choose_smooth(self, smooth: bool) -> unit!:
+        self.smooth = smooth
+        self.sampling_menu.set_text("Smooth ▾" if smooth else "Nearest ▾")
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    func apply(self) -> unit!:
+        let width = self.sizes.pixels(true)
+        let height = self.sizes.pixels(false)
+        if width < 1 or height < 1 or width > 65536 or height > 65536:
+            if let failed = self.failed:
+                failed("Each side must be 1..65536 pixels")
+            return
+        self.dialog.hide()
+        let workspace = self.workspace
+        let resolution = self.resolution_field.value()
+        let resample = self.resample_box.is_checked() and (width != workspace.width() or height != workspace.height())
+        let smooth = self.smooth
+        workspace.as_one("Image Size", func () -> unit!:
+            workspace.canvas.set_resolution(resolution)
+            if resample:
+                workspace.resize_image(width, height, smooth)) catch failure:
+            if let failed = self.failed:
+                failed(f"Image Size: {failure.message}")
+            return
+        workspace.touch()
+        if let done = self.applied:
+            done()
+
+    pub func close(self):
+        self.sizes.close()
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()

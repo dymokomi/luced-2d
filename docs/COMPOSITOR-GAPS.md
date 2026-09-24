@@ -36,9 +36,9 @@ Found beyond the old list, and first because they lose work:
    selected layer and group; Move Out of Folder; new-group, effects and
    adjustment buttons in the footer; Cmd-Shift-click on the canvas adds a layer
    to the selection; opacity digits for every selected layer.
-6. [ ] Real dialogs: New Canvas (size from the clipboard image), Canvas Size
-   (anchor grid, relative, units, color; Opt-Cmd-C), Image Size (aspect lock,
-   resampling; Opt-Cmd-I), Trim.
+6. [x] Real dialogs (0.1.35): New Canvas (size from the clipboard image), Canvas
+   Size (anchor grid, relative, units, extension color; Opt-Cmd-C), Image Size
+   (aspect lock, resolution, resampling; Opt-Cmd-I), Trim.
 7. [ ] Polygonal lasso; selection header: mode control, Feather, anti-alias;
    wand Sample Size and all layers; Cmd-arrows move selected pixels; marquee
    autoscroll; selection changes undoable.

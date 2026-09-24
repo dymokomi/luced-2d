@@ -1,0 +1,156 @@
+## Width and height in a size dialog, as Compositor's sheets have them: in
+## pixels, percent of the size now, millimeters or inches (through the
+## resolution), optionally relative to the size now (Canvas Size's "Relative"),
+## with the aspect ratio kept when locked. The dialogs read the result in
+## whole pixels.
+from ui import Widget, Text, HStack, VStack, Spacer, Size, NumberField, Checkbox, Menu, Command, Font
+from interop import Connection
+import math
+from units import unit_label, pixels_per
+
+pub class SizeFields:
+    pub let rows: VStack
+    let width_field: NumberField
+    let height_field: NumberField
+    let units_menu: Menu
+    pub let lock_box: Checkbox
+    pub let relative_box: Checkbox
+    let connections: list[Connection]
+    ## The size now, in pixels, and pixels per inch.
+    var original_width: float = 1.0
+    var original_height: float = 1.0
+    var resolution: float = 72.0
+    ## The size chosen, in pixels: the fields show it.
+    var width_pixels: float = 1.0
+    var height_pixels: float = 1.0
+    ## "px", "%", "mm" or "in".
+    var units: str = "px"
+    ## Set while the fields are written from code, so their edits are not echoed.
+    var writing: bool = false
+    ## A value changed: the dialog shows the new size.
+    pub var changed: func() -> unit!? = none
+    let font: Font
+
+    pub func init(self, font: Font, relative: bool, locked: bool) -> unit!:
+        self.font = font
+        self.connections = []
+        self.width_field = NumberField(1.0, -65536.0, 65536.0, 1.0, font = font, cells = 11.0)
+        self.height_field = NumberField(1.0, -65536.0, 65536.0, 1.0, font = font, cells = 11.0)
+        self.connections.append(self.width_field.on_change(func (value: float) -> unit!:
+            self.edited(true)))
+        self.connections.append(self.height_field.on_change(func (value: float) -> unit!:
+            self.edited(false)))
+        var commands: list[Command] = []
+        for choice in ["px", "%", "mm", "in"]:
+            let chosen = choice
+            let command = Command(self.label(choice), id = "size_units_" + choice)
+            self.connections.append(command.on_trigger(func () -> unit!:
+                self.choose_units(chosen)))
+            commands.append(command)
+        self.units_menu = Menu("Pixels ▾", commands, font = font)
+        self.lock_box = Checkbox("Keep aspect ratio", locked, font = font)
+        self.relative_box = Checkbox("Relative to the size now", false, font = font)
+        self.connections.append(self.relative_box.on_change(func (value: bool) -> unit!:
+            self.write()))
+        var items: list[Widget] = [self.row("Units", self.units_menu), self.row("Width", self.width_field), self.row("Height", self.height_field), self.row("", self.lock_box)]
+        if relative:
+            items.append(self.row("", self.relative_box))
+        self.rows = VStack(items, spacing = 8.0)
+
+    func row(self, label: str, control: Widget) -> HStack!:
+        let caption = Text(label, font = self.font, muted = true)
+        caption.layout().set_limits(Size(110.0, 0.0), Size(110.0, 16384.0))
+        return HStack([caption, control, Spacer()], spacing = 8.0)
+
+    func label(self, choice: str) -> str:
+        return "Percent" if choice == "%" else unit_label(choice)
+
+    ## Start from a `width` by `height` picture at `resolution` pixels per inch.
+    pub func reset(self, width: int, height: int, resolution: float) -> unit!:
+        self.original_width = float(width)
+        self.original_height = float(height)
+        self.resolution = resolution
+        self.width_pixels = float(width)
+        self.height_pixels = float(height)
+        self.relative_box.set_checked(false)
+        self.write()
+
+    ## The size set from code, in pixels.
+    pub func set_pixels(self, width: int, height: int) -> unit!:
+        self.width_pixels = float(width)
+        self.height_pixels = float(height)
+        self.write()
+
+    ## The resolution changed (Image Size's field): the physical units follow.
+    pub func set_resolution(self, resolution: float) -> unit!:
+        self.resolution = resolution
+        self.write()
+
+    ## The size in whole pixels.
+    pub func pixels(self, width_axis: bool) -> int:
+        return int(math.floor((self.width_pixels if width_axis else self.height_pixels) + 0.5))
+
+    ## A size in `units` (relative or not) from `pixels`, and back.
+    func shown(self, pixels: float, width_axis: bool) -> float:
+        let original = self.original_width if width_axis else self.original_height
+        let amount = pixels - (original if self.relative_box.is_checked() else 0.0)
+        if self.units == "%":
+            return amount / original * 100.0
+        return amount / pixels_per(self.units, self.resolution)
+
+    func to_pixels(self, value: float, width_axis: bool) -> float:
+        let original = self.original_width if width_axis else self.original_height
+        var amount = value * pixels_per(self.units, self.resolution)
+        if self.units == "%":
+            amount = value / 100.0 * original
+        return amount + (original if self.relative_box.is_checked() else 0.0)
+
+    func choose_units(self, units: str) -> unit!:
+        self.units = units
+        self.write()
+
+    ## The fields showing the size in the chosen units.
+    func write(self) -> unit!:
+        self.show()
+        self.writing = true
+        self.width_field.set_value(self.shown(self.width_pixels, true))
+        self.height_field.set_value(self.shown(self.height_pixels, false))
+        self.writing = false
+        self.notify()
+
+    ## The units menu, decimals and suffixes for the chosen units.
+    func show(self) -> unit!:
+        self.units_menu.set_text(self.label(self.units) + " ▾")
+        let whole = self.units == "px"
+        let suffix = " %" if self.units == "%" else " " + self.units
+        for field in [self.width_field, self.height_field]:
+            field.set_decimals(0 if whole else 2)
+            field.set_step(1.0 if whole else 0.01)
+            field.set_suffix(suffix)
+
+    ## One side typed: the other follows when the ratio is kept.
+    func edited(self, width_axis: bool) -> unit!:
+        if self.writing:
+            return
+        let typed = self.to_pixels((self.width_field if width_axis else self.height_field).value(), width_axis)
+        if width_axis:
+            self.width_pixels = typed
+        else:
+            self.height_pixels = typed
+        if self.lock_box.is_checked():
+            if width_axis:
+                self.height_pixels = typed * self.original_height / self.original_width
+            else:
+                self.width_pixels = typed * self.original_width / self.original_height
+            self.write()
+            return
+        self.notify()
+
+    func notify(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+    pub func close(self):
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()

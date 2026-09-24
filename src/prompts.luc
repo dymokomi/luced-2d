@@ -72,33 +72,6 @@ pub class Prompts:
             workspace.export(trimmed, self.export_quality, self.export_matte) catch failure:
                 self.reject(text, f"Could not export: {failure.message}")
                 return
-        elif mode == "new":
-            let numbers = parse_numbers(trimmed)
-            if numbers.length != 2:
-                self.reject(text, "Enter a size like 1920 x 1080")
-                return
-            if numbers[0] < 1 or numbers[1] < 1 or numbers[0] > 16384 or numbers[1] > 16384:
-                self.reject(text, "Each side must be 1..16384 pixels")
-                return
-            workspace.create(numbers[0], numbers[1])
-        elif mode == "canvas":
-            let numbers = parse_numbers(trimmed)
-            if numbers.length != 4 and numbers.length != 2:
-                self.reject(text, "Enter: width x height offset_x offset_y")
-                return
-            let ox = numbers[2] if numbers.length == 4 else 0
-            let oy = numbers[3] if numbers.length == 4 else 0
-            workspace.resize_canvas(numbers[0], numbers[1], ox, oy) catch failure:
-                self.reject(text, f"Could not resize: {failure.message}")
-                return
-        elif mode == "image":
-            let numbers = parse_numbers(trimmed)
-            if numbers.length != 2:
-                self.reject(text, "Enter: width x height")
-                return
-            workspace.resize_image(numbers[0], numbers[1]) catch failure:
-                self.reject(text, f"Could not resize: {failure.message}")
-                return
         elif mode == "expand" or mode == "contract" or mode == "feather":
             let amount = int(trimmed) catch failure:
                 self.reject(text, "Enter a whole number: 1..512")
@@ -113,16 +86,3 @@ pub class Prompts:
         self.cancel()
         if let refresh = self.refreshed:
             refresh()
-
-## The whole numbers in `text`, separated by spaces or an "x" ("1920 x 1080 0 0");
-## none when any part is not a number.
-pub func parse_numbers(text: str) -> list[int]:
-    var numbers: list[int] = []
-    for part in text.replace("x", " ").split(" "):
-        let piece = part.trim()
-        if piece == "":
-            continue
-        let number = int(piece) catch failure:
-            return []
-        numbers.append(number)
-    return numbers

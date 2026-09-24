@@ -584,8 +584,8 @@ pub class Workspace:
         return true
 
     ## Every layer resampled to `width` by `height`.
-    pub func resize_image(self, width: int, height: int) -> unit!:
-        self.canvas.resize_image(width, height)
+    pub func resize_image(self, width: int, height: int, smooth: bool = true) -> unit!:
+        self.canvas.resize_image(width, height, smooth)
         self.fitted = false
         self.touch()
 

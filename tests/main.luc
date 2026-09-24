@@ -8,6 +8,7 @@ from view import CanvasView, clamp_texel, texel_span
 from transform_box import TransformBox, grab_move, grab_turn
 from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
+from size_fields import SizeFields
 from adjustments import adjustments
 from settings import Settings
 from ui import Event
@@ -30,6 +31,7 @@ pub func main(arguments: list[str]) -> int!:
     retouch_tools()
     unsaved_changes(arguments)
     layer_panel_ops()
+    size_dialogs()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -447,4 +449,31 @@ func layer_panel_ops() -> unit!:
     assert(workspace.canvas.layer_opacity(0) == 0.25 and workspace.canvas.layer_opacity(workspace.layer_count() - 1) == 0.25)
     let keys = OpacityKeys()
     assert(keys.typed(5, 1000) == 0.5 and keys.typed(5, 1200) == 0.55 and keys.typed(0, 5000) == 1.0 and keys.typed(0, 5100) == 0.0)
+    panels.close()
+
+## The size dialogs: units and the kept ratio, Canvas Size's anchor and
+## extension layer, Trim.
+func size_dialogs() -> unit!:
+    let fields = SizeFields(Font(), true, true)
+    fields.reset(200, 100, 72.0)
+    assert(fields.pixels(true) == 200 and fields.pixels(false) == 100)
+    fields.set_pixels(300, 150)
+    assert(fields.pixels(false) == 150)
+    fields.close()
+    let workspace = Workspace(40, 30)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let dialogs = panels.size_dialogs
+    workspace.set_color(1.0, 0.0, 0.0)
+    workspace.fill_selection(false)
+    # Grown to 60 by 50 about the bottom-right corner, the new canvas white on a layer of its own.
+    dialogs.canvas_size.resize(60, 50, 8, 4)
+    assert(workspace.width() == 60 and workspace.height() == 50 and workspace.layer_count() == 2)
+    assert(workspace.canvas.layer_name(0) == "Canvas Extension" and workspace.canvas.undo_name() == "Canvas Size")
+    # Trimmed by the top-left color (the white extension): back to the red picture.
+    assert(dialogs.trim.trim(1, true, true, true, true))
+    assert(workspace.width() == 40 and workspace.height() == 30)
+    assert(not dialogs.trim.trim(0, true, true, true, true))
+    workspace.canvas.undo()
+    assert(workspace.width() == 60)
     panels.close()

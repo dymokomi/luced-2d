@@ -9,7 +9,7 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
                     Menu("Edit", [actions.undo, actions.redo, divider(), actions.cut, actions.copy, actions.copy_merged, actions.paste, divider(), actions.free_transform, actions.flip_horizontal, actions.flip_vertical, divider(), actions.fill, actions.fill_background, actions.clear,
                                   actions.swap_colors, actions.reset_colors, divider(), actions.settings], font = font),
                     Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
-                    Menu("Image", [actions.document_settings, divider(), actions.crop, actions.flip_canvas_horizontal, actions.flip_canvas_vertical, divider(), actions.canvas_size, actions.reveal_all, actions.image_size], font = font),
+                    Menu("Image", [actions.document_settings, divider(), actions.crop, actions.flip_canvas_horizontal, actions.flip_canvas_vertical, divider(), actions.canvas_size, actions.reveal_all, actions.image_size, actions.trim], font = font),
                     Menu("Adjust", actions.adjustments + [divider()] + actions.adjustment_layers, font = font),
                     Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_via_copy, actions.layer_via_cut, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
                                    divider(), actions.group_layers, actions.ungroup, actions.move_out_of_folder, divider(),

@@ -1,0 +1,141 @@
+## Image › Canvas Size… (Opt-Cmd-C), as Compositor's sheet: the new size in
+## any unit (or relative to the size now, the ratio kept if asked), the anchor
+## the picture keeps to on a 3×3 grid, and what fills new canvas — nothing, or
+## a color on a layer of its own at the bottom, leaving the old canvas clear.
+## Pixels the canvas no longer reaches stay past it. One undo step.
+from ui import Text, HStack, VStack, Spacer, Dialog, Menu, Command, Button, Widget
+from workspace import Workspace
+from kit import Kit
+from size_fields import SizeFields
+
+pub class CanvasSizeDialog:
+    pub let dialog: Dialog
+    let sizes: SizeFields
+    let now_text: Text
+    let new_text: Text
+    let anchors: list[Button]
+    let extension_menu: Menu
+    ## 0..8, row by row from the top-left; 4 is the middle.
+    var anchor: int = 4
+    ## 0 transparent, 1 foreground, 2 background, 3 black, 4 white.
+    var extension: int = 0
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        let font = kit.font
+        self.sizes = SizeFields(font, true, false)
+        self.now_text = Text("", font = font, muted = true)
+        self.new_text = Text("", font = font)
+        self.sizes.changed = self.show_new
+        self.anchors = []
+        var rows: list[Widget] = []
+        var row = 0
+        while row < 3:
+            var cells: list[Widget] = []
+            var column = 0
+            while column < 3:
+                let spot = row * 3 + column
+                let button = kit.button("·", func () -> unit!:
+                    self.choose_anchor(spot))
+                button.layout().set_size(28.0, 24.0)
+                self.anchors.append(button)
+                cells.append(button)
+                column += 1
+            rows.append(HStack(cells, spacing = 2.0))
+            row += 1
+        var choices: list[Command] = []
+        let names = ["Transparent", "Foreground", "Background", "Black", "White"]
+        var index = 0
+        while index < names.length:
+            let chosen = index
+            let command = Command(names[index], id = f"canvas_extension_{index}")
+            kit.bind(command, func () -> unit!:
+                self.extension = chosen
+                self.extension_menu.set_text(["Transparent", "Foreground", "Background", "Black", "White"][chosen] + " ▾"))
+            choices.append(command)
+            index += 1
+        self.extension_menu = Menu("Transparent ▾", choices, font = font)
+        self.dialog = Dialog([Text("Canvas Size", font = font), self.now_text, self.sizes.rows, self.new_text,
+                              kit.dialog_row("Anchor", VStack(rows, spacing = 2.0), 110.0),
+                              kit.dialog_row("New canvas", self.extension_menu, 110.0),
+                              Text("What falls outside stays past the canvas.", font = font, muted = true),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+
+    pub func open(self) -> unit!:
+        let workspace = self.workspace
+        self.sizes.reset(workspace.width(), workspace.height(), workspace.canvas.resolution())
+        self.now_text.set_text(f"Now: {workspace.width()} × {workspace.height()} px")
+        self.choose_anchor(4)
+        self.dialog.open()
+
+    func choose_anchor(self, spot: int) -> unit!:
+        self.anchor = spot
+        var at = 0
+        for button in self.anchors:
+            button.set_text("●" if at == spot else "·")
+            at += 1
+
+    func show_new(self) -> unit!:
+        self.new_text.set_text(f"New: {self.sizes.pixels(true)} × {self.sizes.pixels(false)} px")
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    func apply(self) -> unit!:
+        let width = self.sizes.pixels(true)
+        let height = self.sizes.pixels(false)
+        if width < 1 or height < 1 or width > 65536 or height > 65536:
+            self.fail("Each side must be 1..65536 pixels")
+            return
+        self.dialog.hide()
+        self.resize(width, height, self.anchor, self.extension) catch failure:
+            self.fail(f"Canvas Size: {failure.message}")
+            return
+        if let done = self.applied:
+            done()
+
+    ## The canvas at `width` by `height`, the picture kept to `anchor` (0..8,
+    ## row by row), new canvas filled as `extension` says; one undo step.
+    pub func resize(self, width: int, height: int, anchor: int, extension: int) -> unit!:
+        let workspace = self.workspace
+        let old_width = workspace.width()
+        let old_height = workspace.height()
+        # The anchor's share of the change: none at the left, half in the middle, all at the right.
+        let offset_x = (width - old_width) * (anchor % 3) // 2
+        let offset_y = (height - old_height) * (anchor // 3) // 2
+        workspace.as_one("Canvas Size", func () -> unit!:
+            workspace.resize_canvas(width, height, offset_x, offset_y)
+            if extension > 0 and (width > old_width or height > old_height):
+                fill_extension(workspace, extension, offset_x, offset_y, old_width, old_height))
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+## The new canvas round the old one filled with `extension`'s color on a layer
+## of its own at the bottom; the old canvas at (`left`, `top`) stays clear.
+func fill_extension(workspace: Workspace, extension: int, left: int, top: int, old_width: int, old_height: int) -> unit!:
+    let canvas = workspace.canvas
+    var red = workspace.red
+    var green = workspace.green
+    var blue = workspace.blue
+    if extension == 2:
+        red = workspace.back_red
+        green = workspace.back_green
+        blue = workspace.back_blue
+    elif extension >= 3:
+        red = 0.0 if extension == 3 else 1.0
+        green = red
+        blue = red
+    let layer = canvas.add_layer("Canvas Extension")
+    canvas.move_into(layer, 0, 0)
+    canvas.select_rectangle(0, 0, workspace.width(), workspace.height(), 0)
+    canvas.select_rectangle(left, top, old_width, old_height, 2)
+    canvas.set_brush(10.0, 1.0, 1.0, 1.0, red, green, blue, false)
+    canvas.fill(layer, false)
+    canvas.deselect()

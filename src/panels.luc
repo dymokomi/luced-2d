@@ -30,6 +30,7 @@ from crash_dialog import CrashDialog
 from menus import menu_bar
 from tools import tools
 from layers_panel import LayersPanel
+from size_dialogs import SizeDialogs
 import math
 from units import unit_ids, unit_label
 
@@ -66,6 +67,7 @@ pub class Panels:
     pub let mask_prompt: Dialog
     var mask_background: bool = false
     pub let document_settings: DocumentSettings
+    pub let size_dialogs: SizeDialogs
     pub let settings_dialog: SettingsDialog
     pub let files: DocumentFiles
     let kit: Kit
@@ -91,7 +93,6 @@ pub class Panels:
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
         self.tabs.on_close = self.files.close_document_at
-        self.tabs.on_new = self.files.new_document
         self.layers_panel = LayersPanel(workspace, actions, kit)
         self.layers = self.layers_panel.layer_list
         self.layers_panel.refreshed = self.refresh
@@ -125,6 +126,9 @@ pub class Panels:
                                    kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
         self.document_settings = DocumentSettings(workspace, font)
         self.document_settings.applied = self.refresh
+        self.size_dialogs = SizeDialogs(workspace, actions, kit)
+        self.size_dialogs.report(self.refresh, self.prompts.tell)
+        self.tabs.on_new = self.size_dialogs.new_canvas.open
         self.connect()
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
         # tool selected, and the palette below them.
@@ -167,7 +171,7 @@ pub class Panels:
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
-                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog], spacing = 0.0)
+                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 
@@ -175,7 +179,6 @@ pub class Panels:
     func connect(self) -> unit!:
         let actions = self.actions
         let kit = self.kit
-        kit.bind(actions.new_document, self.files.new_document)
         kit.bind(actions.open_document, self.files.open_document)
         kit.bind(actions.save, self.files.save)
         kit.bind(actions.save_as, self.files.save_as)
@@ -213,15 +216,10 @@ pub class Panels:
         kit.bind(actions.feather, func () -> unit!:
             self.prompts.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather"))
         kit.bind(actions.crop, self.crop)
-        kit.bind(actions.canvas_size, func () -> unit!:
-            self.prompts.ask("canvas", "Canvas size: width x height, then the old canvas's offset x y (e.g. 1920 x 1080 0 0)",
-                             f"{self.workspace.width()} x {self.workspace.height()} 0 0", "Resize"))
         kit.bind(actions.reveal_all, func () -> unit!:
             if not self.workspace.reveal_all():
                 self.status.set_text("Nothing lies past the canvas")
             self.refresh())
-        kit.bind(actions.image_size, func () -> unit!:
-            self.prompts.ask("image", "Image size: width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Resize"))
         kit.bind(actions.blur, self.adjust.blur)
         kit.bind(actions.free_transform, self.free_transform)
         kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
@@ -542,6 +540,7 @@ pub class Panels:
         self.settings_dialog.close()
         self.picker.close()
         self.document_settings.close()
+        self.size_dialogs.close()
         if self.workspace.previewing():
             self.workspace.end_preview(false) catch failure:
                 discard(failure)

@@ -1,4 +1,4 @@
-## Documents and their files: new, open, save, export and close, and asking
+## Documents and their files: open, save, export and close, and asking
 ## before unsaved work is lost. Save always writes the layered `.l2d` package
 ## and makes it the document's file; flattened PNG and JPEG pictures are
 ## exported, which leaves the document's file alone (Compositor's split). A
@@ -29,9 +29,6 @@ pub class DocumentFiles:
         self.export_dialog = ExportDialog(kit)
         kit.keep(self.confirm.on_choose(self.choose))
         self.export_dialog.chosen = self.export_jpeg_with
-
-    pub func new_document(self) -> unit!:
-        self.prompts.ask("new", "New document size, width x height in pixels", f"{self.workspace.width()} x {self.workspace.height()}", "Create")
 
     pub func open_document(self) -> unit!:
         if let app = self.app:

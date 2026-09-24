@@ -52,6 +52,7 @@ pub class Actions:
     pub let canvas_size: Command
     pub let reveal_all: Command
     pub let image_size: Command
+    pub let trim: Command
     # Adjust, one per luce-image adjustment kind, and Filter
     pub let adjustments: list[Command]
     ## One per adjustment an adjustment layer can hold: a new one of that kind.
@@ -138,9 +139,10 @@ pub class Actions:
         self.crop = Command("Crop to Selection", id = "crop")
         self.flip_canvas_horizontal = Command("Flip Canvas Horizontal", id = "flip_canvas_horizontal")
         self.flip_canvas_vertical = Command("Flip Canvas Vertical", id = "flip_canvas_vertical")
-        self.canvas_size = Command("Canvas Size…", id = "canvas_size")
+        self.canvas_size = Command("Canvas Size…", Shortcut(Key.c, primary = true, alt = true), id = "canvas_size")
         self.reveal_all = Command("Reveal All", id = "reveal_all")
-        self.image_size = Command("Image Size…", id = "image_size")
+        self.image_size = Command("Image Size…", Shortcut(Key.i, primary = true, alt = true), id = "image_size")
+        self.trim = Command("Trim…", id = "trim")
         # The Adjust menu's upper half changes the pixels; the lower adds adjustment layers.
         self.adjustments = []
         self.adjustment_layers = []
@@ -185,7 +187,7 @@ pub class Actions:
         self.units = []
         for unit_id in unit_ids():
             self.units.append(Command(unit_label(unit_id), id = f"units_{unit_id}"))
-        self.document_settings = Command("Document Settings…", Shortcut(Key.i, primary = true, alt = true), id = "document_settings")
+        self.document_settings = Command("Document Settings…", id = "document_settings")
         self.actual_size = Command("Actual Size", Shortcut(Key.digit_1, primary = true), id = "actual_size")
         self.zoom_in = Command("Zoom In", Shortcut(Key.equal, primary = true), id = "zoom_in")
         self.zoom_out = Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out")
@@ -198,7 +200,7 @@ pub class Actions:
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
         self.all = [self.new_document, self.open_document, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
-                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.blur, self.add_noise,
+                    self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,

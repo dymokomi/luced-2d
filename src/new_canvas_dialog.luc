@@ -1,0 +1,54 @@
+## File › New…, as Compositor's New Canvas: a size in pixels and a
+## resolution, starting from the image on the clipboard when there is one
+## (the "Clipboard" button puts its size back).
+from ui import Text, HStack, Spacer, Dialog, NumberField
+from canvas import Canvas
+from workspace import Workspace
+from kit import Kit
+
+pub class NewCanvasDialog:
+    pub let dialog: Dialog
+    let width_field: NumberField
+    let height_field: NumberField
+    let resolution_field: NumberField
+    pub var created: func() -> unit!? = none
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        let font = kit.font
+        self.width_field = NumberField(1280.0, 1.0, 65536.0, 1.0, suffix = " px", font = font, cells = 11.0)
+        self.height_field = NumberField(800.0, 1.0, 65536.0, 1.0, suffix = " px", font = font, cells = 11.0)
+        self.resolution_field = NumberField(72.0, 1.0, 9600.0, 1.0, suffix = " px/in", font = font, cells = 11.0)
+        self.dialog = Dialog([Text("New Canvas", font = font), Text("A blank space for the next picture.", font = font, muted = true),
+                              kit.dialog_row("Width", self.width_field, 110.0), kit.dialog_row("Height", self.height_field, 110.0),
+                              kit.dialog_row("Resolution", self.resolution_field, 110.0),
+                              HStack([kit.button("Clipboard Size", self.from_clipboard), Spacer(), kit.button("Cancel", self.cancel),
+                                      kit.button("Create", self.create)], spacing = 8.0)], width = 440.0, spacing = 10.0)
+
+    ## Open at the clipboard image's size if there is one, else the document's.
+    pub func open(self) -> unit!:
+        self.width_field.set_value(float(self.workspace.width()))
+        self.height_field.set_value(float(self.workspace.height()))
+        self.resolution_field.set_value(self.workspace.canvas.resolution())
+        self.from_clipboard()
+        self.dialog.open()
+
+    func from_clipboard(self) -> unit!:
+        let width = Canvas.clipboard_image_width() catch failure:
+            return
+        let height = Canvas.clipboard_image_height() catch failure:
+            return
+        if width > 0 and height > 0:
+            self.width_field.set_value(float(width))
+            self.height_field.set_value(float(height))
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    func create(self) -> unit!:
+        self.dialog.hide()
+        self.workspace.create(int(self.width_field.value() + 0.5), int(self.height_field.value() + 0.5))
+        self.workspace.canvas.set_resolution(self.resolution_field.value())
+        if let done = self.created:
+            done()

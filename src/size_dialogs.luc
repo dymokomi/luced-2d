@@ -1,0 +1,44 @@
+## The document's size dialogs together: File › New…, Image › Canvas Size…,
+## Image Size… and Trim…, their commands wired, and what the window needs to
+## show them and hear back.
+from ui import Widget
+from workspace import Workspace
+from actions import Actions
+from kit import Kit
+from new_canvas_dialog import NewCanvasDialog
+from canvas_size_dialog import CanvasSizeDialog
+from image_size_dialog import ImageSizeDialog
+from trim_dialog import TrimDialog
+
+pub class SizeDialogs:
+    pub let new_canvas: NewCanvasDialog
+    pub let canvas_size: CanvasSizeDialog
+    pub let image_size: ImageSizeDialog
+    pub let trim: TrimDialog
+
+    pub func init(self, workspace: Workspace, actions: Actions, kit: Kit) -> unit!:
+        self.new_canvas = NewCanvasDialog(workspace, kit)
+        self.canvas_size = CanvasSizeDialog(workspace, kit)
+        self.image_size = ImageSizeDialog(workspace, kit)
+        self.trim = TrimDialog(workspace, kit)
+        kit.bind(actions.new_document, self.new_canvas.open)
+        kit.bind(actions.canvas_size, self.canvas_size.open)
+        kit.bind(actions.image_size, self.image_size.open)
+        kit.bind(actions.trim, self.trim.open)
+
+    ## The dialogs, for the window to hold.
+    pub func dialogs(self) -> list[Widget]:
+        return [self.new_canvas.dialog, self.canvas_size.dialog, self.image_size.dialog, self.trim.dialog]
+
+    ## After any of them changes the document the window refreshes; what failed is said.
+    pub func report(self, refreshed: func() -> unit!, failed: func(str) -> unit!):
+        self.new_canvas.created = refreshed
+        self.canvas_size.applied = refreshed
+        self.canvas_size.failed = failed
+        self.image_size.applied = refreshed
+        self.image_size.failed = failed
+        self.trim.applied = refreshed
+        self.trim.failed = failed
+
+    pub func close(self):
+        self.image_size.close()

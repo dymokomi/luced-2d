@@ -1,0 +1,81 @@
+## Image › Trim…, as Compositor's: the canvas cut to what the picture holds,
+## judged by transparency or by the top-left or bottom-right pixel's color,
+## on the sides chosen. One undo step.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command, Checkbox
+from workspace import Workspace
+from kit import Kit
+
+pub class TrimDialog:
+    pub let dialog: Dialog
+    let based_menu: Menu
+    let top_box: Checkbox
+    let bottom_box: Checkbox
+    let left_box: Checkbox
+    let right_box: Checkbox
+    ## 0 transparent pixels, 1 the top-left pixel's color, 2 the bottom-right's.
+    var based_on: int = 0
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        let font = kit.font
+        var choices: list[Command] = []
+        let names = ["Transparent Pixels", "Top Left Pixel Color", "Bottom Right Pixel Color"]
+        var index = 0
+        while index < names.length:
+            let chosen = index
+            let command = Command(names[index], id = f"trim_based_{index}")
+            kit.bind(command, func () -> unit!:
+                self.based_on = chosen
+                self.based_menu.set_text(["Transparent Pixels", "Top Left Pixel Color", "Bottom Right Pixel Color"][chosen] + " ▾"))
+            choices.append(command)
+            index += 1
+        self.based_menu = Menu("Transparent Pixels ▾", choices, font = font)
+        self.top_box = Checkbox("Top", true, font = font)
+        self.bottom_box = Checkbox("Bottom", true, font = font)
+        self.left_box = Checkbox("Left", true, font = font)
+        self.right_box = Checkbox("Right", true, font = font)
+        self.dialog = Dialog([Text("Trim", font = font), kit.dialog_row("Based on", self.based_menu, 110.0),
+                              kit.dialog_row("Trim away", HStack([self.top_box, self.bottom_box, self.left_box, self.right_box], spacing = 12.0), 110.0),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+
+    pub func open(self) -> unit!:
+        self.dialog.open()
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    func apply(self) -> unit!:
+        self.dialog.hide()
+        let trimmed = self.trim(self.based_on, self.top_box.is_checked(), self.bottom_box.is_checked(), self.left_box.is_checked(), self.right_box.is_checked()) catch failure:
+            self.fail(f"Trim: {failure.message}")
+            return
+        if not trimmed:
+            self.fail("Trim: nothing to trim away")
+            return
+        if let done = self.applied:
+            done()
+
+    ## Trim the canvas on the sides named to what is not `based_on` (0
+    ## transparent, 1 the top-left color, 2 the bottom-right); whether it changed.
+    pub func trim(self, based_on: int, top_side: bool, bottom_side: bool, left_side: bool, right_side: bool) -> bool!:
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        if not canvas.measure_trim(based_on):
+            return false
+        # The sides not trimmed keep the canvas's edge.
+        let left = canvas.content_left() if left_side else 0
+        let top = canvas.content_top() if top_side else 0
+        let right = canvas.content_left() + canvas.content_width() if right_side else workspace.width()
+        let bottom = canvas.content_top() + canvas.content_height() if bottom_side else workspace.height()
+        if left == 0 and top == 0 and right == workspace.width() and bottom == workspace.height():
+            return false
+        workspace.as_one("Trim", func () -> unit!:
+            workspace.resize_canvas(right - left, bottom - top, -left, -top))
+        return true
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
