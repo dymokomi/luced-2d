@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -266,6 +266,25 @@ SCENES = {
             editor.workspace.adjust(2, [])
             print(f"SELMOVE selection at {editor.workspace.canvas.selection_left()},{editor.workspace.canvas.selection_top()} undo {editor.workspace.canvas.can_undo()}")
             editor.panels.refresh()''',
+    'clipboard': '''            let saved = clipboard.read_text()
+            editor.workspace.select(0)
+            editor.workspace.choose_tool("marquee")
+            editor.panels.refresh()
+            editor.workspace.canvas.select_rectangle(900, 150, 400, 300, 0)
+            # Keys go where focus is: on the canvas, as after a click there.
+            editor.panels.view.layout().request_focus()
+            editor.app.layout(1400.0, 900.0)
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.c, meta = true))
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.v, meta = true))
+            print(f"CLIPBOARD after paste layers {editor.workspace.layer_count()} selected {editor.workspace.canvas.layer_name(editor.workspace.selected)}")
+            editor.workspace.move_layer(-500, 200)
+            editor.workspace.select(0)
+            editor.workspace.canvas.select_rectangle(100, 500, 300, 200, 0)
+            editor.app.dispatch(Event(kind = EventKind.key_down, key = Key.j, meta = true))
+            editor.workspace.move_layer(900, -350)
+            print(f"CLIPBOARD after layer via copy layers {editor.workspace.layer_count()} selected {editor.workspace.canvas.layer_name(editor.workspace.selected)}")
+            clipboard.write_text(saved)
+            editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
             editor.panels.pick_color(false)
@@ -276,7 +295,7 @@ if arguments.zoom:
     SCENE += '\n            editor.workspace.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')

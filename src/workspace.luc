@@ -281,6 +281,38 @@ pub class Workspace:
         self.selected -= 1
         self.touch()
 
+    ## Copy the selected layer's selected pixels (all of them without a
+    ## selection) to the system clipboard, or the whole picture's with
+    ## `merged`; with `cut` they leave the layer.
+    pub func copy_selection(self, merged: bool, cut: bool) -> unit!:
+        self.canvas.copy_selection(self.selected_id(), merged, cut)
+        self.touch()
+
+    ## The clipboard's image on a new layer just above the selected one, centred
+    ## on a document point, and selected.
+    pub func paste(self, x: float, y: float) -> unit!:
+        let above = self.selected + 1
+        let id = self.canvas.paste(int(x), int(y))
+        var at = self.layer_count() - 1
+        while at > above:
+            self.canvas.reorder_layer(id, -1)
+            at -= 1
+        self.select_id(id)
+
+    ## Layer via Copy (via Cut with `cut`): a new layer of the selected pixels, selected.
+    pub func layer_via_copy(self, cut: bool) -> unit!:
+        let id = self.canvas.layer_via_copy(self.selected_id(), cut)
+        self.select_id(id)
+
+    ## Select the layer whose id is `id`.
+    func select_id(self, id: int) -> unit!:
+        var index = 0
+        while index < self.layer_count():
+            if self.canvas.layer_id(index) == id:
+                self.select(index)
+                return
+            index += 1
+
     ## Rename the selected layer.
     pub func rename(self, name: str) -> unit!:
         self.canvas.rename_layer(self.selected_id(), name)

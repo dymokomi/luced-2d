@@ -210,6 +210,28 @@ pub class Panels:
         kit.bind(actions.layer_style, self.adjust.layer_style)
         kit.bind(actions.rename_layer, func () -> unit!:
             self.prompts.ask("rename", "Layer name", self.workspace.canvas.layer_name(self.workspace.selected), "Rename"))
+        kit.bind(actions.cut, func () -> unit!:
+            self.clipboard_step("Cut", func () -> unit!:
+                self.workspace.copy_selection(false, true)))
+        kit.bind(actions.copy, func () -> unit!:
+            self.clipboard_step("Copy", func () -> unit!:
+                self.workspace.copy_selection(false, false)))
+        kit.bind(actions.copy_merged, func () -> unit!:
+            self.clipboard_step("Copy Merged", func () -> unit!:
+                self.workspace.copy_selection(true, false)))
+        kit.bind(actions.paste, func () -> unit!:
+            self.clipboard_step("Paste", func () -> unit!:
+                # Paste lands in the middle of the view, as Photoshop's does.
+                let bounds = self.view.layout().bounds()
+                let x = (bounds.width * 0.5 - self.workspace.offset_x) / self.workspace.zoom
+                let y = (bounds.height * 0.5 - self.workspace.offset_y) / self.workspace.zoom
+                self.workspace.paste(x, y)))
+        kit.bind(actions.layer_via_copy, func () -> unit!:
+            self.clipboard_step("Layer via Copy", func () -> unit!:
+                self.workspace.layer_via_copy(false)))
+        kit.bind(actions.layer_via_cut, func () -> unit!:
+            self.clipboard_step("Layer via Cut", func () -> unit!:
+                self.workspace.layer_via_copy(true)))
         kit.bind(actions.add_layer, self.add_layer)
         kit.bind(actions.duplicate_layer, self.duplicate_layer)
         kit.bind(actions.layer_up, func () -> unit!:
@@ -349,6 +371,14 @@ pub class Panels:
     pub func crop(self) -> unit!:
         self.workspace.crop() catch failure:
             self.prompts.tell(f"Cannot crop: {failure.message}")
+            return
+        self.refresh()
+
+    ## Run a clipboard or layer command; a failure (nothing selected, no image
+    ## on the clipboard) is said in the prompt.
+    func clipboard_step(self, name: str, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            self.prompts.tell(f"{name}: {failure.message}")
             return
         self.refresh()
 
