@@ -36,6 +36,9 @@ pub func tools() -> list[Tool]!:
             Tool("gradient", "Gradient", "Gradient", "gradient-tool", Key.g, "Drag from the foreground color to the background color · fills the selection"),
             Tool("brush", "Brush", "Brush", "brush-tool", Key.b, "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"),
             Tool("eraser", "Eraser", "Eraser", "eraser-tool", Key.e, "Drag to erase · [ ] size · Space to pan"),
+            Tool("clone", "Clone Stamp", "Clone Stamp", "clone-stamp", Key.s, "Alt-click where to copy from · drag to stamp it · [ ] size · digits set opacity"),
+            Tool("heal", "Spot Healing Brush", "Spot Healing", "healing-brush", Key.j, "Brush over a spot: it is filled from the picture beside it · [ ] size"),
+            Tool("smear", "Smudge", "Smudge", "smudge-tool", Key.r, "Drag to smudge, blur or push pixels (the mode in the header) · digits set strength"),
             Tool("hand", "Hand", "Hand", "pan-tool", Key.h, "Drag to pan"),
             Tool("zoom", "Zoom", "Zoom", "zoom-in", Key.z, "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool")]
 

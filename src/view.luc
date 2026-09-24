@@ -150,8 +150,10 @@ pub class CanvasView: Widget:
             workspace.canvas.draw_selection(target, whole, workspace.zoom, ants_left, ants_top, self.ants)
         self.selection.draw(painter, workspace.zoom, left, top, theme.text())
         self.draw_box(painter, size.width, size.height)
-        if self.pointer_inside and not self.panning and (workspace.tool == "brush" or workspace.tool == "eraser"):
+        if self.pointer_inside and not self.panning and brushed(workspace.tool):
             self.draw_brush_outline(painter)
+            if workspace.tool == "clone" and workspace.canvas.has_clone_source():
+                self.draw_clone_source(painter)
         painter.close()
 
     ## The checkerboard under the document's part of the view, clipped to it:
@@ -193,6 +195,18 @@ pub class CanvasView: Widget:
             painter.line(a, b, 3.0, theme.backdrop())
             painter.line(a, b, 1.0, theme.text())
             index += 1
+
+    ## The Clone Stamp's source: a crosshair where a stroke from the pointer
+    ## would copy from, white under black as Compositor's.
+    func draw_clone_source(self, painter: Painter) -> unit!:
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        let x = canvas.clone_sample_x(self.document_x(self.pointer_x)) * workspace.zoom + workspace.offset_x
+        let y = canvas.clone_sample_y(self.document_y(self.pointer_y)) * workspace.zoom + workspace.offset_y
+        for width in [3.0, 1.0]:
+            let ink = theme.text() if width == 3.0 else theme.backdrop()
+            painter.line(Point(x - 7.0, y), Point(x + 7.0, y), width, ink)
+            painter.line(Point(x, y - 7.0), Point(x, y + 7.0), width, ink)
 
     ## The grid over the document: majors every grid_major document pixels, their
     ## subdivisions fainter; a level whose lines would crowd closer than a few
@@ -362,6 +376,9 @@ pub class CanvasView: Widget:
             self.zoom_x = event.x
             self.zoom_y = event.y
             self.zoom_start = workspace.zoom
+        elif tool == "clone" and event.alt:
+            # Alt-click: where the Clone Stamp copies from, as Photoshop's.
+            workspace.set_clone_source(x, y)
         elif (tool == "brush" or tool == "gradient") and event.alt:
             # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
             workspace.pick(x, y)
@@ -388,7 +405,7 @@ pub class CanvasView: Widget:
     ## Whether `tool` needs pixels and the selected layer is a group, which has
     ## none: then say so, as Photoshop does, and do nothing.
     func refuses_group(self, tool: str) -> bool!:
-        let paints = tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "text"
+        let paints = tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear"
         if not paints or not self.workspace.canvas.layer_is_group(self.workspace.selected):
             return false
         if let refused = self.on_refused:
@@ -617,6 +634,10 @@ pub class CanvasView: Widget:
             self.stroke_end_x = point.x
             self.stroke_end_y = point.y
             self.has_stroke_end = true
+
+## Whether `tool` paints with the brush's tip, and so shows its outline.
+func brushed(tool: str) -> bool:
+    return tool == "brush" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear"
 
 ## The digit a number key types, or -1.
 func digit_value(key: Key) -> int:

@@ -44,6 +44,12 @@ pub class Workspace:
     pub var text_y: float = 0.0
     ## The Move tool's Auto-Select: a press picks the top layer with pixels under it.
     pub var auto_select: bool = false
+    ## The retouching tools' options: the Clone Stamp keeps its first offset
+    ## (aligned) and samples this layer or all; the Smudge tool smudges (0),
+    ## blurs (1) or pushes as Liquify does (2).
+    pub var clone_aligned: bool = true
+    pub var clone_all: bool = false
+    pub var smear_mode: int = 0
     ## The free transform under way on the canvas, if any.
     pub var transform: TransformBox? = none
     ## The Crop tool's box while the tool is active.
@@ -554,7 +560,25 @@ pub class Workspace:
         if not self.canvas.layer_visible(self.selected):
             return
         self.brush.apply(self.canvas, self.red, self.green, self.blue, self.erasing)
+        self.canvas.set_retouch(self.retouch_kind())
+        self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
+        self.touch()
+
+    ## The canvas's retouching tool for the active tool: 0 plain paint, 1 clone
+    ## stamp, 2 spot healing, 3 blur, 4 smudge, 5 push.
+    pub func retouch_kind(self) -> int:
+        if self.tool == "clone":
+            return 1
+        if self.tool == "heal":
+            return 2
+        if self.tool == "smear":
+            return 4 if self.smear_mode == 0 else (3 if self.smear_mode == 1 else 5)
+        return 0
+
+    ## Alt-click with the Clone Stamp: where it copies from.
+    pub func set_clone_source(self, x: float, y: float):
+        self.canvas.set_clone_source(x, y)
         self.touch()
 
     ## Continue the stroke in progress, if any, to a document point.

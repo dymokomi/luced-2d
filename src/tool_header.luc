@@ -2,6 +2,7 @@
 ## tool's name and only its options — the brush's preset, size, hardness,
 ## opacity, flow and spacing (eleusis scrubbers: drag to change, click to
 ## type), the wand's tolerance, the text size, the Move tool's Auto-Select,
+## the Clone Stamp's Aligned and Sample, the Smudge tool's mode,
 ## Cancel and Apply while a free transform or the Crop tool's box is up — and
 ## the tool's hint, shown at the right of the status line.
 from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Button, Checkbox
@@ -28,6 +29,10 @@ pub class ToolHeader:
     pub let text_controls: HStack
     pub let auto_select_box: Checkbox
     pub let move_controls: HStack
+    pub let aligned_box: Checkbox
+    pub let sample_menu: Menu
+    pub let clone_controls: HStack
+    pub let smear_menu: Menu
     pub let box_controls: HStack
     ## Brush…: the window opens Brush Settings; a preset picked: the window
     ## refreshes; Apply or Cancel: the window finishes the box, keeping it or not.
@@ -84,7 +89,22 @@ pub class ToolHeader:
         let apply = kit.button("Apply", func () -> unit!:
             self.finish(true))
         self.box_controls = HStack([cancel, apply], spacing = 8.0)
-        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer(), self.box_controls],
+        self.aligned_box = kit.checkbox("Aligned", func () -> unit!:
+            self.workspace.clone_aligned = not self.workspace.clone_aligned)
+        let this_layer = self.choice("This Layer", "clone_sample_layer", func () -> unit!:
+            self.workspace.clone_all = false)
+        let all_layers = self.choice("All Layers", "clone_sample_all", func () -> unit!:
+            self.workspace.clone_all = true)
+        self.sample_menu = Menu("This Layer ▾", [this_layer, all_layers], font = font)
+        self.clone_controls = HStack([self.aligned_box, kit.labelled("Sample", self.sample_menu)], spacing = 12.0)
+        let smudge = self.choice("Smudge", "smear_smudge", func () -> unit!:
+            self.workspace.smear_mode = 0)
+        let blur = self.choice("Blur", "smear_blur", func () -> unit!:
+            self.workspace.smear_mode = 1)
+        let liquify = self.choice("Liquify", "smear_liquify", func () -> unit!:
+            self.workspace.smear_mode = 2)
+        self.smear_menu = Menu("Smudge ▾", [smudge, blur, liquify], font = font)
+        self.bar = Toolbar([self.title, self.smear_menu, self.brush_controls, self.clone_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
@@ -98,6 +118,15 @@ pub class ToolHeader:
     func open_brush_settings(self) -> unit!:
         if let open = self.brush_settings:
             open()
+
+    ## A menu entry that does `change` and shows the header again.
+    func choice(self, name: str, id: str, change: func() -> unit!) -> Command!:
+        let command = Command(name, id = id)
+        self.kit.bind(command, func () -> unit!:
+            change()
+            if let refresh = self.refreshed:
+                refresh())
+        return command
 
     func finish(self, keep: bool) -> unit!:
         if let done = self.finished:
@@ -117,7 +146,13 @@ pub class ToolHeader:
         # A free transform takes over the header until it is applied or cancelled.
         let transforming = workspace.transform != none
         self.title.set_text("Transform" if transforming else (active.title + " on mask" if on_mask else active.title))
-        self.brush_controls.layout().set_visible(not transforming and (tool == "brush" or tool == "eraser" or tool == "gradient"))
+        let retouching = tool == "clone" or tool == "heal" or tool == "smear"
+        self.brush_controls.layout().set_visible(not transforming and (tool == "brush" or tool == "eraser" or tool == "gradient" or retouching))
+        self.clone_controls.layout().set_visible(not transforming and tool == "clone")
+        self.smear_menu.layout().set_visible(not transforming and tool == "smear")
+        self.aligned_box.set_checked(workspace.clone_aligned)
+        self.sample_menu.set_text("All Layers ▾" if workspace.clone_all else "This Layer ▾")
+        self.smear_menu.set_text(["Smudge ▾", "Blur ▾", "Liquify ▾"][workspace.smear_mode])
         self.wand_controls.layout().set_visible(not transforming and tool == "wand")
         self.text_controls.layout().set_visible(not transforming and tool == "text")
         self.move_controls.layout().set_visible(not transforming and tool == "move")

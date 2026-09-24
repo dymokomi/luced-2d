@@ -27,6 +27,7 @@ pub func main(arguments: list[str]) -> int!:
     tool_gestures()
     boxes()
     adjustment_table()
+    retouch_tools()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -347,3 +348,21 @@ func adjustment_table() -> unit!:
     assert(near(back[1], 255.0) and near(back[2], 1.0))
     # Hue/Saturation: seven ranges of three, then Colorize; Color Balance keeps luminosity by default.
     assert(table[1].value_count() == 22 and table[10].defaults()[9] == 1.0 and not table[7].layerable)
+
+## The retouching tools tell the canvas what their strokes do.
+func retouch_tools() -> unit!:
+    let workspace = Workspace(64, 64)
+    workspace.choose_tool("brush")
+    assert(workspace.retouch_kind() == 0)
+    workspace.choose_tool("clone")
+    assert(workspace.retouch_kind() == 1)
+    workspace.choose_tool("heal")
+    assert(workspace.retouch_kind() == 2)
+    workspace.choose_tool("smear")
+    assert(workspace.retouch_kind() == 4)
+    workspace.smear_mode = 1
+    assert(workspace.retouch_kind() == 3)
+    workspace.smear_mode = 2
+    assert(workspace.retouch_kind() == 5)
+    workspace.set_clone_source(10.0, 12.0)
+    assert(workspace.canvas.has_clone_source() and workspace.canvas.clone_sample_x(40.0) == 10.0)

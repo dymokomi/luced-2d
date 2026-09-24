@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -64,6 +64,40 @@ SCENES = {
             editor.panels.adjust.show_page(1, 1)
             editor.panels.adjust.set_control(1, 0, 120.0)
             editor.panels.adjust.set_control(1, 1, 40.0)
+            editor.panels.refresh()''',
+    # The retouching tools on the picture: a clone of its top-left stamped on
+    # the blue, Liquify pushing the circle's edge, a heal over the text's d.
+    'retouch': '''            editor.workspace.select(0)
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            editor.workspace.fit(area.width, area.height)
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            editor.workspace.brush.diameter = 120.0
+            editor.workspace.brush.hardness = 0.3
+            editor.workspace.brush.opacity = 1.0
+            editor.workspace.choose_tool("clone")
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 150.0 * zoom, y = oy + 150.0 * zoom, button = 0, alt = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 150.0 * zoom, y = oy + 150.0 * zoom, button = 0, alt = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 1100.0 * zoom, y = oy + 300.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 1250.0 * zoom, y = oy + 300.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 1250.0 * zoom, y = oy + 300.0 * zoom, button = 0))
+            editor.workspace.choose_tool("smear")
+            editor.workspace.smear_mode = 2
+            editor.workspace.brush.diameter = 160.0
+            editor.workspace.brush.opacity = 0.8
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 850.0 * zoom, y = oy + 600.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 780.0 * zoom, y = oy + 600.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 700.0 * zoom, y = oy + 600.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 700.0 * zoom, y = oy + 600.0 * zoom, button = 0))
+            editor.workspace.choose_tool("heal")
+            editor.workspace.brush.diameter = 90.0
+            editor.workspace.brush.opacity = 1.0
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 1120.0 * zoom, y = oy + 860.0 * zoom, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 1130.0 * zoom, y = oy + 900.0 * zoom))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 1130.0 * zoom, y = oy + 900.0 * zoom, button = 0))
+            print(f"RETOUCH undo {editor.workspace.canvas.can_undo()}")
             editor.panels.refresh()''',
     'noise': '''            editor.workspace.select(0)
             editor.panels.adjust.add_noise()
