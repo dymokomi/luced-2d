@@ -295,6 +295,29 @@ func boxes() -> unit!:
     middle.end()
     # Turned a quarter, its right side (100 out from the middle) is at the bottom now.
     assert(middle.hit(50.0, 125.0, 3.0) == 3)
+    # Cmd on a corner distorts: that corner alone goes where it is dragged.
+    let bent = TransformBox(0.0, 0.0, 100.0, 50.0)
+    bent.begin(2, 100.0, 0.0)
+    bent.drag(130.0, -20.0, false, false, true)
+    assert(bent.distorted and not bent.unchanged() and near(bent.corners[2], 130.0) and near(bent.corners[3], -20.0) and near(bent.corners[4], 100.0))
+    # Dragged past the bottom-left corner it would fold over: not taken.
+    bent.drag(-50.0, 90.0, false, false, true)
+    assert(near(bent.corners[2], 130.0))
+    bent.end()
+    # A side takes both its corners; inside moves all four.
+    bent.begin(5, 50.0, 50.0)
+    bent.drag(50.0, 60.0, false, false)
+    assert(near(bent.corners[5], 60.0) and near(bent.corners[7], 60.0) and near(bent.corners[1], 0.0))
+    bent.end()
+    assert(bent.contains(50.0, 30.0) and not bent.contains(-20.0, 30.0))
+    # The numbers: width with the ratio kept, the middle, the scale, a flip.
+    let typed = TransformBox(0.0, 0.0, 100.0, 50.0)
+    typed.set_width(200.0, true)
+    assert(near(typed.shown_height(), 100.0) and near(typed.middle_x(), 50.0))
+    typed.set_middle(10.0, 20.0)
+    typed.set_scale(50.0)
+    typed.flip(true)
+    assert(near(typed.middle_x(), 10.0) and near(typed.scale_x, -0.5) and near(typed.shown_width(), 50.0))
     let crop = CropBox(300.0, 200.0)
     # The bottom-right handle pulled in, to whole pixels.
     crop.begin(crop.hit(300.0, 200.0, 3.0), 300.0, 200.0)

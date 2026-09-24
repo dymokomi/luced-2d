@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -401,19 +401,37 @@ SCENES = {
             let ox = area.x + editor.workspace.offset_x
             let oy = area.y + editor.workspace.offset_y
             editor.panels.free_transform()
-            let box = editor.workspace.transform else trap("a transform box")
+            let session = editor.workspace.transform else trap("a transform")
+            let box = session.box
             print(f"TRANSFORM box {box.left},{box.top} {box.width}x{box.height}")
             # Shrink from the bottom-right corner, then turn it a little from outside.
             let corner_x = box.left + box.width
             let corner_y = box.top + box.height
             editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + corner_x * zoom, y = oy + corner_y * zoom, button = 0))
-            print(f"TRANSFORM grabbed {box.grabbed} tool {editor.workspace.tool} zoom {zoom}")
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + (corner_x - 200.0) * zoom, y = oy + (corner_y - 200.0) * zoom))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + (corner_x - 200.0) * zoom, y = oy + (corner_y - 200.0) * zoom, button = 0))
             editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + 1350.0 * zoom, y = oy + 440.0 * zoom, button = 0))
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 1300.0 * zoom, y = oy + 800.0 * zoom))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 1300.0 * zoom, y = oy + 800.0 * zoom, button = 0))
             print(f"TRANSFORM scale {box.scale_x} {box.scale_y} angle {box.angle} move {box.dx} {box.dy}")
+            editor.panels.refresh()''',
+    # Cmd-dragging the top-right corner out: a perspective distortion.
+    'distort': '''            editor.workspace.select(1)
+            editor.panels.refresh()
+            let area = editor.panels.view.layout().bounds()
+            editor.workspace.fit(area.width, area.height)
+            let zoom = editor.workspace.zoom
+            let ox = area.x + editor.workspace.offset_x
+            let oy = area.y + editor.workspace.offset_y
+            editor.panels.free_transform()
+            let session = editor.workspace.transform else trap("a transform")
+            let box = session.box
+            let corner_x = box.left + box.width
+            let corner_y = box.top
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + corner_x * zoom, y = oy + corner_y * zoom, button = 0, meta = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + (corner_x + 150.0) * zoom, y = oy + (corner_y - 120.0) * zoom, meta = true))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + (corner_x + 150.0) * zoom, y = oy + (corner_y - 120.0) * zoom, button = 0, meta = true))
+            print(f"DISTORT distorted {box.distorted} corners {box.corners}")
             editor.panels.refresh()''',
     'crop': '''            print("CROP choose")
             editor.workspace.choose_tool("crop")

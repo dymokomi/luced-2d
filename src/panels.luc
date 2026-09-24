@@ -295,6 +295,10 @@ pub class Panels:
         kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
         kit.bind(actions.toggle_clipped, self.toggle_clipped)
         kit.bind(actions.toggle_visibility, self.toggle_visibility)
+        kit.bind(actions.show_transform_controls, func () -> unit!:
+            self.workspace.show_transform_controls = not self.workspace.show_transform_controls
+            self.workspace.touch()
+            self.refresh())
         kit.bind(actions.show_rulers, func () -> unit!:
             self.workspace.show_rulers = not self.workspace.show_rulers
             self.view_changed())
@@ -558,6 +562,7 @@ pub class Panels:
         self.top_ruler.layout().invalidate()
         self.left_ruler.layout().invalidate()
         self.actions.show_rulers.set_text("Show Rulers ✓" if workspace.show_rulers else "Show Rulers")
+        self.actions.show_transform_controls.set_text("Show Transform Controls ✓" if workspace.show_transform_controls else "Show Transform Controls")
         self.actions.show_grid.set_text("Show Grid ✓" if workspace.show_grid else "Show Grid")
         var shown = 0
         for unit_name in unit_ids():

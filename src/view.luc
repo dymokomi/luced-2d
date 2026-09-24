@@ -7,6 +7,7 @@ from input import EventKind, Cursor, Key, ScrollUnit
 from workspace import Workspace
 from selection_drag import SelectionDrag, mode_of
 from kit import outline, dropped_paths
+from transform_box import grab_move
 import theme
 import math
 import time
@@ -349,8 +350,13 @@ pub class CanvasView: Widget:
         # A free transform or the Crop tool's box takes presses while it is up;
         # handles answer within 6 points whatever the zoom.
         let reach = 6.0 / workspace.zoom
-        if let box = workspace.transform:
-            box.begin(box.hit(x, y, reach), x, y)
+        if let session = workspace.transform:
+            let grab = session.box.hit(x, y, reach)
+            # Alt-dragging inside moves a copy, the original left in place.
+            if grab == grab_move and event.alt:
+                workspace.duplicate_in_transform()
+            if let carried = workspace.transform:
+                carried.box.begin(grab, x, y)
             self.boxing = true
             return
         if let crop = workspace.crop_box:
@@ -360,6 +366,15 @@ pub class CanvasView: Widget:
         # Cmd (Ctrl) held makes most tools the Move tool for the drag, as in Photoshop.
         let temporary_move = (event.meta or event.control) and tool != "hand" and tool != "zoom"
         let selecting_tool = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"
+        # With Show Transform Controls a handle starts a free transform.
+        if tool == "move" and not temporary_move:
+            if let shown = workspace.controls_box():
+                let grab = shown.hit(x, y, reach)
+                if grab >= 0 and grab < 8 and workspace.begin_transform():
+                    if let session = workspace.transform:
+                        session.box.begin(grab, x, y)
+                    self.boxing = true
+                    return
         if tool == "move" or temporary_move:
             self.start_move(event)
         elif selecting_tool and not event.shift and not event.alt and workspace.in_selection(x, y):
@@ -510,34 +525,40 @@ pub class CanvasView: Widget:
             workspace.move_selection(dx, dy)
 
     ## A free transform's or the Crop tool's box dragged to a document point.
-    func drag_box(self, x: float, y: float, shift: bool, alt: bool) -> unit!:
-        if let box = self.workspace.transform:
-            box.drag(x, y, shift, alt)
+    func drag_box(self, x: float, y: float, shift: bool, alt: bool, distort: bool) -> unit!:
+        if let session = self.workspace.transform:
+            session.box.drag(x, y, shift, alt, distort)
             self.workspace.preview_transform()
             return
         if let crop = self.workspace.crop_box:
             crop.drag(x, y, shift)
 
     func end_box(self):
-        if let box = self.workspace.transform:
-            box.end()
+        if let session = self.workspace.transform:
+            session.box.end()
             return
         if let crop = self.workspace.crop_box:
             crop.end()
 
-    ## A free transform's box, or else the Crop tool's, over the view.
+    ## A free transform's box, else the Crop tool's, else the Move tool's transform controls, over the view.
     func draw_box(self, painter: Painter, width: float, height: float) -> unit!:
         let workspace = self.workspace
-        if let box = workspace.transform:
-            box.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
+        if let session = workspace.transform:
+            session.box.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
             return
         if let crop = workspace.crop_box:
             crop.draw(painter, width, height, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
+            return
+        # Not while a move is dragged: the box stays where the layer was.
+        if not self.moving:
+            if let shown = workspace.controls_box():
+                shown.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
 
     ## The pointer moved: carry on the gesture in progress.
     func drag(self, event: Event) -> unit!:
         if self.boxing:
-            self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
+            # Cmd (Ctrl) on a corner distorts, as in Compositor.
+            self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt, event.meta or event.control)
         elif self.panning:
             self.workspace.pan(event.x - self.last_x, event.y - self.last_y)
             self.last_x = event.x

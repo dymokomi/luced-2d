@@ -10,6 +10,7 @@ from workspace import Workspace
 from kit import Kit
 from brush import preset_names
 from tools import tool_by_id
+from transform_controls import TransformControls
 
 pub class ToolHeader:
     pub let bar: Toolbar
@@ -38,6 +39,8 @@ pub class ToolHeader:
     pub let transparent_box: Checkbox
     pub let gradient_controls: HStack
     pub let box_controls: HStack
+    pub let transform_controls: TransformControls
+    pub let controls_box: Checkbox
     ## Brush…: the window opens Brush Settings; a preset picked: the window
     ## refreshes; Apply or Cancel: the window finishes the box, keeping it or not.
     pub var brush_settings: func() -> unit!? = none
@@ -87,7 +90,14 @@ pub class ToolHeader:
         self.text_controls = HStack([self.text_size_slider], spacing = 12.0)
         self.auto_select_box = kit.checkbox("Auto-Select", func () -> unit!:
             self.workspace.auto_select = not self.workspace.auto_select)
-        self.move_controls = HStack([self.auto_select_box], spacing = 12.0)
+        self.controls_box = kit.checkbox("Show Transform Controls", func () -> unit!:
+            self.workspace.show_transform_controls = not self.workspace.show_transform_controls
+            self.workspace.touch())
+        self.move_controls = HStack([self.auto_select_box, self.controls_box], spacing = 12.0)
+        self.transform_controls = TransformControls(workspace, kit)
+        self.transform_controls.changed = func () -> unit!:
+            if let refresh = self.refreshed:
+                refresh()
         let cancel = kit.button("Cancel", func () -> unit!:
             self.finish(false))
         let apply = kit.button("Apply", func () -> unit!:
@@ -118,7 +128,8 @@ pub class ToolHeader:
         self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
             self.workspace.gradient_transparent = not self.workspace.gradient_transparent)
         self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
-        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer(), self.box_controls],
+        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.wand_controls, self.text_controls, self.move_controls,
+                            self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
@@ -174,6 +185,9 @@ pub class ToolHeader:
         self.wand_controls.layout().set_visible(not transforming and tool == "wand")
         self.text_controls.layout().set_visible(not transforming and tool == "text")
         self.move_controls.layout().set_visible(not transforming and tool == "move")
+        self.controls_box.set_checked(workspace.show_transform_controls)
+        self.transform_controls.row.layout().set_visible(transforming)
+        self.transform_controls.show()
         self.box_controls.layout().set_visible(transforming or workspace.crop_box != none)
         self.auto_select_box.set_checked(workspace.auto_select)
         self.size_field.set_value(workspace.brush.diameter)
@@ -183,6 +197,6 @@ pub class ToolHeader:
         self.spacing_field.set_value(workspace.brush.spacing * 100.0)
         self.preset_menu.set_text(workspace.brush.preset + " ▾")
         if transforming:
-            self.hint.set_text("Drag a corner to scale (shift frees it) · a side stretches · alt about the middle · outside turns · Enter applies · Esc cancels")
+            self.hint.set_text("Corner scales (shift frees) · side stretches · alt about the middle · cmd-corner distorts · alt-drag inside copies · outside turns · Enter applies")
         else:
             self.hint.set_text("Click the canvas to sample a color · X swaps · D resets" if sampling else active.hint)

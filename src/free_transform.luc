@@ -1,0 +1,98 @@
+## Edit › Free Transform under way: the box dragged over the canvas's
+## transform session, the layers it moves and how it resamples. The canvas
+## shows the layers through the box live; Apply keeps it as one undo step,
+## Cancel puts everything back. With a selection only its pixels float, on the
+## selected layer, and the outline goes with them.
+from canvas import Canvas
+from transform_box import TransformBox
+
+pub class FreeTransform:
+    pub let box: TransformBox
+    ## The layers moving; one when a selection floats.
+    pub let ids: list[int]
+    ## Compositor's sampling: 0 nearest, 1 smooth, 2 high quality.
+    pub var sampling: int = 1
+    let canvas: Canvas
+
+    pub func init(self, canvas: Canvas, ids: list[int], box: TransformBox):
+        self.canvas = canvas
+        self.ids = ids
+        self.box = box
+
+    ## Whether the selected pixels float rather than whole layers moving.
+    pub func floats(self) -> bool:
+        return self.canvas.transform_floats()
+
+    ## Show the layers as the box has them now.
+    pub func preview(self) -> unit!:
+        let box = self.box
+        if box.distorted:
+            let c = box.corners
+            self.canvas.preview_distort(box.left, box.top, box.width, box.height, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])
+        else:
+            self.canvas.preview_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+
+    pub func set_sampling(self, sampling: int) -> unit!:
+        self.sampling = sampling
+        self.canvas.set_transform_sampling(sampling)
+        if not self.box.unchanged():
+            self.preview()
+
+    ## Keep what is shown (unless the box is as found) or drop it.
+    pub func finish(self, keep: bool) -> unit!:
+        self.canvas.end_transform(keep and not self.box.unchanged())
+
+## Begin a free transform of layers `ids` (the first the selected one) on
+## `canvas`: around the selection when there is one, whose pixels then float,
+## else around everything the layers have painted. `box` carries on a box
+## already dragged (an Alt-drag's copy). None when there is nothing to move.
+pub func begin_free_transform(canvas: Canvas, ids: list[int], sampling: int, box: TransformBox? = none) -> FreeTransform?!:
+    if ids.length == 0:
+        return none
+    var frame = box
+    if frame == none:
+        frame = box_around(canvas, ids)
+    let found = frame else return none
+    canvas.begin_transform(ids[0])
+    var moving: list[int] = [ids[0]]
+    if not canvas.transform_floats():
+        for id in ids[1..]:
+            canvas.add_to_transform(id)
+            moving.append(id)
+    let session = FreeTransform(canvas, moving, found)
+    session.set_sampling(sampling)
+    if not found.unchanged():
+        session.preview()
+    return session
+
+## The box a transform starts from: the selection's, or the painted box of
+## every layer together; none when there is nothing painted.
+pub func box_around(canvas: Canvas, ids: list[int]) -> TransformBox?!:
+    if canvas.has_selection():
+        return TransformBox(float(canvas.selection_left()), float(canvas.selection_top()), float(canvas.selection_width()), float(canvas.selection_height()))
+    var found = false
+    var left = 0
+    var top = 0
+    var right = 0
+    var bottom = 0
+    for id in ids:
+        if not canvas.measure_content(id):
+            continue
+        let l = canvas.content_left()
+        let t = canvas.content_top()
+        let r = l + canvas.content_width()
+        let b = t + canvas.content_height()
+        if not found:
+            left = l
+            top = t
+            right = r
+            bottom = b
+            found = true
+        else:
+            left = l if l < left else left
+            top = t if t < top else top
+            right = r if r > right else right
+            bottom = b if b > bottom else bottom
+    if not found:
+        return none
+    return TransformBox(float(left), float(top), float(right - left), float(bottom - top))

@@ -26,10 +26,10 @@ Found beyond the old list, and first because they lose work:
 3. [x] Layers that survive going off-canvas (0.1.32): moved, transformed, cropped
    or canvas-sized pixels stay past the canvas and come back; Image › Reveal All.
    Merge Down still flattens to the canvas.
-4. [ ] Transform: box on the Move tool (Show Transform Controls, Cmd-H); Cmd-T
-   with a selection floats the pixels; numeric W/H/Scale/angle and sampling;
-   several layers or a folder at once; free distort (Cmd-drag a corner); Alt
-   duplicates while transforming.
+4. [x] Transform (0.1.33): box on the Move tool (Show Transform Controls, Cmd-H);
+   Cmd-T with a selection floats the pixels; numeric X/Y/W/H/Scale/angle, flips
+   and sampling; several layers or a folder at once; free distort (Cmd-drag a
+   corner); Alt-drag inside duplicates.
 5. [ ] Layers panel: double-click renames inline; the full context menu
    (NativeLayerList.swift:119-215); Option-drag duplicates; Option-click between
    rows clips; swipe across eyes; merge selected / merge group; duplicate every

@@ -1,12 +1,14 @@
-## Free Transform on the canvas, as in Photoshop: a box around what the layer
-## has painted with eight handles. A corner scales proportionally (Shift frees
-## it), a side stretches one way, Alt scales about the middle; inside the box
-## moves (Shift keeps to an axis), outside it turns (Shift in 15° steps).
+## Free Transform on the canvas, as in Photoshop: a box around what is being
+## transformed, with eight handles. A corner scales proportionally (Shift
+## frees it), a side stretches one way, Alt scales about the middle; inside the
+## box moves (Shift keeps to an axis), outside it turns (Shift in 15° steps).
+## Cmd-dragging a corner distorts: from then on the four corners move freely,
+## in perspective, as Compositor's Distort.
 ##
-## The box keeps the canvas's model: the painted box as found, scaled by
-## (`scale_x`, `scale_y`) and turned `angle` degrees about its middle, then
-## moved by (`dx`, `dy`). Everything is in document pixels but the handles,
-## which are hit and drawn at screen size.
+## The box keeps the canvas's model: the box as found, scaled by (`scale_x`,
+## `scale_y`) and turned `angle` degrees about its middle, then moved by
+## (`dx`, `dy`) — or, distorted, its four `corners`. Everything is in document
+## pixels but the handles, which are hit and drawn at screen size.
 from ui import Painter, Point
 from gpu import Rect, Color
 import math
@@ -18,7 +20,7 @@ pub let grab_move: int = 8
 pub let grab_turn: int = 9
 
 pub class TransformBox:
-    ## The painted box as found, and its middle: the transform's pivot.
+    ## The box as found, and its middle: the transform's pivot.
     pub let left: float
     pub let top: float
     pub let width: float
@@ -28,6 +30,10 @@ pub class TransformBox:
     pub var angle: float = 0.0
     pub var dx: float = 0.0
     pub var dy: float = 0.0
+    ## Distorted: the corners (x, y pairs: top-left, top-right, bottom-right,
+    ## bottom-left) are the transform, and the numbers above no longer are.
+    pub var distorted: bool = false
+    pub var corners: list[float]
     ## The drag under way: what was grabbed, where, and the model as it was.
     pub var grabbed: int = -1
     var start_x: float = 0.0
@@ -37,12 +43,15 @@ pub class TransformBox:
     var from_angle: float = 0.0
     var from_dx: float = 0.0
     var from_dy: float = 0.0
+    var from_corners: list[float]
 
     pub func init(self, left: float, top: float, width: float, height: float):
         self.left = left
         self.top = top
         self.width = width
         self.height = height
+        self.corners = []
+        self.from_corners = []
 
     pub func pivot_x(self) -> float:
         return self.left + self.width * 0.5
@@ -52,7 +61,66 @@ pub class TransformBox:
 
     ## Whether it is still the box as found.
     pub func unchanged(self) -> bool:
+        if self.distorted:
+            return false
         return self.scale_x == 1.0 and self.scale_y == 1.0 and self.angle == 0.0 and self.dx == 0.0 and self.dy == 0.0
+
+    # -- The numbers, as the tool header shows them.
+
+    ## The box's width and height now, in document pixels, and its middle.
+    pub func shown_width(self) -> float:
+        return self.width * math.abs(self.scale_x)
+
+    pub func shown_height(self) -> float:
+        return self.height * math.abs(self.scale_y)
+
+    pub func middle_x(self) -> float:
+        return self.pivot_x() + self.dx
+
+    pub func middle_y(self) -> float:
+        return self.pivot_y() + self.dy
+
+    ## Set the width (and, `locked`, the height in proportion), keeping the
+    ## middle and any flip.
+    pub func set_width(self, pixels: float, locked: bool):
+        if self.width <= 0.0 or pixels < 1.0:
+            return
+        let factor = pixels / self.shown_width()
+        self.scale_x = keep_off_zero(self.scale_x * factor)
+        if locked:
+            self.scale_y = keep_off_zero(self.scale_y * factor)
+
+    pub func set_height(self, pixels: float, locked: bool):
+        if self.height <= 0.0 or pixels < 1.0:
+            return
+        let factor = pixels / self.shown_height()
+        self.scale_y = keep_off_zero(self.scale_y * factor)
+        if locked:
+            self.scale_x = keep_off_zero(self.scale_x * factor)
+
+    ## Both sides at `percent` of the box as found, about the middle.
+    pub func set_scale(self, percent: float):
+        if percent <= 0.0:
+            return
+        self.scale_x = keep_off_zero(percent / 100.0 * (-1.0 if self.scale_x < 0.0 else 1.0))
+        self.scale_y = keep_off_zero(percent / 100.0 * (-1.0 if self.scale_y < 0.0 else 1.0))
+
+    ## The middle at document point (`x`, `y`).
+    pub func set_middle(self, x: float, y: float):
+        self.dx = x - self.pivot_x()
+        self.dy = y - self.pivot_y()
+
+    pub func set_angle(self, degrees: float):
+        self.angle = math.mod(degrees + 540.0, 360.0) - 180.0
+
+    ## Mirror across the box's own vertical (or horizontal) axis.
+    pub func flip(self, horizontal: bool):
+        if horizontal:
+            self.scale_x = -self.scale_x
+        else:
+            self.scale_y = -self.scale_y
+
+    # -- Where things are.
 
     ## Handle `index`'s side of the box along x and y: -1, 0 or 1.
     func side_x(self, index: int) -> float:
@@ -83,25 +151,62 @@ pub class TransformBox:
         let uy = sy * self.height * 0.5 * self.scale_y
         return self.pivot_y() + self.dy + ux * math.sin(turn) + uy * math.cos(turn)
 
+    ## Handle `index` (0..7) in document pixels: a corner, or the middle of a
+    ## side between two corners.
+    pub func handle_x(self, index: int) -> float:
+        if not self.distorted:
+            return self.place_x(self.side_x(index), self.side_y(index))
+        if index % 2 == 0:
+            return self.corners[index]
+        return (self.corners[index - 1] + self.corners[(index + 1) % 8]) * 0.5
+
+    pub func handle_y(self, index: int) -> float:
+        if not self.distorted:
+            return self.place_y(self.side_x(index), self.side_y(index))
+        if index % 2 == 0:
+            return self.corners[index + 1]
+        return (self.corners[index] + self.corners[(index + 2) % 8]) * 0.5
+
+    ## The corners as they are now (x, y pairs, clockwise from the top-left).
+    pub func corner_points(self) -> list[float]:
+        if self.distorted:
+            return self.corners.copy()
+        var points: list[float] = []
+        for index in [0, 2, 4, 6]:
+            points.append(self.handle_x(index))
+            points.append(self.handle_y(index))
+        return points
+
     ## What a press at document point (`x`, `y`) grabs, with handles `reach`
     ## document pixels about (their screen size over the zoom).
     pub func hit(self, x: float, y: float, reach: float) -> int:
         var index = 0
         while index < 8:
-            let hx = self.place_x(self.side_x(index), self.side_y(index))
-            let hy = self.place_y(self.side_x(index), self.side_y(index))
-            if math.abs(x - hx) <= reach and math.abs(y - hy) <= reach:
+            if math.abs(x - self.handle_x(index)) <= reach and math.abs(y - self.handle_y(index)) <= reach:
                 return index
             index += 1
-        # Inside: the point in the box's own frame lies within its half-sizes.
-        let turn = self.angle * math.pi / 180.0
-        let px = x - self.pivot_x() - self.dx
-        let py = y - self.pivot_y() - self.dy
-        let local_x = px * math.cos(turn) + py * math.sin(turn)
-        let local_y = -px * math.sin(turn) + py * math.cos(turn)
-        if math.abs(local_x) <= math.abs(self.width * 0.5 * self.scale_x) and math.abs(local_y) <= math.abs(self.height * 0.5 * self.scale_y):
-            return grab_move
-        return grab_turn
+        return grab_move if self.contains(x, y) else grab_turn
+
+    ## Whether document point (`x`, `y`) lies inside the box as it is now.
+    pub func contains(self, x: float, y: float) -> bool:
+        let points = self.corner_points()
+        var sign = 0.0
+        var corner = 0
+        while corner < 4:
+            let ax = points[corner * 2]
+            let ay = points[corner * 2 + 1]
+            let bx = points[((corner + 1) % 4) * 2]
+            let by = points[((corner + 1) % 4) * 2 + 1]
+            let cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+            if cross != 0.0:
+                if sign == 0.0:
+                    sign = cross
+                elif (cross < 0.0) != (sign < 0.0):
+                    return false
+            corner += 1
+        return true
+
+    # -- Dragging.
 
     ## Start dragging what `grab` names from document point (`x`, `y`).
     pub func begin(self, grab: int, x: float, y: float):
@@ -113,13 +218,22 @@ pub class TransformBox:
         self.from_angle = self.angle
         self.from_dx = self.dx
         self.from_dy = self.dy
+        self.from_corners = self.corners.copy()
 
     pub func end(self):
         self.grabbed = grab_none
 
-    ## The pointer at document point (`x`, `y`) with the modifiers held.
-    pub func drag(self, x: float, y: float, shift: bool, alt: bool):
+    ## The pointer at document point (`x`, `y`) with the modifiers held;
+    ## `distort` (Cmd) on a corner starts distorting.
+    pub func drag(self, x: float, y: float, shift: bool, alt: bool, distort: bool = false):
         let grab = self.grabbed
+        if distort and not self.distorted and grab >= 0 and grab < 8 and grab % 2 == 0:
+            self.corners = self.corner_points()
+            self.from_corners = self.corners.copy()
+            self.distorted = true
+        if self.distorted:
+            self.drag_corners(x, y, shift)
+            return
         if grab == grab_move:
             var move_x = x - self.start_x
             var move_y = y - self.start_y
@@ -137,11 +251,53 @@ pub class TransformBox:
             var turned = self.from_angle + swept * 180.0 / math.pi
             if shift:
                 turned = math.round(turned / 15.0) * 15.0
-            # Kept to -180..180 so the number shown stays readable.
-            turned = math.mod(turned + 540.0, 360.0) - 180.0
-            self.angle = turned
+            self.set_angle(turned)
         elif grab >= 0 and grab < 8:
             self.stretch(grab, x, y, shift, alt)
+
+    ## Distorted: a corner goes where it is dragged, a side takes its two
+    ## corners along, inside moves them all, outside turns them about their
+    ## middle. A drag that would fold the shape over is not taken.
+    func drag_corners(self, x: float, y: float, shift: bool):
+        let grab = self.grabbed
+        var move_x = x - self.start_x
+        var move_y = y - self.start_y
+        if shift and grab == grab_move:
+            if math.abs(move_x) >= math.abs(move_y):
+                move_y = 0.0
+            else:
+                move_x = 0.0
+        var moved = self.from_corners.copy()
+        if grab == grab_move:
+            var at = 0
+            while at < 8:
+                moved[at] += move_x
+                moved[at + 1] += move_y
+                at += 2
+        elif grab == grab_turn:
+            let cx = (moved[0] + moved[2] + moved[4] + moved[6]) * 0.25
+            let cy = (moved[1] + moved[3] + moved[5] + moved[7]) * 0.25
+            var swept = math.atan2(y - cy, x - cx) - math.atan2(self.start_y - cy, self.start_x - cx)
+            if shift:
+                swept = math.round(swept * 12.0 / math.pi) * math.pi / 12.0
+            var at = 0
+            while at < 8:
+                let px = moved[at] - cx
+                let py = moved[at + 1] - cy
+                moved[at] = cx + px * math.cos(swept) - py * math.sin(swept)
+                moved[at + 1] = cy + px * math.sin(swept) + py * math.cos(swept)
+                at += 2
+        elif grab >= 0 and grab < 8:
+            # A corner is itself; a side is the corners either side of it.
+            var index = grab - 1 if grab % 2 == 1 else grab
+            let last = grab + 1 if grab % 2 == 1 else grab
+            while index <= last:
+                let at = (index % 8)
+                moved[at] += move_x
+                moved[at + 1] += move_y
+                index += 2
+        if convex(moved):
+            self.corners = moved
 
     ## Handle `index` dragged to (`x`, `y`): the opposite side (or with Alt the
     ## middle) stays put while the box scales to reach the pointer.
@@ -198,15 +354,15 @@ pub class TransformBox:
         var index = 0
         while index < 8:
             let next = (index + 1) % 8
-            let a = Point(self.place_x(self.side_x(index), self.side_y(index)) * zoom + left, self.place_y(self.side_x(index), self.side_y(index)) * zoom + top)
-            let b = Point(self.place_x(self.side_x(next), self.side_y(next)) * zoom + left, self.place_y(self.side_x(next), self.side_y(next)) * zoom + top)
+            let a = Point(self.handle_x(index) * zoom + left, self.handle_y(index) * zoom + top)
+            let b = Point(self.handle_x(next) * zoom + left, self.handle_y(next) * zoom + top)
             painter.line(a, b, 3.0, backing)
             painter.line(a, b, 1.0, ink)
             index += 1
         index = 0
         while index < 8:
-            let hx = self.place_x(self.side_x(index), self.side_y(index)) * zoom + left
-            let hy = self.place_y(self.side_x(index), self.side_y(index)) * zoom + top
+            let hx = self.handle_x(index) * zoom + left
+            let hy = self.handle_y(index) * zoom + top
             painter.rectangle(Rect(math.floor(hx) - 4.0, math.floor(hy) - 4.0, 9.0, 9.0), ink)
             painter.rectangle(Rect(math.floor(hx) - 3.0, math.floor(hy) - 3.0, 7.0, 7.0), backing)
             index += 1
@@ -215,3 +371,22 @@ func keep_off_zero(scale: float) -> float:
     if math.abs(scale) >= 0.001:
         return scale
     return -0.001 if scale < 0.0 else 0.001
+
+## Whether four corners (x, y pairs) wind one way round with area at each
+## turn, as the canvas's distortion needs.
+pub func convex(corners: list[float]) -> bool:
+    var sign = 0.0
+    var index = 0
+    while index < 4:
+        let a = index * 2
+        let b = ((index + 1) % 4) * 2
+        let c = ((index + 2) % 4) * 2
+        let cross = (corners[b] - corners[a]) * (corners[c + 1] - corners[b + 1]) - (corners[b + 1] - corners[a + 1]) * (corners[c] - corners[b])
+        if math.abs(cross) <= 0.01:
+            return false
+        if sign == 0.0:
+            sign = -1.0 if cross < 0.0 else 1.0
+        elif (cross < 0.0) != (sign < 0.0):
+            return false
+        index += 1
+    return true

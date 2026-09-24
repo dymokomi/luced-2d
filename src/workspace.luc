@@ -12,6 +12,7 @@ import math
 import transfer
 import paths
 from units import pixels_per
+from free_transform import FreeTransform, begin_free_transform, box_around
 from transform_box import TransformBox
 from crop_box import CropBox
 
@@ -56,8 +57,16 @@ pub class Workspace:
     pub var gradient_radial: bool = false
     pub var gradient_reverse: bool = false
     pub var gradient_transparent: bool = false
-    ## The free transform under way on the canvas, if any.
-    pub var transform: TransformBox? = none
+    ## The free transform under way on the canvas, if any, and how the next resamples.
+    pub var transform: FreeTransform? = none
+    pub var transform_sampling: int = 1
+    ## The transform numbers keep width and height in proportion.
+    pub var lock_transform_ratio: bool = true
+    ## The Move tool shows the transform box around the selected layers; a
+    ## handle dragged starts a free transform (View › Show Transform Controls).
+    pub var show_transform_controls: bool = false
+    var controls_cache: TransformBox? = none
+    var controls_revision: int = -1
     ## The Crop tool's box while the tool is active.
     pub var crop_box: CropBox? = none
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
@@ -759,35 +768,58 @@ pub class Workspace:
         self.canvas.preview_blur(radius)
         self.touch()
 
-    ## Edit › Free Transform: a box around what the selected layer has painted,
-    ## previewing live until `finish_transform`. False when there is nothing
-    ## painted to transform, or something else is previewing.
+    ## Edit › Free Transform: a box around the selected layers' pixels (or the
+    ## selection's, whose pixels then float), shown live until
+    ## `finish_transform`. False when there is nothing to transform, or
+    ## something else is previewing.
     pub func begin_transform(self) -> bool!:
         if self.transform != none or self.previewing():
             return false
-        let id = self.selected_id()
-        if not self.canvas.measure_content(id):
-            return false
-        self.transform = TransformBox(float(self.canvas.content_left()), float(self.canvas.content_top()),
-                                      float(self.canvas.content_width()), float(self.canvas.content_height()))
-        self.canvas.begin_preview(id)
+        self.transform = begin_free_transform(self.canvas, self.moving_ids(), self.transform_sampling)
         self.touch()
-        return true
+        return self.transform != none
 
-    ## Show the layer as the transform box has it now.
+    ## Show the layers as the transform box has them now.
     pub func preview_transform(self) -> unit!:
-        if let box = self.transform:
-            self.canvas.preview_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+        if let session = self.transform:
+            session.preview()
             self.touch()
 
     ## Apply the transform (Enter) or drop it (Esc). Applied, it is one undo
-    ## step, and a linked mask goes with the pixels.
+    ## step, and linked masks go with the pixels.
     pub func finish_transform(self, keep: bool) -> unit!:
-        if let box = self.transform:
+        if let session = self.transform:
             self.transform = none
-            self.canvas.end_preview(false)
-            if keep and not box.unchanged():
-                self.canvas.transform_layer(self.selected_id(), box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+            session.finish(keep)
+            self.touch()
+
+    ## The box the Move tool shows with Show Transform Controls, measured again
+    ## only after a change; none when it is not shown or nothing is painted.
+    pub func controls_box(self) -> TransformBox?!:
+        if not self.show_transform_controls or self.tool != "move" or self.transform != none or self.crop_box != none:
+            return none
+        if self.controls_revision != self.revision:
+            self.controls_cache = box_around(self.canvas, self.moving_ids())
+            self.controls_revision = self.revision
+        return self.controls_cache
+
+    ## Alt-drag inside the box: carry on the same box on a copy of the layer,
+    ## the original left as it was. Not for floating pixels or several layers.
+    pub func duplicate_in_transform(self) -> unit!:
+        let session = self.transform else return
+        if session.floats() or session.ids.length != 1:
+            return
+        self.transform = none
+        session.finish(false)
+        self.duplicate()
+        self.transform = begin_free_transform(self.canvas, [self.selected_id()], session.sampling, session.box)
+        self.touch()
+
+    ## The transform's sampling (0 nearest, 1 smooth, 2 high quality), kept for the next.
+    pub func set_transform_sampling(self, sampling: int) -> unit!:
+        self.transform_sampling = sampling
+        if let session = self.transform:
+            session.set_sampling(sampling)
             self.touch()
 
     ## Edit › Transform › Flip: the selected layer mirrored about its painted middle.

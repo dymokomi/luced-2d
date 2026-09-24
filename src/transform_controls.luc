@@ -1,0 +1,103 @@
+## The tool header's numbers while a free transform is up, as Compositor's
+## transform inspector: the box's middle (X, Y), its size (W, H, Link
+## keeping their ratio), Scale, the angle, the sampling, and Flip. Each edit
+## moves the box and shows the layers through it at once. Distorted, the
+## corners are the transform, so the numbers step aside.
+from ui import HStack, NumberField, Menu, Command, Checkbox
+from workspace import Workspace
+from kit import Kit
+from transform_box import TransformBox
+
+pub class TransformControls:
+    pub let row: HStack
+    let numbers: HStack
+    let x_field: NumberField
+    let y_field: NumberField
+    let width_field: NumberField
+    let height_field: NumberField
+    let scale_field: NumberField
+    let angle_field: NumberField
+    let ratio_box: Checkbox
+    let sampling_menu: Menu
+    ## The header refreshes after an edit.
+    pub var changed: func() -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.x_field = self.number(-30000.0, 30000.0, "", func (value: float) -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.set_middle(value, box.middle_y())))
+        self.y_field = self.number(-30000.0, 30000.0, "", func (value: float) -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.set_middle(box.middle_x(), value)))
+        self.width_field = self.number(1.0, 30000.0, "", func (value: float) -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.set_width(value, self.workspace.lock_transform_ratio)))
+        self.height_field = self.number(1.0, 30000.0, "", func (value: float) -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.set_height(value, self.workspace.lock_transform_ratio)))
+        self.scale_field = self.number(0.1, 30000.0, "%", func (value: float) -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.set_scale(value)))
+        self.angle_field = self.number(-360.0, 360.0, "°", func (value: float) -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.set_angle(value)))
+        self.ratio_box = kit.checkbox("Link", func () -> unit!:
+            self.workspace.lock_transform_ratio = not self.workspace.lock_transform_ratio)
+        let flip_horizontal = kit.button("Flip H", func () -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.flip(true)))
+        let flip_vertical = kit.button("Flip V", func () -> unit!:
+            self.edit(func (box: TransformBox) -> unit!:
+                box.flip(false)))
+        self.numbers = HStack([kit.labelled("X", self.x_field), kit.labelled("Y", self.y_field), kit.labelled("W", self.width_field), self.ratio_box,
+                               kit.labelled("H", self.height_field), kit.labelled("Scale", self.scale_field), kit.labelled("Angle", self.angle_field),
+                               flip_horizontal, flip_vertical], spacing = 12.0)
+        var choices: list[Command] = []
+        let names = ["Nearest", "Smooth", "High Quality"]
+        var index = 0
+        while index < names.length:
+            let sampling = index
+            let command = Command(names[index], id = f"transform_sampling_{index}")
+            kit.bind(command, func () -> unit!:
+                self.workspace.set_transform_sampling(sampling)
+                self.refresh())
+            choices.append(command)
+            index += 1
+        self.sampling_menu = Menu("Smooth ▾", choices, font = kit.font)
+        self.row = HStack([self.numbers, kit.labelled("Sampling", self.sampling_menu)], spacing = 12.0)
+
+    func number(self, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
+        let field = NumberField(0.0, minimum, maximum, 1.0, decimals = 1, suffix = suffix, font = self.kit.font, cells = 8.0)
+        self.kit.keep(field.on_change(apply))
+        return field
+
+    ## Change the transform's box with `change`, then show it.
+    func edit(self, change: func(TransformBox) -> unit!) -> unit!:
+        let session = self.workspace.transform else return
+        if session.box.distorted:
+            return
+        change(session.box)
+        self.workspace.preview_transform()
+        self.refresh()
+
+    func refresh(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+    ## The numbers as the box has them now.
+    pub func show(self) -> unit!:
+        let session = self.workspace.transform else return
+        let box = session.box
+        self.numbers.layout().set_visible(not box.distorted)
+        self.x_field.set_value(box.middle_x())
+        self.y_field.set_value(box.middle_y())
+        self.width_field.set_value(box.shown_width())
+        self.height_field.set_value(box.shown_height())
+        self.scale_field.set_value(box.shown_width() / box.width * 100.0 if box.width > 0.0 else 100.0)
+        self.angle_field.set_value(box.angle)
+        self.ratio_box.set_checked(self.workspace.lock_transform_ratio)
+        self.sampling_menu.set_text(["Nearest", "Smooth", "High Quality"][session.sampling] + " ▾")
