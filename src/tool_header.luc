@@ -75,7 +75,7 @@ pub class ToolHeader:
         self.auto_select_box = kit.checkbox("Auto-Select", func () -> unit!:
             self.workspace.auto_select = not self.workspace.auto_select)
         self.move_controls = HStack([self.auto_select_box], spacing = 12.0)
-        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer()], font = font)
+        self.bar = Toolbar([self.title, self.brush_controls, self.wand_controls, self.text_controls, self.move_controls, Spacer()], font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
     func scrubber(self, value: float, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
