@@ -1,0 +1,197 @@
+## The Layers panel's operations on whatever is selected, as Compositor's:
+## duplicate every selected layer and group, merge (Merge Down for one layer,
+## Merge Layers for several, Merge Group for a group), Move Out of Folder, and
+## opacity set on every selected layer at once — typed as digits too (1 is
+## 10%, 0 is 100%, two quick digits an exact value). Each is one undo step.
+from workspace import Workspace
+from layer_groups import members, drop_layer, drop_above
+
+## Duplicate every selected layer and group, each copy just above its
+## original, and select the copies.
+pub func duplicate_selected(workspace: Workspace) -> unit!:
+    workspace.as_one("Duplicate Layer", func () -> unit!:
+        var copies: list[int] = []
+        for id in top_level(workspace, workspace.selected_ids()):
+            copies.append(duplicate_one(workspace, id))
+        select_all_of(workspace, copies))
+
+## A copy of layer `id` just above it in its group; a group's copy holds
+## copies of all it holds. The copy's id.
+func duplicate_one(workspace: Workspace, id: int) -> int!:
+    let canvas = workspace.canvas
+    let index = workspace.index_of(id)
+    let name = canvas.layer_name(index) + " copy"
+    let parent = canvas.layer_parent(index)
+    let position = canvas.layer_position(index)
+    if canvas.layer_is_group(index):
+        let group = canvas.add_group(name)
+        canvas.move_into(group, parent, position + 1)
+        canvas.set_layer(group, canvas.layer_visible(index), canvas.layer_opacity(index), canvas.layer_blend(index))
+        for member in members(workspace, id):
+            let copy = duplicate_one(workspace, member)
+            canvas.move_into(copy, group, -1)
+        return group
+    let kind = canvas.layer_adjustment(index)
+    if kind >= 0:
+        # An adjustment layer is its kind and settings.
+        var parameter = 0
+        while parameter < 23:
+            canvas.set_adjustment(parameter, canvas.adjustment_value(index, parameter))
+            parameter += 1
+        let copy = canvas.add_adjustment_layer(name, kind)
+        canvas.clear_adjustments()
+        canvas.move_into(copy, parent, position + 1)
+        canvas.set_layer(copy, canvas.layer_visible(index), canvas.layer_opacity(index), canvas.layer_blend(index))
+        return copy
+    return canvas.duplicate_layer(id, name)
+
+## What Merge does with the selection now: "Merge Group" for a group, "Merge
+## Layers" for several layers, "Merge Down" for one.
+pub func merge_title(workspace: Workspace) -> str!:
+    let ids = workspace.selected_ids()
+    if ids.length == 1 and workspace.canvas.layer_is_group(workspace.selected):
+        return "Merge Group"
+    return "Merge Layers" if ids.length > 1 else "Merge Down"
+
+## Whether Merge has something to do.
+pub func can_merge(workspace: Workspace) -> bool!:
+    let canvas = workspace.canvas
+    let ids = workspace.selected_ids()
+    if ids.length > 1:
+        return true
+    if canvas.layer_is_group(workspace.selected):
+        return members(workspace, workspace.selected_id()).length > 0
+    # Merge Down needs a layer below it in the same group.
+    return canvas.layer_position(workspace.selected) > 0
+
+## Layer › Merge: down, the selected layers into one, or a group into one layer.
+pub func merge(workspace: Workspace) -> unit!:
+    let title = merge_title(workspace)
+    workspace.as_one(title, func () -> unit!:
+        if title == "Merge Group":
+            discard(merge_group(workspace, workspace.selected_id()))
+        elif title == "Merge Layers":
+            merge_layers(workspace, workspace.selected_ids())
+        else:
+            let below = workspace.canvas.layer_id(workspace.selected - 1)
+            workspace.canvas.merge_down(workspace.selected_id())
+            workspace.select_id(below))
+
+## The layers `ids` into the bottom-most of them, each brought just above it
+## in turn; groups among them are merged first.
+func merge_layers(workspace: Workspace, ids: list[int]) -> unit!:
+    var layers: list[int] = []
+    for id in top_level(workspace, ids):
+        if workspace.canvas.layer_is_group(workspace.index_of(id)):
+            layers.append(merge_group(workspace, id))
+        else:
+            layers.append(id)
+    # Bottom first: stack order.
+    var order: list[int] = []
+    for id in layers:
+        order.append(workspace.index_of(id))
+    order.sort()
+    let bottom = workspace.canvas.layer_id(order[0])
+    var ordered: list[int] = []
+    for index in order[1..]:
+        ordered.append(workspace.canvas.layer_id(index))
+    for id in ordered:
+        drop_layer(workspace, id, workspace.index_of(bottom), drop_above)
+        workspace.canvas.merge_down(id)
+    workspace.select_id(bottom)
+
+## A group's layers into one, where the group was, taking the group's
+## opacity; groups inside are merged first. The merged layer's id.
+func merge_group(workspace: Workspace, group: int) -> int!:
+    let canvas = workspace.canvas
+    for member in members(workspace, group):
+        if canvas.layer_is_group(workspace.index_of(member)):
+            discard(merge_group(workspace, member))
+    let inside = members(workspace, group)
+    if inside.length == 0:
+        return group
+    # From the top down, each into the one below it.
+    var at = inside.length - 1
+    while at > 0:
+        canvas.merge_down(inside[at])
+        at -= 1
+    let merged = inside[0]
+    let index = workspace.index_of(group)
+    let opacity = canvas.layer_opacity(index)
+    let visible = canvas.layer_visible(index)
+    let name = canvas.layer_name(index)
+    drop_layer(workspace, merged, index, drop_above)
+    canvas.remove_layer(group)
+    let kept = workspace.index_of(merged)
+    canvas.set_layer(merged, visible and canvas.layer_visible(kept), canvas.layer_opacity(kept) * opacity, canvas.layer_blend(kept))
+    canvas.rename_layer(merged, name)
+    workspace.select_id(merged)
+    return merged
+
+## Layer › Move Out of Folder: each selected layer to just above the group
+## holding it.
+pub func move_out_of_folder(workspace: Workspace) -> unit!:
+    workspace.as_one("Move Out of Folder", func () -> unit!:
+        let ids = workspace.selected_ids()
+        for id in ids:
+            let parent = workspace.canvas.layer_parent(workspace.index_of(id))
+            if parent != 0:
+                drop_layer(workspace, id, workspace.index_of(parent), drop_above)
+        select_all_of(workspace, ids))
+
+## Whether any selected layer sits in a group.
+pub func can_move_out(workspace: Workspace) -> bool!:
+    for id in workspace.selected_ids():
+        if workspace.canvas.layer_parent(workspace.index_of(id)) != 0:
+            return true
+    return false
+
+## Every selected layer at `opacity` (0..1), one step.
+pub func set_opacity_all(workspace: Workspace, opacity: float) -> unit!:
+    workspace.as_one("Opacity", func () -> unit!:
+        let canvas = workspace.canvas
+        for id in workspace.selected_ids():
+            let index = workspace.index_of(id)
+            canvas.set_layer(id, canvas.layer_visible(index), opacity, canvas.layer_blend(index)))
+    workspace.touch()
+
+## Opacity typed as digits: one digit is tens of percent (0 is 100%), a
+## second within half a second makes the exact percentage (0 then 0 is 0%).
+pub class OpacityKeys:
+    var first: int = -1
+    var when: int = 0
+
+    pub func init(self):
+        self.first = -1
+
+    ## Digit `digit` typed at `now` milliseconds: the opacity it sets.
+    pub func typed(self, digit: int, now: int) -> float:
+        if self.first >= 0 and now - self.when <= 500:
+            let percent = self.first * 10 + digit
+            self.first = -1
+            return float(percent) / 100.0
+        self.first = digit
+        self.when = now
+        return 1.0 if digit == 0 else float(digit) / 10.0
+
+## `ids` without those inside another of them: a selected group takes its layers along.
+func top_level(workspace: Workspace, ids: list[int]) -> list[int]!:
+    var kept: list[int] = []
+    for id in ids:
+        var inside = false
+        var parent = workspace.canvas.layer_parent(workspace.index_of(id))
+        while parent != 0:
+            if ids.contains(parent):
+                inside = true
+            parent = workspace.canvas.layer_parent(workspace.index_of(parent))
+        if not inside:
+            kept.append(id)
+    return kept
+
+## Select exactly the layers `ids`, the last of them the active one.
+func select_all_of(workspace: Workspace, ids: list[int]) -> unit!:
+    if ids.length == 0:
+        return
+    workspace.select_id(ids[ids.length - 1])
+    for id in ids[..<(ids.length - 1)]:
+        workspace.toggle_picked(workspace.index_of(id))

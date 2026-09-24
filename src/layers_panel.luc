@@ -1,0 +1,184 @@
+## The Layers panel, as Compositor's: the list, the row's menu (right-click),
+## the footer's buttons — new layer, new group, effects, adjustment layers,
+## mask, clip, duplicate, delete — and a layer's name edited in its own row.
+## The layer commands the menu bar shares are wired here too.
+from ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Button, Command
+from workspace import Workspace
+from actions import Actions
+from kit import Kit
+from layers import LayerList
+from menus import divider
+from layer_groups import group_selected, ungroup
+from layer_ops import duplicate_selected, merge, merge_title, can_merge, move_out_of_folder, can_move_out
+
+pub class LayersPanel:
+    pub let panel: Panel
+    pub let layer_list: LayerList
+    let rename_field: TextField
+    let row_menu: ContextMenu
+    let footer_menu: ContextMenu
+    let adjust_button: Button
+    ## The layer whose name is being edited in its row, or 0.
+    var renaming: int = 0
+    ## After a change the window refreshes; what failed is said in a prompt;
+    ## the effects button opens Layer Style.
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    pub var open_style: func() -> unit!? = none
+    let workspace: Workspace
+    let actions: Actions
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, actions: Actions, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.actions = actions
+        self.kit = kit
+        let font = kit.font
+        self.layer_list = LayerList(workspace, font)
+        self.layer_list.layout().set_flex()
+        self.layer_list.on_place_files = self.place_files
+        self.layer_list.on_rename = self.begin_rename
+        # The row's menu, its titles fitted to the selection each time it opens.
+        self.row_menu = ContextMenu(self.layer_list, [actions.duplicate_layer, actions.rename_layer, actions.delete_layer, divider(),
+                                                actions.toggle_clipped, actions.group_layers, actions.move_out_of_folder, actions.merge_down, divider(),
+                                                actions.toggle_mask, actions.hide_all_mask, actions.toggle_mask_enabled, divider(),
+                                                actions.toggle_visibility, actions.layer_style], font = font)
+        kit.keep(self.row_menu.on_open(self.fit_titles))
+        # A name is typed where it is shown; Enter or a click away keeps it.
+        self.rename_field = TextField("", font = font, cells = 16.0)
+        let field_box = self.rename_field.layout()
+        field_box.set_popup(true)
+        field_box.set_modal(false)
+        field_box.set_visible(false)
+        kit.keep(self.rename_field.on_commit(self.finish_rename))
+        let content = VStack([self.row_menu, self.rename_field], spacing = 0.0)
+        content.layout().set_flex()
+        self.adjust_button = kit.shelf_button("color-correction", self.open_adjustments)
+        let shelf = Shelf([kit.shelf_button("plus", self.command(actions.add_layer)), kit.shelf_button("folder-new", self.command(actions.group_layers)),
+                           kit.shelf_button("bevel", self.style), self.adjust_button, kit.shelf_button("layer-mask", self.command(actions.toggle_mask)),
+                           kit.shelf_button("send-backward", self.command(actions.toggle_clipped)), kit.shelf_button("duplicate", self.command(actions.duplicate_layer)),
+                           Spacer(), kit.shelf_button("trash", self.command(actions.delete_layer))])
+        # The adjustment button's menu: Photoshop's half-filled circle.
+        self.footer_menu = ContextMenu(shelf, actions.adjustment_layers, font = font)
+        self.panel = Panel("Layers", content, minimum = Size(220.0, 120.0), closable = false, footer = self.footer_menu)
+        self.connect()
+
+    ## Wire the layer commands the menu bar and this panel share.
+    func connect(self) -> unit!:
+        let actions = self.actions
+        let workspace = self.workspace
+        let kit = self.kit
+        kit.bind(actions.add_layer, self.attempting("New Layer", workspace.add_layer))
+        kit.bind(actions.duplicate_layer, self.attempting("Duplicate", func () -> unit!:
+            duplicate_selected(self.workspace)))
+        kit.bind(actions.merge_down, self.attempting("Merge", func () -> unit!:
+            if can_merge(self.workspace):
+                merge(self.workspace)))
+        kit.bind(actions.delete_layer, self.attempting("Delete", workspace.delete_layer))
+        kit.bind(actions.rename_layer, func () -> unit!:
+            let index = self.workspace.selected
+            self.begin_rename(index, self.layer_list.name_left(index), self.layer_list.row_top(index) + 6.0))
+        kit.bind(actions.group_layers, self.attempting("Group Layers", func () -> unit!:
+            group_selected(self.workspace)))
+        kit.bind(actions.ungroup, self.attempting("Ungroup", func () -> unit!:
+            ungroup(self.workspace)))
+        kit.bind(actions.move_out_of_folder, self.attempting("Move Out of Folder", func () -> unit!:
+            move_out_of_folder(self.workspace)))
+        kit.bind(actions.toggle_clipped, self.attempting("Clipping Mask", workspace.toggle_clipped))
+
+    ## The menu's titles and states for the selection now, as Compositor's.
+    pub func fit_titles(self) -> unit!:
+        let actions = self.actions
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        let index = workspace.selected
+        let several = workspace.selected_ids().length > 1
+        let masked = canvas.layer_masked(index)
+        actions.delete_layer.set_text("Delete Selected Layers" if several else "Delete Layer")
+        actions.rename_layer.set_enabled(not several)
+        actions.toggle_clipped.set_text("Release Clipping Mask" if canvas.layer_clipped(index) else "Create Clipping Mask")
+        actions.merge_down.set_text(merge_title(workspace))
+        actions.merge_down.set_enabled(can_merge(workspace))
+        actions.move_out_of_folder.set_enabled(can_move_out(workspace))
+        actions.toggle_mask.set_text("Delete Mask" if masked else "Add Mask (Reveal All)")
+        actions.hide_all_mask.set_text("Add Mask (Hide All)")
+        actions.hide_all_mask.set_enabled(not masked)
+        actions.toggle_mask_enabled.set_text("Enable Mask" if masked and not canvas.layer_mask_enabled(index) else "Disable Mask")
+        actions.toggle_mask_enabled.set_enabled(masked)
+        actions.toggle_visibility.set_text("Show Layer" if not canvas.layer_visible(index) else "Hide Layer")
+
+    ## The panel as the document is now.
+    pub func show(self) -> unit!:
+        self.panel.set_text(f"Layers · {self.workspace.layer_count()}")
+        self.fit_titles()
+        self.layer_list.layout().invalidate()
+
+    # -- Renaming in the row.
+
+    func begin_rename(self, index: int, x: float, y: float) -> unit!:
+        if y < 0.0:
+            return
+        self.renaming = self.workspace.canvas.layer_id(index)
+        self.rename_field.set_text(self.workspace.canvas.layer_name(index))
+        let field_box = self.rename_field.layout()
+        field_box.set_popup_point(x - 4.0, y)
+        field_box.set_visible(true)
+        field_box.request_focus()
+
+    func finish_rename(self, name: str) -> unit!:
+        let id = self.renaming
+        self.renaming = 0
+        self.rename_field.layout().set_visible(false)
+        let trimmed = name.trim()
+        let index = self.workspace.index_of(id)
+        if id == 0 or index < 0 or trimmed == "" or trimmed == self.workspace.canvas.layer_name(index):
+            return
+        self.attempt("Rename", func () -> unit!:
+            self.workspace.canvas.rename_layer(id, trimmed)
+            self.workspace.touch())
+        self.layer_list.layout().request_focus()
+
+    # -- The footer.
+
+    func open_adjustments(self) -> unit!:
+        let button = self.adjust_button.layout().bounds()
+        let footer = self.footer_menu.layout().bounds()
+        self.footer_menu.open_at(button.x - footer.x, button.y - footer.y)
+
+    func style(self) -> unit!:
+        if let open = self.open_style:
+            open()
+
+    ## Pictures dropped on the list: each becomes a layer, centred.
+    func place_files(self, files: list[str]) -> unit!:
+        let workspace = self.workspace
+        for path in files:
+            workspace.place_file(path, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
+                self.fail(f"Could not place {path}: {failure.message}")
+                continue
+        self.refresh()
+
+    # -- Doing and saying.
+
+    ## A command's action run from a button, so the menu bar and the footer do the same.
+    func command(self, action: Command) -> func() -> unit!:
+        return func () -> unit!:
+            action.trigger()
+
+    func attempting(self, name: str, step: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            self.attempt(name, step)
+
+    func attempt(self, name: str, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            self.fail(f"{name}: {failure.message}")
+            return
+        self.refresh()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

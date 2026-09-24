@@ -8,6 +8,7 @@ from workspace import Workspace
 from selection_drag import SelectionDrag, mode_of
 from kit import outline, dropped_paths
 from transform_box import grab_move
+from layer_ops import OpacityKeys, set_opacity_all
 import theme
 import math
 import time
@@ -50,9 +51,8 @@ pub class CanvasView: Widget:
     var axis: int = -1
     var stroke_x: float = 0.0
     var stroke_y: float = 0.0
-    ## The last digit typed and when, so two quick digits give an exact opacity.
-    var digit: int = -1
-    var digit_at: int = 0
+    ## The digits typed, so two quick ones give an exact opacity.
+    let opacity_keys: OpacityKeys
     let selection: SelectionDrag
     ## A gradient drag in progress, from a document point.
     var gradient_dragging: bool = false
@@ -92,6 +92,7 @@ pub class CanvasView: Widget:
     pub func init(self, workspace: Workspace) -> unit!:
         self.workspace = workspace
         self.selection = SelectionDrag()
+        self.opacity_keys = OpacityKeys()
         self.checker = Image(256, 256)
         for y in 0..<256:
             for x in 0..<256:
@@ -457,23 +458,17 @@ pub class CanvasView: Widget:
 
     ## A number key, as Photoshop's: 1..9 set 10%..90% and 0 sets 100%; two
     ## digits within half a second set that exact percentage (0 then 5: 5%).
-    ## Painting tools take it as the brush's opacity, the others as the layer's.
+    ## Painting tools take it as the brush's opacity, the others as every
+    ## selected layer's.
     func type_digit(self, value: int) -> unit!:
-        let now = time.now() // 1000000
-        var percent = 100 if value == 0 else value * 10
-        if self.digit >= 0 and now - self.digit_at < 500:
-            percent = self.digit * 10 + value
-            self.digit = -1
-        else:
-            self.digit = value
-        self.digit_at = now
+        let fraction = self.opacity_keys.typed(value, time.now() // 1000000)
         let workspace = self.workspace
-        let fraction = math.max(0.01, float(percent) / 100.0)
-        if workspace.tool == "brush" or workspace.tool == "eraser" or workspace.tool == "gradient":
-            workspace.brush.opacity = fraction
+        let tool = workspace.tool
+        if tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "clone" or tool == "heal" or tool == "smear":
+            workspace.brush.opacity = math.max(0.01, fraction)
             workspace.touch()
         else:
-            workspace.set_opacity(fraction)
+            set_opacity_all(workspace, fraction)
         if let changed = self.on_changed:
             changed()
 
@@ -483,7 +478,14 @@ pub class CanvasView: Widget:
     ## top layer with pixels under it.
     func start_move(self, event: Event) -> unit!:
         let workspace = self.workspace
-        if workspace.tool == "move" and (workspace.auto_select or event.meta or event.control):
+        let command = event.meta or event.control
+        if command and event.shift:
+            # Cmd-Shift-click adds the layer under the pointer to the selection.
+            workspace.pick_layer(self.document_x(event.x), self.document_y(event.y), true)
+            if let changed = self.on_changed:
+                changed()
+            return
+        if workspace.tool == "move" and (workspace.auto_select or command):
             workspace.pick_layer(self.document_x(event.x), self.document_y(event.y))
             if let changed = self.on_changed:
                 changed()

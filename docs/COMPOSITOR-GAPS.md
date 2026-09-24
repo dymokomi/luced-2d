@@ -30,12 +30,12 @@ Found beyond the old list, and first because they lose work:
    Cmd-T with a selection floats the pixels; numeric X/Y/W/H/Scale/angle, flips
    and sampling; several layers or a folder at once; free distort (Cmd-drag a
    corner); Alt-drag inside duplicates.
-5. [ ] Layers panel: double-click renames inline; the full context menu
-   (NativeLayerList.swift:119-215); Option-drag duplicates; Option-click between
-   rows clips; swipe across eyes; merge selected / merge group; duplicate every
-   selected layer and groups; Move Out of Folder; new-group, effects and
-   adjustment buttons in the footer; Cmd-Shift-click on canvas adds a layer to
-   the selection; opacity digits for every selected layer.
+5. [x] Layers panel (0.1.34): double-click renames inline; the row menu with
+   titles fitted to the selection; Alt-drag duplicates; Alt-click between rows
+   clips; a drag down the eyes; Merge Layers / Merge Group; duplicate every
+   selected layer and group; Move Out of Folder; new-group, effects and
+   adjustment buttons in the footer; Cmd-Shift-click on the canvas adds a layer
+   to the selection; opacity digits for every selected layer.
 6. [ ] Real dialogs: New Canvas (size from the clipboard image), Canvas Size
    (anchor grid, relative, units, color; Opt-Cmd-C), Image Size (aspect lock,
    resampling; Opt-Cmd-I), Trim.

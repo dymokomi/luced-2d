@@ -12,7 +12,7 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
                     Menu("Image", [actions.document_settings, divider(), actions.crop, actions.flip_canvas_horizontal, actions.flip_canvas_vertical, divider(), actions.canvas_size, actions.reveal_all, actions.image_size], font = font),
                     Menu("Adjust", actions.adjustments + [divider()] + actions.adjustment_layers, font = font),
                     Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_via_copy, actions.layer_via_cut, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
-                                   divider(), actions.group_layers, actions.ungroup, divider(),
+                                   divider(), actions.group_layers, actions.ungroup, actions.move_out_of_folder, divider(),
                                    actions.toggle_mask, actions.hide_all_mask, actions.toggle_mask_enabled, actions.toggle_mask_editing, actions.load_transparency,
                                    divider(), actions.toggle_clipped, actions.toggle_visibility,
                                    actions.rename_layer, actions.layer_style, divider(), actions.next_blend, actions.previous_blend], font = font),
@@ -22,5 +22,5 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
                     Spacer()], font = font)
 
 ## A menu's separator line.
-func divider() -> Command!:
+pub func divider() -> Command!:
     return Command("", divider = true)

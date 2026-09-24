@@ -7,8 +7,10 @@ from input import EventKind, Cursor
 from workspace import Workspace
 import theme
 import math
+import time
 from kit import dropped_paths
 from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_inside, drop_above, drop_below
+from layer_ops import duplicate_selected
 
 ## The layer list: one 52-point row per shown layer, top layer first, each with
 ## an eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it
@@ -17,12 +19,15 @@ from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_
 ## an adjustment layer its icon (its settings show in Properties).
 ##
 ## As in Photoshop: a click selects a row, Cmd-click adds it to the selection
-## or takes it out, Shift-click selects a run; the eye toggles visibility; the
-## mask thumbnail targets the mask for painting, the layer thumbnail the pixels
-## again; Cmd-click on a thumbnail loads it as the selection (Shift adds, Alt
-## subtracts) and Shift-click on the mask thumbnail disables the mask. A row
-## dragged lands above the row it is dropped on, or inside a group dropped on
-## its middle.
+## or takes it out, Shift-click selects a run; the eye toggles visibility, and
+## dragging on down the eyes sets theirs the same; the mask thumbnail targets
+## the mask for painting, the layer thumbnail the pixels again; Cmd-click on a
+## thumbnail loads it as the selection (Shift adds, Alt subtracts) and
+## Shift-click on the mask thumbnail disables the mask. A double-click on the
+## name renames the layer there. Alt-click on the line between two rows clips
+## the upper to the lower (or releases it). A row dragged lands above the row
+## it is dropped on, or inside a group dropped on its middle; with Alt a copy
+## lands there instead.
 pub class LayerList: Widget:
     let box: Layout
     pub let workspace: Workspace
@@ -32,8 +37,16 @@ pub class LayerList: Widget:
     var drag_index: int = -1
     var drag_y: float = 0.0
     var drag_started: bool = false
+    ## A drag down the eyes: the visibility it gives each row it crosses, or none.
+    var eye_swipe: bool = false
+    var eye_visible: bool = false
+    ## The last press, for a double-click: its row's layer and when (ms).
+    var last_index: int = -1
+    var last_time: int = 0
     ## Pictures dropped on the list: placed as new layers.
     pub var on_place_files: func(list[str]) -> unit!? = none
+    ## A double-click on a name: rename the layer at that index, its name at (x, y).
+    pub var on_rename: func(int, float, float) -> unit!? = none
 
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
@@ -59,6 +72,20 @@ pub class LayerList: Widget:
         if row < 0 or row >= rows.length:
             return -1
         return rows[row]
+
+    ## Where the row of the layer at `index` starts, or -1 when it is not shown.
+    pub func row_top(self, index: int) -> float!:
+        var row = 0
+        for shown in shown_rows(self.workspace):
+            if shown == index:
+                return float(row) * self.row_height
+            row += 1
+        return -1.0
+
+    ## Where the name of the layer at `index` starts.
+    pub func name_left(self, index: int) -> float!:
+        let masked = self.workspace.canvas.layer_masked(index)
+        return self.thumb_left(index) + 44.0 + (38.0 if masked else 0.0)
 
     ## Where a row's thumbnail starts: past the eye, a step in per group
     ## holding it, and further when clipped.
@@ -180,19 +207,23 @@ pub class LayerList: Widget:
 
     ## A drop at `y`: onto a group's middle it goes in; otherwise at the row
     ## edge nearest the pointer, above the row below that edge — or, past the
-    ## last row, below it.
-    func drop(self, y: float) -> unit!:
+    ## last row, below it. With `copy` (Alt) a copy goes there instead.
+    func drop(self, y: float, copy: bool) -> unit!:
         let workspace = self.workspace
-        let id = workspace.canvas.layer_id(self.drag_index)
-        if self.into_group(y):
-            drop_layer(workspace, id, self.row_of(y), drop_inside)
-            return
+        let canvas = workspace.canvas
+        # Where it lands, by layer id: a copy shifts the rows.
         let rows = shown_rows(workspace)
         let slot = clamp_int(int(math.floor(y / self.row_height + 0.5)), 0, rows.length)
-        if slot < rows.length:
-            drop_layer(workspace, id, rows[slot], drop_above)
-        else:
-            drop_layer(workspace, id, rows[rows.length - 1], drop_below)
+        let into = self.into_group(y)
+        let how = drop_inside if into else (drop_above if slot < rows.length else drop_below)
+        let target = canvas.layer_id(self.row_of(y) if into else (rows[slot] if slot < rows.length else rows[rows.length - 1]))
+        let dragged = canvas.layer_id(self.drag_index)
+        workspace.as_one("Duplicate Layer" if copy else "Move Layer", func () -> unit!:
+            var id = dragged
+            if copy:
+                duplicate_selected(workspace)
+                id = workspace.selected_id()
+            drop_layer(workspace, id, workspace.index_of(target), how))
 
     ## The dragged files that can become layers.
     pub func event(self, event: Event) -> unit!:
@@ -208,10 +239,23 @@ pub class LayerList: Widget:
             return
         if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
             self.box.request_focus()
+            # Alt on the line between two rows clips the upper to the lower.
+            if event.alt and not (event.meta or event.control) and self.clip_line(event.y):
+                self.box.invalidate()
+                return
             let index = self.row_of(event.y)
             if index >= 0:
                 self.press(index, event)
             self.box.invalidate()
+        elif event.kind == EventKind.pointer_moved and self.eye_swipe:
+            let index = self.row_of(event.y)
+            if index >= 0 and self.workspace.canvas.layer_visible(index) != self.eye_visible:
+                let canvas = self.workspace.canvas
+                canvas.set_layer(canvas.layer_id(index), self.eye_visible, canvas.layer_opacity(index), canvas.layer_blend(index))
+                self.workspace.touch()
+                self.box.invalidate()
+        elif event.kind == EventKind.pointer_up and event.button == 0 and self.eye_swipe:
+            self.eye_swipe = false
         elif event.kind == EventKind.pointer_moved and self.drag_index >= 0:
             if math.abs(event.y - self.drag_y) > 4.0:
                 self.drag_started = true
@@ -220,14 +264,31 @@ pub class LayerList: Widget:
                 self.box.invalidate()
         elif event.kind == EventKind.pointer_up and event.button == 0 and self.drag_index >= 0:
             if self.drag_started:
-                self.drop(event.y)
+                self.drop(event.y, event.alt)
             self.drag_index = -1
             self.drag_started = false
             self.box.invalidate()
         elif event.cancelled:
             self.drag_index = -1
             self.drag_started = false
+            self.eye_swipe = false
             self.box.invalidate()
+
+    ## An Alt-click at `y`: on the line between two rows (within 5 points), the
+    ## upper row's layer clipped to the one below, or released. Whether it was.
+    func clip_line(self, y: float) -> bool!:
+        let rows = shown_rows(self.workspace)
+        let line = int(math.floor(y / self.row_height + 0.5))
+        if line < 1 or line >= rows.length or math.abs(y - float(line) * self.row_height) > 5.0:
+            return false
+        let upper = rows[line - 1]
+        let canvas = self.workspace.canvas
+        if canvas.layer_is_group(upper):
+            return false
+        self.workspace.as_one("Clipping Mask", func () -> unit!:
+            canvas.set_clipped(canvas.layer_id(upper), not canvas.layer_clipped(upper)))
+        self.workspace.touch()
+        return true
 
     ## A press on the row of the layer at `index`.
     func press(self, index: int, event: Event) -> unit!:
@@ -240,8 +301,11 @@ pub class LayerList: Widget:
         let on_mask = canvas.layer_masked(index) and event.x >= mask_left and event.x < mask_left + 30.0
         let mode = 1 if event.shift else (2 if event.alt else 0)
         if event.x < 28.0:
-            workspace.select(index)
-            workspace.toggle_visibility()
+            # The eye; a drag on down the eyes gives them the same.
+            canvas.set_layer(canvas.layer_id(index), not canvas.layer_visible(index), canvas.layer_opacity(index), canvas.layer_blend(index))
+            self.eye_swipe = true
+            self.eye_visible = canvas.layer_visible(index)
+            workspace.touch()
         elif canvas.layer_is_group(index) and on_thumb:
             toggle_folded(workspace, canvas.layer_id(index))
         elif command and (on_thumb or on_mask):
@@ -256,6 +320,16 @@ pub class LayerList: Widget:
         elif event.shift:
             workspace.pick_range(index)
         else:
+            # A second press on the name soon after the first renames it.
+            let now = time.now() // 1000000
+            let again = index == self.last_index and now - self.last_time <= 400
+            self.last_index = index
+            self.last_time = now
+            if again and event.x >= self.name_left(index):
+                self.last_index = -1
+                if let rename = self.on_rename:
+                    rename(index, self.name_left(index), self.row_top(index) + 6.0)
+                return
             workspace.select(index)
             self.drag_index = index
             self.drag_y = event.y

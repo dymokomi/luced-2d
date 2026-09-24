@@ -7,6 +7,7 @@ from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
 from transform_box import TransformBox, grab_move, grab_turn
 from crop_box import CropBox, crop_new
+from layer_ops import OpacityKeys, set_opacity_all
 from adjustments import adjustments
 from settings import Settings
 from ui import Event
@@ -28,6 +29,7 @@ pub func main(arguments: list[str]) -> int!:
     adjustment_table()
     retouch_tools()
     unsaved_changes(arguments)
+    layer_panel_ops()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -76,7 +78,7 @@ func contents() -> unit!:
     let font = Font()
     let actions = Actions()
     let panels = Panels(workspace, actions, font)
-    panels.add_layer()
+    actions.add_layer.trigger()
     assert(workspace.layer_count() == 2)
     panels.select_layer(0)
     assert(workspace.selected == 0)
@@ -412,4 +414,37 @@ func unsaved_changes(arguments: list[str]) -> unit!:
     assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0) and panels.files.can_quit())
     # Nothing past the canvas: Reveal All has nothing to do.
     assert(not workspace.reveal_all())
+    panels.close()
+
+## The Layers panel's operations: titles fitted to the selection, groups
+## duplicated with what they hold, Merge Group, opacity for every selected
+## layer and typed as digits.
+func layer_panel_ops() -> unit!:
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    actions.add_layer.trigger()
+    actions.add_layer.trigger()
+    assert(workspace.layer_count() == 3 and workspace.selected == 2)
+    workspace.toggle_picked(1)
+    panels.layers_panel.fit_titles()
+    assert(actions.merge_down.text() == "Merge Layers" and actions.delete_layer.text() == "Delete Selected Layers" and not actions.rename_layer.is_enabled())
+    actions.group_layers.trigger()
+    assert(workspace.layer_count() == 4 and workspace.canvas.layer_is_group(workspace.selected))
+    panels.layers_panel.fit_titles()
+    assert(actions.merge_down.text() == "Merge Group")
+    # The group's copy holds copies of its two layers.
+    actions.duplicate_layer.trigger()
+    assert(workspace.layer_count() == 7 and workspace.canvas.layer_is_group(workspace.selected))
+    actions.merge_down.trigger()
+    assert(workspace.layer_count() == 5 and not workspace.canvas.layer_is_group(workspace.selected))
+    assert(workspace.canvas.undo_name() == "Merge Group")
+    # Every selected layer takes the opacity, in one step.
+    workspace.select(0)
+    workspace.toggle_picked(workspace.layer_count() - 1)
+    set_opacity_all(workspace, 0.25)
+    assert(workspace.canvas.layer_opacity(0) == 0.25 and workspace.canvas.layer_opacity(workspace.layer_count() - 1) == 0.25)
+    let keys = OpacityKeys()
+    assert(keys.typed(5, 1000) == 0.5 and keys.typed(5, 1200) == 0.55 and keys.typed(0, 5000) == 1.0 and keys.typed(0, 5100) == 0.0)
     panels.close()

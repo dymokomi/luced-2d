@@ -953,9 +953,14 @@ pub class Workspace:
         self.touch()
 
     ## Select the top visible layer with pixels at a document point, if any.
-    pub func pick_layer(self, x: float, y: float) -> unit!:
+    pub func pick_layer(self, x: float, y: float, add: bool = false) -> unit!:
         let index = self.canvas.layer_at(int(math.floor(x)), int(math.floor(y)))
-        if index >= 0 and index != self.selected:
+        if index < 0 or index == self.selected:
+            return
+        # With `add` it joins the selection (or leaves it), as Cmd-Shift-click.
+        if add:
+            self.toggle_picked(index)
+        else:
             self.select(index)
 
     ## Whether the document pixel under a point is selected at all.

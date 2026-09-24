@@ -70,6 +70,7 @@ pub class Actions:
     pub let delete_layer: Command
     pub let group_layers: Command
     pub let ungroup: Command
+    pub let move_out_of_folder: Command
     pub let toggle_mask: Command
     pub let hide_all_mask: Command
     pub let toggle_mask_enabled: Command
@@ -160,6 +161,7 @@ pub class Actions:
         self.delete_layer = Command("Delete Layer", Shortcut(Key.delete, primary = true, shift = true), id = "delete_layer")
         self.group_layers = Command("Group Layers", Shortcut(Key.g, primary = true), id = "group_layers")
         self.ungroup = Command("Ungroup Layers", Shortcut(Key.g, primary = true, shift = true), id = "ungroup")
+        self.move_out_of_folder = Command("Move Out of Folder", id = "move_out_of_folder")
         self.toggle_mask = Command("Add / Remove Mask", id = "toggle_mask")
         self.hide_all_mask = Command("Add Mask Hiding All", id = "hide_all_mask")
         self.toggle_mask_enabled = Command("Disable / Enable Mask", id = "toggle_mask_enabled")
@@ -198,7 +200,7 @@ pub class Actions:
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
-                    self.group_layers, self.ungroup, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
+                    self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
                     self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.adjustment_layers + self.blends + self.tools + self.units
 
@@ -223,8 +225,8 @@ pub class Actions:
         self.crop.set_enabled(selection)
         self.layer_up.set_enabled(workspace.selected < layers - 1)
         self.layer_down.set_enabled(workspace.selected > 0)
-        self.merge_down.set_enabled(workspace.selected > 0)
         self.delete_layer.set_enabled(layers > 1)
+        # Merge and Duplicate follow the selection: the Layers panel fits them (layer_ops).
         let group = canvas.layer_is_group(workspace.selected)
         self.toggle_mask_editing.set_enabled(canvas.layer_masked(workspace.selected))
         self.toggle_mask_enabled.set_enabled(canvas.layer_masked(workspace.selected))
@@ -232,7 +234,6 @@ pub class Actions:
         self.hide_all_mask.set_enabled(not group and not canvas.layer_masked(workspace.selected))
         self.load_transparency.set_enabled(not group)
         self.ungroup.set_enabled(group)
-        self.duplicate_layer.set_enabled(not group)
         self.toggle_clipped.set_enabled(workspace.selected > 0)
         for command in self.adjustments:
             command.set_enabled(not previewing)

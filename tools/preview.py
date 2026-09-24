@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -104,6 +104,18 @@ SCENES = {
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 1130.0 * zoom, y = oy + 900.0 * zoom))
             editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + 1130.0 * zoom, y = oy + 900.0 * zoom, button = 0))
             print(f"RETOUCH undo {editor.workspace.canvas.can_undo()}")
+            editor.panels.refresh()''',
+    # The Layers panel's row menu, right-clicked on the top layer.
+    'layermenu': '''            editor.workspace.select(1)
+            editor.panels.refresh()
+            let rows = editor.panels.layers.layout().bounds()
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = rows.x + 120.0, y = rows.y + 20.0, button = 1))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = rows.x + 120.0, y = rows.y + 20.0, button = 1))
+            editor.panels.refresh()''',
+    # A layer's name edited in its row.
+    'rename': '''            editor.workspace.select(1)
+            editor.panels.refresh()
+            editor.panels.actions.rename_layer.trigger()
             editor.panels.refresh()''',
     'closeprompt': '''            editor.workspace.add_layer()
             editor.panels.files.close_document()
