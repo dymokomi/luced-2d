@@ -44,7 +44,8 @@ pub class Panels:
     pub let preset_menu: Menu
     ## Brush Settings…: one dialog with Photoshop's sections, its controls in the
     ## order `show_brush` writes them.
-    pub let brush_dialog: Dialog
+    ## Brush Settings: opens floating over the workspace and docks like any panel.
+    pub let brush_panel: Panel
     let brush_fields: list[NumberField]
     let brush_sliders: list[Slider]
     let brush_checks: list[Checkbox]
@@ -165,7 +166,7 @@ pub class Panels:
         self.brush_sliders = []
         self.brush_checks = []
         self.texture_menu = Menu("None ▾", self.texture_commands(), font = font)
-        self.brush_dialog = self.build_brush_dialog(font)
+        self.brush_panel = self.build_brush_panel(font)
         self.palette = Palette(workspace)
         self.document_settings = DocumentSettings(workspace, font)
         self.document_settings.applied = self.refresh
@@ -333,7 +334,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.brush_dialog, self.settings_dialog.dialog, self.document_settings.dialog, self.crash_dialog], spacing = 0.0)
+        self.body = VStack([menus, header, self.dock, Toolbar([self.status, Spacer(), self.header_hint], font = font), self.prompt, self.picker.dialog, self.mask_prompt, self.adjust_dialog, self.settings_dialog.dialog, self.document_settings.dialog, self.crash_dialog], spacing = 0.0)
         self.body.layout().set_flex()
         self.connections.append(self.prompt.on_submit(self.apply))
         self.refresh()
@@ -687,8 +688,9 @@ pub class Panels:
     ## Brush Settings…: Photoshop's sections — Tip Shape, Shape Dynamics,
     ## Scattering, Texture, Color Dynamics, Transfer — as an accordion, one
     ## open at a time, each rows of a slider and a number field. Edits go
-    ## straight to the workspace; the next stroke paints with them.
-    func build_brush_dialog(self, font: Font) -> Dialog!:
+    ## straight to the workspace; the next stroke paints with them. A panel,
+    ## so it floats or docks wherever the user puts it.
+    func build_brush_panel(self, font: Font) -> Panel!:
         var tip: list[Widget] = []
         tip.append(self.brush_row("Spacing", 1.0, 500.0, 0, "%", func (value: float) -> unit!:
             self.workspace.spacing = value / 100.0))
@@ -733,7 +735,7 @@ pub class Panels:
         for rows in [tip, shape, scattering, texture, color_rows, transfer]:
             sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
         let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = font, open = 0)
-        return Dialog([Text("Brush Settings", font = font), stack, HStack([Spacer(), self.button("Done", self.close_brush)], spacing = 8.0)], width = 480.0, spacing = 8.0)
+        return Panel("Brush Settings", VStack([stack, Spacer()], spacing = 0.0, padding = 6.0), minimum = Size(320.0, 240.0))
 
     ## The texture menu's entries: picking one sets the pattern.
     func texture_commands(self) -> list[Command]!:
@@ -809,13 +811,14 @@ pub class Panels:
         self.brush_checks[1].set_checked(w.pressure_flow)
         self.texture_menu.set_text(["None", "Grain", "Canvas", "Dots"][w.texture] + " ▾")
 
+    ## Show Brush Settings: floating the first time, else brought forward
+    ## wherever it was left, floating or docked.
     pub func open_brush(self) -> unit!:
         self.show_brush()
-        self.brush_dialog.open()
-
-    func close_brush(self) -> unit!:
-        self.brush_dialog.hide()
-        self.refresh()
+        if self.dock.contains(self.brush_panel):
+            self.dock.select(self.brush_panel)
+        else:
+            self.dock.float(self.brush_panel)
 
     ## A properties row after eleusis: a muted label in a fixed column, the
     ## control, and a one-point rule beneath.
@@ -1214,7 +1217,7 @@ pub class Panels:
         self.flow_field.set_value(workspace.flow * 100.0)
         self.spacing_field.set_value(workspace.spacing * 100.0)
         self.preset_menu.set_text(workspace.preset + " ▾")
-        if self.brush_dialog.is_open():
+        if self.dock.contains(self.brush_panel):
             self.show_brush()
         var hint = "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"
         if self.picker.is_open():

@@ -77,6 +77,14 @@ func contents() -> unit!:
     assert(workspace.tool == "brush")
     actions.tools[4].trigger()
     assert(workspace.tool == "wand")
+    # Brush Settings opens floating, once; docked, it stays where it was put.
+    panels.open_brush()
+    assert(panels.dock.is_floating(panels.brush_panel) and panels.dock.panel_count() == 4)
+    panels.open_brush()
+    assert(panels.dock.panel_count() == 4)
+    panels.dock.move(panels.brush_panel, panels.properties_panel)
+    panels.open_brush()
+    assert(not panels.dock.is_floating(panels.brush_panel) and panels.dock.same_group(panels.brush_panel, panels.properties_panel))
     panels.close()
 
 ## Settings parse their defaults, survive a round trip through the file text,

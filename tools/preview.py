@@ -16,7 +16,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/luce-base')
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -169,15 +170,41 @@ SCENES = {
             editor.workspace.canvas.set_resolution(300.0)
             editor.panels.document_settings.open()
             editor.panels.refresh()''',
+    'white': '''            editor.workspace.choose_tool("brush")
+            editor.workspace.select(0)
+            editor.workspace.canvas.set_layer(editor.workspace.selected_id(), false, 1.0)
+            editor.workspace.select(1)
+            editor.workspace.canvas.set_layer(editor.workspace.selected_id(), true, 1.0, 0)
+            editor.workspace.set_color(1.0, 1.0, 1.0)
+            editor.workspace.apply_preset("Hard Round")
+            editor.workspace.diameter = 40.0
+            editor.workspace.begin_stroke(200.0, 200.0)
+            editor.workspace.extend_stroke(1000.0, 260.0)
+            editor.workspace.end_stroke()
+            editor.workspace.apply_preset("Soft Round")
+            editor.workspace.diameter = 80.0
+            editor.workspace.begin_stroke(200.0, 450.0)
+            editor.workspace.extend_stroke(1000.0, 520.0)
+            editor.workspace.end_stroke()
+            editor.panels.refresh()''',
+    'brushdock': '''            editor.workspace.choose_tool("brush")
+            editor.panels.open_brush()
+            editor.panels.refresh()
+            editor.panels.dock.move(editor.panels.brush_panel, editor.panels.properties_panel, DockPosition.tab)
+            editor.panels.refresh()
+            print(f"BRUSHDOCK floating {editor.panels.dock.is_floating(editor.panels.brush_panel)}")
+            editor.panels.refresh()''',
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
             editor.panels.pick_color(false)
             editor.panels.refresh()''',
 }
 SCENE = SCENES[arguments.scene]
+if arguments.zoom:
+    SCENE += '\n            editor.workspace.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
