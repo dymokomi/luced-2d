@@ -44,8 +44,8 @@ pub class Adjustment:
     pub let knobs: list[Knob]
     pub let pages: list[str]
     pub let toggles: list[Toggle]
-    ## Whether it can be an adjustment layer: all but Curves, whose table a
-    ## layer does not keep yet.
+    ## Whether it can be an adjustment layer (every kind now; Curves keeps its
+    ## curves with the layer).
     pub let layerable: bool
 
     pub func init(self, kind: int, name: str, knobs: list[Knob], pages: list[str]? = none, toggles: list[Toggle]? = none, layerable: bool = true):
@@ -122,7 +122,7 @@ pub func adjustments() -> list[Adjustment]:
             Adjustment(4, "Desaturate", []),
             Adjustment(5, "Threshold", [Knob("Level", 0.0, 255.0, 128.0, level)]),
             Adjustment(6, "Posterize", [Knob("Levels", 2.0, 32.0, 4.0)]),
-            Adjustment(7, "Curves", [], layerable = false),
+            Adjustment(7, "Curves", []),
             Adjustment(8, "Exposure", [Knob("Exposure", -20.0, 20.0, 0.0, 1.0, 2), Knob("Offset", -0.5, 0.5, 0.0, 1.0, 2),
                                        Knob("Gamma", 0.01, 9.99, 1.0, 1.0, 2)]),
             Adjustment(9, "Black & White", [Knob("Reds", -200.0, 300.0, 40.0, percent, 0, "%"), Knob("Yellows", -200.0, 300.0, 60.0, percent, 0, "%"),
@@ -136,6 +136,8 @@ pub func adjustments() -> list[Adjustment]:
             Adjustment(11, "Gradient Map", [], toggles = [Toggle("Reverse")])]
 
 ## The Gradient Map's kind: its colors, the foreground to the background, go after its toggle.
+## The kinds some code treats apart: Curves keeps curves, Gradient Map colors.
+pub let curves_adjustment: int = 7
 pub let gradient_map: int = 11
 ## The kinds the dialog shows no knobs for and the Adjust menu applies at once.
 pub func applies_at_once(kind: int) -> bool:

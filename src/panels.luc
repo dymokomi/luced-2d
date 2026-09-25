@@ -22,7 +22,7 @@ from tool_header import ToolHeader
 from brush_settings import BrushSettings
 from adjust_dialog import AdjustDialog
 from style_dialog import StyleDialog
-from adjustments import adjustments, applies_at_once, gradient_map
+from adjustments import adjustments, applies_at_once, gradient_map, curves_adjustment
 from properties import Properties
 from prompts import Prompts
 from document_files import DocumentFiles
@@ -66,6 +66,8 @@ pub class Panels:
     pub let picker: ColorPicker
     ## On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
     pub let mask_prompt: Dialog
+    ## The workspace revision the panels last showed.
+    var shown_revision: int = -1
     var mask_background: bool = false
     pub let document_settings: DocumentSettings
     pub let size_dialogs: SizeDialogs
@@ -86,7 +88,7 @@ pub class Panels:
         kit.keep(self.prompts.prompt.on_submit(self.prompts.apply))
         self.files = DocumentFiles(workspace, self.prompts, kit)
         self.files.refreshed = self.refresh
-        self.view = CanvasView(workspace)
+        self.view = CanvasView(workspace, font)
         self.view.on_open_files = self.files.open_files
         self.view.on_key_up = self.spring_back
         self.view.on_changed = self.refresh
@@ -479,6 +481,12 @@ pub class Panels:
         var numbers = spec.engine(spec.defaults())
         if kind == gradient_map:
             numbers = numbers + self.workspace.colors_encoded()
+        # A new Curves layer starts straight, whatever a dialog last staged.
+        if kind == curves_adjustment:
+            var channel = 0
+            while channel < 4:
+                self.workspace.canvas.reset_curve(channel)
+                channel += 1
         discard(self.workspace.add_adjustment_layer(kind, spec.name, numbers))
 
     ## Edit › Free Transform: the box goes up around the layer's pixels on the canvas.
@@ -572,8 +580,17 @@ pub class Panels:
         self.view.layout().invalidate()
         self.layers.layout().invalidate()
 
+    ## Once a frame: when the document changed since the panels last showed it
+    ## (a stroke let go, a key's edit), show it — not mid-stroke, when every
+    ## frame changes it. Menus and shortcuts then offer what is possible now.
+    pub func refresh_if_changed(self) -> unit!:
+        if self.workspace.revision == self.shown_revision or self.workspace.canvas.painting():
+            return
+        self.refresh()
+
     pub func refresh(self) -> unit!:
         let workspace = self.workspace
+        self.shown_revision = workspace.revision
         self.header.show(self.picker.is_open())
         self.palette.layout().invalidate()
         self.picker.sync()

@@ -9,6 +9,7 @@ from workspace import Workspace
 from canvas import Canvas
 from kit import Kit
 from adjustment_controls import AdjustmentControls
+from adjustments import curves_adjustment
 
 pub class Properties:
     pub let panel: Panel
@@ -121,7 +122,11 @@ pub class Properties:
             numbers.append(canvas.adjustment_value(selected, parameter))
             parameter += 1
         self.adjustment.below = id
-        self.adjustment.show(kind, spec.shown_of(numbers))
+        # A Curves layer brings its own curves to edit.
+        let own_curves = kind == curves_adjustment
+        if own_curves:
+            canvas.stage_layer_curves(id)
+        self.adjustment.show(kind, spec.shown_of(numbers), own_curves)
         self.adjustment_title.set_text(spec.name)
 
     ## A setting changed: the layer takes it at once.

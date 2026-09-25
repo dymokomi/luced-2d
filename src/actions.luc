@@ -2,6 +2,7 @@
 ## the keyboard all present the same command, so a shortcut shows beside its
 ## menu item and disabling an action disables it everywhere at once.
 from adjustments import adjustments, applies_at_once
+import ui
 from ui import Command, Shortcut
 from input import Key
 from workspace import Workspace
@@ -128,7 +129,7 @@ pub class Actions:
         self.copy_merged = Command("Copy Merged", Shortcut(Key.c, primary = true, shift = true), id = "copy_merged")
         self.paste = Command("Paste", Shortcut(Key.v, primary = true), id = "paste")
         self.fill = Command("Fill Selection with Color", Shortcut(Key.backspace, alt = true), id = "fill")
-        self.clear = Command("Clear Selection", Shortcut(Key.backspace), id = "clear")
+        self.clear = Command("Clear Selection", Shortcut(ui.clear_key()), id = "clear")
         self.fill_background = Command("Fill Selection with Background", Shortcut(Key.backspace, primary = true), id = "fill_background")
         self.swap_colors = Command("Swap Colors", Shortcut(Key.x), id = "swap_colors")
         self.reset_colors = Command("Default Colors", Shortcut(Key.d), id = "reset_colors")

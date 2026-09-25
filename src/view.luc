@@ -1,7 +1,7 @@
 ## The canvas view: it draws the document at the workspace's zoom and offset,
 ## and turns pointer, key and scroll input into what the active tool does —
 ## painting, selecting, moving, zooming and panning.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point, Font
 from gpu import RenderTarget, Rect, Region, Filter, Color
 from input import EventKind, Cursor, Key, ScrollUnit
 from workspace import Workspace
@@ -75,6 +75,8 @@ pub class CanvasView: Widget:
     var gradient_dragging: bool = false
     ## A live gradient's end being dragged (the new one's end, or a handle).
     var gradient_handle: bool = false
+    ## For the size shown beside a Crop box being dragged.
+    var font: Font? = none
     ## The Text tool pressed: a click sets point text, a drag a box.
     var text_dragging: bool = false
     var gradient_x: float = 0.0
@@ -110,8 +112,9 @@ pub class CanvasView: Widget:
     var ants: float = 0.0
     let checker: Image
 
-    pub func init(self, workspace: Workspace) -> unit!:
+    pub func init(self, workspace: Workspace, font: Font? = none) -> unit!:
         self.workspace = workspace
+        self.font = font
         self.selection = SelectionDrag()
         self.opacity_keys = OpacityKeys()
         self.polygon = PolygonLasso()
@@ -390,6 +393,10 @@ pub class CanvasView: Widget:
         if event.kind == EventKind.magnify:
             # A touchpad pinch: the magnification change, about the pointer.
             self.workspace.zoom_about(1.0 + event.scroll_y, event.x, event.y)
+        elif event.scroll_unit == ScrollUnit.lines and (event.shift or (event.scroll_x != 0.0 and event.scroll_y == 0.0)):
+            # Shift-wheel, or a wheel tilted sideways, pans across; a notch is 40 points.
+            let across = event.scroll_x if event.scroll_x != 0.0 else event.scroll_y
+            self.workspace.pan(across * 40.0, 0.0)
         elif event.scroll_unit == ScrollUnit.lines or event.meta or event.control or event.alt:
             # A notched mouse wheel zooms about the pointer; so does any scroll with cmd, ctrl or alt held.
             let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
@@ -415,8 +422,8 @@ pub class CanvasView: Widget:
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
         # A free transform or the Crop tool's box takes presses while it is up;
-        # handles answer within 6 points whatever the zoom.
-        let reach = 6.0 / workspace.zoom
+        # handles answer within 8 points whatever the zoom.
+        let reach = 8.0 / workspace.zoom
         # With the Move tool (or Cmd held) a guide under the pointer is taken up.
         if (tool == "move" or event.meta or event.control) and workspace.transform == none and workspace.crop_box == none:
             let guide = self.guides.hit(workspace, x, y, 4.0 / workspace.zoom)
@@ -658,6 +665,14 @@ pub class CanvasView: Widget:
             return
         if let crop = workspace.crop_box:
             crop.draw(painter, width, height, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
+            # While it is dragged, its size beside its bottom-right corner, as Photoshop shows it.
+            if crop.grabbed >= 0:
+                if let font = self.font:
+                    let label = f"{int(math.abs(crop.right - crop.left))} × {int(math.abs(crop.bottom - crop.top))} px"
+                    let x = math.max(crop.left, crop.right) * workspace.zoom + workspace.offset_x + 10.0
+                    let y = math.max(crop.top, crop.bottom) * workspace.zoom + workspace.offset_y + 10.0
+                    painter.rectangle(Rect(x - 4.0, y - 2.0, font.measure(label) + 8.0, font.line_height() + 4.0), theme.backdrop())
+                    painter.text(label, x, y, theme.text(), font)
             return
         # Not while a move is dragged: the box stays where the layer was.
         if not self.moving:
@@ -766,6 +781,10 @@ pub class CanvasView: Widget:
         elif self.boxing:
             self.boxing = false
             self.end_box()
+            # The header's size readout follows the box once it is let go.
+            if workspace.crop_box != none:
+                if let changed = self.on_changed:
+                    changed()
         elif self.zooming:
             self.zooming = false
             if not self.zoom_moved:

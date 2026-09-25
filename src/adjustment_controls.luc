@@ -8,7 +8,7 @@
 from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor
 from workspace import Workspace
 from kit import Kit, SliderField
-from adjustments import Adjustment, Knob, Toggle, adjustments, gradient_map
+from adjustments import Adjustment, Knob, Toggle, adjustments, gradient_map, curves_adjustment
 from levels_graph import LevelsGraph
 
 ## The rows past the adjustments' (0..11): the filters, in the dialog.
@@ -16,7 +16,7 @@ pub let blur_kind: int = 12
 pub let noise_kind: int = 13
 ## Levels: its kind, and five values per page.
 let levels_kind: int = 3
-let curves_kind: int = 7
+let curves_kind: int = curves_adjustment
 
 pub class AdjustmentControls:
     ## Every kind's rows in one column; only the shown kind's are visible.
@@ -144,7 +144,9 @@ pub class AdjustmentControls:
     # -- Showing.
 
     ## Show `kind` with `values` (shown units; its defaults when empty).
-    pub func show(self, kind: int, values: list[float]) -> unit!:
+    ## `staged_curves`: the canvas already holds the curves to show (a Curves
+    ## layer's own); otherwise Curves starts from the identity.
+    pub func show(self, kind: int, values: list[float], staged_curves: bool = false) -> unit!:
         self.kind = kind
         var index = 0
         for row in self.rows:
@@ -155,10 +157,11 @@ pub class AdjustmentControls:
         slot_boxes(self.checkboxes[kind], self.shown[kind], spec.page_count() * spec.knobs.length)
         self.show_page(kind, 0)
         if kind == curves_kind:
-            var channel = 0
-            while channel < 4:
-                self.workspace.canvas.reset_curve(channel)
-                channel += 1
+            if not staged_curves:
+                var channel = 0
+                while channel < 4:
+                    self.workspace.canvas.reset_curve(channel)
+                    channel += 1
             self.show_curve_channel(0)
 
     ## Show page `page` of `kind`: its values in the sliders, and for Levels

@@ -242,6 +242,14 @@ pub class Workspace:
         var document_path = path
         if path.ends_with(manifest) and path.length > manifest.length + 5 and path[..<(path.length - manifest.length - 1)].ends_with(".l2d"):
             document_path = path[..<(path.length - manifest.length - 1)]
+        # A document already open is shown, not opened a second time.
+        var index = 0
+        while index < self.documents.length:
+            let open_path = self.path if index == self.current else self.documents[index].path
+            if open_path == document_path:
+                self.switch_document(index)
+                return
+            index += 1
         self.adopt(Document(Canvas.open(path), document_path))
 
     ## Save the document to `path` as an `.l2d` package, which keeps every

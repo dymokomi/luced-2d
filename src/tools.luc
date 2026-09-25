@@ -3,6 +3,7 @@
 ## luciaos-assets icon, its key (with Shift for the second tool on a key, as
 ## Photoshop's Shift-M), and the hint the status line shows while it is active.
 from input import Key
+import ui
 
 pub class Tool:
     pub let id: str
@@ -23,12 +24,14 @@ pub class Tool:
         self.hint = hint
 
 pub func tools() -> list[Tool]!:
-    return [Tool("move", "Move", "Move", "move-tool", Key.v, "Drag moves the layer or selection · alt copies · shift locks axis · cmd-click picks"),
+    # The primary modifier as the platform names it: cmd on macOS, ctrl elsewhere.
+    let command = ui.primary_key_name().lower()
+    return [Tool("move", "Move", "Move", "move-tool", Key.v, f"Drag moves the layer or selection · alt copies · shift locks axis · {command}-click picks"),
             Tool("marquee", "Rectangular Marquee", "Marquee", "selection-tool", Key.m,
                  "Drag to select · shift adds, alt subtracts, both intersect · drag inside to move the outline · shift while dragging squares, alt centers"),
             Tool("ellipse", "Elliptical Marquee", "Ellipse", "ellipse-select-tool", Key.m,
-                 "Drag to select · shift adds, alt subtracts · shift while dragging makes a circle, alt centers · cmd-D deselect", shift = true),
-            Tool("lasso", "Lasso", "Lasso", "lasso-tool", Key.l, "Drag around the area to select · shift adds · alt subtracts · cmd-D deselect"),
+                 f"Drag to select · shift adds, alt subtracts · shift while dragging makes a circle, alt centers · {command}-D deselects", shift = true),
+            Tool("lasso", "Lasso", "Lasso", "lasso-tool", Key.l, f"Drag around the area to select · shift adds · alt subtracts · {command}-D deselects"),
             Tool("polygon", "Polygonal Lasso", "Polygonal Lasso", "polygon-select-tool", Key.l,
                  "Click the corners · click the first again, double-click or Enter closes · Delete takes one back · Esc cancels", shift = true),
             Tool("wand", "Magic Wand", "Magic Wand", "magic-wand-tool", Key.w, "Click a color to select it · shift adds · alt subtracts"),
@@ -36,7 +39,7 @@ pub func tools() -> list[Tool]!:
             Tool("text", "Text", "Text", "text-tool", Key.t, "Click where the text starts, then type it"),
             Tool("eyedropper", "Eyedropper", "Eyedropper", "eyedropper-tool", Key.i, "Click a color to make it the foreground color"),
             Tool("gradient", "Gradient", "Gradient", "gradient-tool", Key.g, "Drag from the foreground color to the background color · fills the selection"),
-            Tool("brush", "Brush", "Brush", "brush-tool", Key.b, "Drag to paint · [ ] size · Space to pan · scroll pans, cmd-scroll zooms"),
+            Tool("brush", "Brush", "Brush", "brush-tool", Key.b, "Drag to paint · [ ] size · Space or the middle button pans · the wheel zooms, shift-wheel pans"),
             Tool("eraser", "Eraser", "Eraser", "eraser-tool", Key.e, "Drag to erase · [ ] size · Space to pan"),
             Tool("clone", "Clone Stamp", "Clone Stamp", "clone-stamp", Key.s, "Alt-click where to copy from · drag to stamp it · [ ] size · digits set opacity"),
             Tool("heal", "Spot Healing Brush", "Spot Healing", "healing-brush", Key.j, "Brush over a spot: it is filled from the picture beside it · [ ] size"),

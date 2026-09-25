@@ -5,6 +5,7 @@
 ## the Clone Stamp's Aligned and Sample, the Smudge tool's mode,
 ## Cancel and Apply while a free transform or the Crop tool's box is up — and
 ## the tool's hint, shown at the right of the status line.
+import ui
 from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Checkbox
 from workspace import Workspace
 from kit import Kit
@@ -209,6 +210,6 @@ pub class ToolHeader:
         self.spacing_field.set_value(workspace.brush.spacing * 100.0)
         self.preset_menu.set_text(workspace.brush.preset + " ▾")
         if transforming:
-            self.hint.set_text("Corner scales (shift frees) · side stretches · alt about the middle · cmd-corner distorts · alt-drag inside copies · outside turns · Enter applies")
+            self.hint.set_text(f"Corner scales (shift frees) · side stretches · alt about the middle · {ui.primary_key_name().lower()}-corner distorts · alt-drag inside copies · outside turns · Enter applies")
         else:
             self.hint.set_text("Click the canvas to sample a color · X swaps · D resets" if sampling else active.hint)

@@ -41,6 +41,7 @@ pub func main(arguments: list[str]) -> int!:
     live_gradient()
     crop_box_options()
     mask_actions()
+    stroke_undo()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -383,7 +384,7 @@ func adjustment_table() -> unit!:
     let back = levels.shown_of(numbers)
     assert(near(back[1], 255.0) and near(back[2], 1.0))
     # Hue/Saturation: seven ranges of three, then Colorize; Color Balance keeps luminosity by default.
-    assert(table[1].value_count() == 22 and table[10].defaults()[9] == 1.0 and not table[7].layerable)
+    assert(table[1].value_count() == 22 and table[10].defaults()[9] == 1.0 and table[7].layerable)
 
 ## The retouching tools tell the canvas what their strokes do.
 func retouch_tools() -> unit!:
@@ -697,3 +698,25 @@ func mask_actions() -> unit!:
     assert(workspace.mask_source_present())
     workspace.paste_mask()
     assert(workspace.canvas.layer_masked(0) and workspace.canvas.editing_mask())
+
+## A brush stroke through the view ends on release and is one undo step.
+func stroke_undo() -> unit!:
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    panels.choose_tool("brush")
+    press(view, 10.0, 10.0)
+    drag_to(view, 60.0, 40.0)
+    release(view, 60.0, 40.0)
+    assert(not workspace.canvas.painting() and workspace.canvas.can_undo() and workspace.canvas.undo_name() == "Brush Stroke")
+    # The frame's refresh shows it, and showing it changes nothing more.
+    panels.refresh_if_changed()
+    let shown = workspace.revision
+    panels.refresh_if_changed()
+    assert(workspace.revision == shown)
+    panels.close()
