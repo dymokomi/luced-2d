@@ -18,6 +18,7 @@ pub class TypeControls:
     ## Whether the family menu has the system's families yet, and for which
     ## family the style menu lists styles.
     var listed: bool = false
+    var families: list[str]
     var styled_family: str = ""
     ## The layer whose settings the header last took (a text layer brings its own).
     var shown_layer: int = 0
@@ -29,6 +30,7 @@ pub class TypeControls:
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
         self.workspace = workspace
         self.kit = kit
+        self.families = []
         let font = kit.font
         # Filled from the system when first shown; a menu starts with one entry.
         self.family_menu = Menu("Helvetica ▾", [Command("Helvetica", id = "font_family_placeholder")], font = font)
@@ -74,7 +76,10 @@ pub class TypeControls:
             self.list_families(canvas)
         if self.styled_family != options.family:
             self.list_styles(options.family)
-        self.family_menu.set_text(options.family + " ▾")
+        # A family saved on another system and missing here says so; the text
+        # renders with the system's fallback until another family is chosen.
+        let missing = self.listed and not self.families.contains(options.family)
+        self.family_menu.set_text(options.family + (" (missing) ▾" if missing else " ▾"))
         self.style_menu.set_text(options.style + " ▾")
         self.size_field.set_value(options.size)
         self.tracking_field.set_value(options.tracking)
@@ -98,6 +103,7 @@ pub class TypeControls:
             commands.append(command)
             index += 1
         self.family_menu.set_actions(commands)
+        self.families = names
         # A family this system lacks (Helvetica off macOS) gives way to one it has.
         let options = self.workspace.typing
         if not names.contains(options.family):
