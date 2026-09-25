@@ -14,7 +14,7 @@ pub class Actions:
     # File
     pub let new_document: Command
     pub let open_document: Command
-    ## File › Import Image…: a picture placed as a new layer.
+    ## File › Import Images…: pictures placed as new layers, one each.
     pub let import_image: Command
     pub let save: Command
     pub let save_as: Command
@@ -132,7 +132,7 @@ pub class Actions:
     pub func init(self) -> unit!:
         self.new_document = Command("New…", Shortcut(Key.n, primary = true), id = "new")
         self.open_document = Command("Open…", Shortcut(Key.o, primary = true), id = "open")
-        self.import_image = Command("Import Image…", id = "import_image")
+        self.import_image = Command("Import Images…", id = "import_image")
         self.save = Command("Save", Shortcut(Key.s, primary = true), id = "save")
         self.save_as = Command("Save As…", Shortcut(Key.s, primary = true, shift = true), id = "save_as")
         self.close_document = Command("Close", Shortcut(Key.w, primary = true), id = "close_document")

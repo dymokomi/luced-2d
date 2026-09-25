@@ -78,8 +78,9 @@ Found beyond the old list, and first because they lose work:
     another layer copies it, a double-click opens Layer Style.
 16. [ ] Import. Done (0.1.55): File › Import Image… (one picture as a layer);
     PSD groups rebuilt and layer masks kept, merged-only PSDs as one layer,
-    PSB. Left: several files at once, SVG (luce-svg needs colors), HEIC,
-    Camera RAW.
+    PSB; several files at once (0.1.60). Left: SVG (luce-svg needs colors),
+    HEIC and Camera RAW (each needs a decoder: HEVC, and the cameras' raw
+    formats).
 17. [ ] Tool extras. Done (0.1.56): right-drag sets brush size (Shift:
     hardness); eyedropper sample ring; zoom % field; stepped zoom; pixel grid
     at 800%+; Add Noise Uniform/Gaussian; Spot Healing's Content-Aware and

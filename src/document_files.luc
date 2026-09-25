@@ -50,15 +50,19 @@ pub class DocumentFiles:
     ## layer of this document, centred, as a picture dropped on Layers does.
     pub func import_image(self) -> unit!:
         let app = self.app else return
-        let chosen = app.open_file("Import a PNG, JPEG, TIFF, EXR or Photoshop picture as a layer") catch failure:
+        let chosen = app.open_files("Import PNG, JPEG, TIFF, EXR or Photoshop pictures, each as a layer") catch failure:
             self.prompts.tell(f"Could not import: {failure.message}")
             return
         if chosen == "":
             return
         let workspace = self.workspace
-        workspace.place_file(chosen, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
-            self.prompts.tell(f"Could not import {chosen}: {failure.message}")
-            return
+        # One layer a picture, in the order chosen, each centred.
+        for path in chosen.lines():
+            if path == "":
+                continue
+            workspace.place_file(path, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
+                self.prompts.tell(f"Could not import {path}: {failure.message}")
+                continue
         self.refresh()
 
     ## Files dropped on the canvas: each opens in its own tab.
