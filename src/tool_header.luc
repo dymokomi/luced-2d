@@ -116,6 +116,8 @@ pub class ToolHeader:
         self.transform_controls.changed = func () -> unit!:
             if let refresh = self.refreshed:
                 refresh()
+        self.transform_controls.submitted = func () -> unit!:
+            self.finish(true)
         let cancel = kit.button("Cancel", func () -> unit!:
             self.finish(false))
         let apply = kit.button("Apply", func () -> unit!:

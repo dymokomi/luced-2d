@@ -313,7 +313,7 @@ pub class CanvasView: Widget:
     func draw_clone_preview(self, painter: Painter) -> unit!:
         let workspace = self.workspace
         let diameter = workspace.brush.diameter
-        let source = workspace.canvas.clone_preview(workspace.selected_id(), self.document_x(self.pointer_x), self.document_y(self.pointer_y), diameter) catch failure:
+        let source = workspace.canvas.clone_preview(workspace.selected_id(), self.document_x(self.pointer_x), self.document_y(self.pointer_y), diameter, 0.6) catch failure:
             discard(failure)
             return
         let side = int(math.max(1.0, math.min(1024.0, math.ceil(diameter))))
@@ -323,7 +323,7 @@ pub class CanvasView: Widget:
         let image = self.clone_image else return
         image.write(source)
         let shown = float(side) * workspace.zoom
-        painter.image(image, Rect(self.pointer_x - shown * 0.5, self.pointer_y - shown * 0.5, shown, shown), opacity = 0.6)
+        painter.image(image, Rect(self.pointer_x - shown * 0.5, self.pointer_y - shown * 0.5, shown, shown))
 
     ## The Clone Stamp's source: a crosshair where a stroke from the pointer
     ## would copy from, white under black as Compositor's.

@@ -21,6 +21,8 @@ pub class TransformControls:
     let sampling_menu: Menu
     ## The header refreshes after an edit.
     pub var changed: func() -> unit!? = none
+    ## Enter on a field already committed applies the transform, as Photoshop's.
+    pub var submitted: func() -> unit!? = none
     let workspace: Workspace
     let kit: Kit
 
@@ -73,6 +75,9 @@ pub class TransformControls:
     func number(self, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
         let field = NumberField(0.0, minimum, maximum, 1.0, decimals = 1, suffix = suffix, font = self.kit.font, cells = 8.0)
         self.kit.keep(field.on_change(apply))
+        self.kit.keep(field.on_submit(func () -> unit!:
+            if let submitted = self.submitted:
+                submitted()))
         return field
 
     ## Change the transform's box with `change`, then show it.
