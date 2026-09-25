@@ -10,7 +10,7 @@ from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, Numbe
 from workspace import Workspace
 from shape_tool import restyle_selected, selected_shape_options
 from kit import Kit
-from brush import preset_names
+from brush import preset_names, max_brush
 from tools import tool_by_id
 from transform_controls import TransformControls
 from type_controls import TypeControls
@@ -80,7 +80,7 @@ pub class ToolHeader:
         self.title = Text("Brush", font = font)
         self.title.layout().set_limits(Size(150.0, 0.0), Size(150.0, 16384.0))
         self.hint = Text("", font = font)
-        self.size_field = self.scrubber(workspace.brush.diameter, 1.0, 500.0, " px", func (value: float) -> unit!:
+        self.size_field = self.scrubber(workspace.brush.diameter, 1.0, max_brush, " px", func (value: float) -> unit!:
             self.workspace.brush.diameter = value)
         self.hardness_field = self.scrubber(workspace.brush.hardness * 100.0, 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.hardness = value / 100.0)

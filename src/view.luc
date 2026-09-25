@@ -18,6 +18,7 @@ from tool_cursor import cursor_for, draw_magnifier
 import theme
 import math
 import time
+from brush import max_brush
 
 ## The document on screen: backdrop, checkerboard under transparent pixels,
 ## the flattened document at the workspace's zoom and offset, and a hairline
@@ -817,7 +818,7 @@ pub class CanvasView: Widget:
         if self.sizing:
             # Right is bigger, a point a pixel at 100%; with Shift, up is harder.
             let brush = self.workspace.brush
-            brush.diameter = math.clamp(self.sizing_diameter + (event.x - self.sizing_x) / self.workspace.zoom, 1.0, 5000.0)
+            brush.diameter = math.clamp(self.sizing_diameter + (event.x - self.sizing_x) / self.workspace.zoom, 1.0, max_brush)
             if event.shift:
                 brush.hardness = math.clamp(self.sizing_hardness - (event.y - self.sizing_y) / 200.0, 0.0, 1.0)
             self.workspace.touch()

@@ -9,6 +9,7 @@ from workspace import Workspace
 from tools import tools
 import files
 import paths
+from brush import max_brush
 
 ## Where the options live, beside the settings.
 pub func tools_path(directory: str = "") -> str!:
@@ -30,7 +31,7 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
             workspace.tool = tool
     let brush = workspace.brush
     brush.preset = words(table, "brush.preset", brush.preset)
-    brush.diameter = number(table, "brush.diameter", brush.diameter, 1.0, 4096.0)
+    brush.diameter = number(table, "brush.diameter", brush.diameter, 1.0, max_brush)
     brush.hardness = number(table, "brush.hardness", brush.hardness, 0.0, 1.0)
     brush.opacity = number(table, "brush.opacity", brush.opacity, 0.01, 1.0)
     brush.flow = number(table, "brush.flow", brush.flow, 0.01, 1.0)
