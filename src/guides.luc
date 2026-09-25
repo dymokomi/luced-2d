@@ -9,8 +9,10 @@ from workspace import Workspace
 from snapping import Snapper
 import math
 
-## Guides' color: Photoshop's cyan.
-pub let guide_ink: Color = Color(0.0, 0.78, 0.9)
+## Guides' color: Photoshop's cyan. A function until the released compiler
+## takes a constant built from a Base struct (fixed in luce c1b49e9).
+pub func guide_ink() -> Color:
+    return Color(0.0, 0.78, 0.9)
 
 pub class GuideDrag:
     pub var active: bool = false
@@ -91,7 +93,7 @@ pub class GuideDrag:
     func line(self, painter: Painter, workspace: Workspace, vertical: bool, position: float, width: float, height: float) -> unit!:
         if vertical:
             let x = math.floor(position * workspace.zoom + workspace.offset_x) + 0.5
-            painter.line(Point(x, 0.0), Point(x, height), 1.0, guide_ink)
+            painter.line(Point(x, 0.0), Point(x, height), 1.0, guide_ink())
         else:
             let y = math.floor(position * workspace.zoom + workspace.offset_y) + 0.5
-            painter.line(Point(0.0, y), Point(width, y), 1.0, guide_ink)
+            painter.line(Point(0.0, y), Point(width, y), 1.0, guide_ink())
