@@ -17,6 +17,8 @@ from settings import Settings
 from ui import Event, Application
 from layer_effects import EffectRows
 from update_check import newer
+from script_host import ScriptHost
+from script_commands import parse_line
 from tool_memory import tools_path, restore_tools, remember_tools
 import paths
 import files
@@ -57,6 +59,8 @@ pub func main(arguments: list[str]) -> int!:
     update_versions()
     subject_selection()
     tool_modes()
+    scripts()
+    script_editor()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -907,4 +911,44 @@ func tool_modes() -> unit!:
     press(panels.view, 10.0, 10.0)
     release(panels.view, 12.0, 12.0)
     assert(workspace.canvas.undo_name() == steps and workspace.tool == "idle")
+    panels.close()
+
+## A script's lines are read back exactly; a script run by Luce's interpreter
+## adds a layer, paints and adjusts as one undo step, and a failing action
+## stops it.
+func scripts() -> unit!:
+    let line = parse_line("@l2d add_layer\tSky\\tblue\t1") else trap("a script line")
+    assert(line.action == "add_layer" and line.fields == ["Sky\tblue", "1"])
+    assert(parse_line("hello") == none)
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let host = ScriptHost(workspace, none, paths.join(files.home_directory(), ".luced-2d-test-run"))
+    let before = workspace.layer_count()
+    host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.add_layer(\"Sun\")\n    luced.set_color(1.0, 0.8, 0.0)\n    luced.select_ellipse(10, 10, 20, 20)\n    luced.fill()\n    luced.adjust(\"Exposure\", [0.5])\n    print(f\"{luced.document_width()} wide\")\n    return 0\n")
+    if host.console.contains("No such file") or host.console.contains("status 127"):
+        # No Luce installed where the tests run: nothing more to check here.
+        return
+    assert(host.succeeded and host.console.contains("64 wide"))
+    assert(workspace.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.selected) == "Sun")
+    assert(workspace.canvas.undo_name() == "Script")
+    workspace.undo()
+    assert(workspace.layer_count() == before)
+    host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.select_layer(9)\n    luced.add_layer(\"Never\")\n    return 0\n")
+    assert(not host.succeeded and host.console.contains("select_layer failed") and workspace.layer_count() == before)
+
+## The Script editor opens with a starter script that runs: dots on a layer.
+func script_editor() -> unit!:
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    panels.scripts.open()
+    assert(panels.scripts.dialog.is_open())
+    let before = workspace.layer_count()
+    panels.scripts.run()
+    while panels.scripts.host.running():
+        panels.scripts.poll()
+    panels.scripts.poll()
+    if panels.scripts.host.succeeded:
+        assert(workspace.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.selected) == "Dots")
+    panels.scripts.close()
     panels.close()

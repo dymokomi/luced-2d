@@ -1,0 +1,45 @@
+## Headless mode: `luced-2d --script SCRIPT [FILE...]` runs a script with no
+## window, for batches and pipelines. Each FILE opens in a tab first — the
+## last one is the document the script starts in — or, with none, the script
+## starts on a new canvas of the settings' size. The script's output goes to
+## stdout; its status is the process's: 0 when every action succeeded.
+from workspace import Workspace
+from script_host import ScriptHost
+from canvas import Canvas
+from settings import Store
+import files
+
+## Whether `arguments` ask for headless mode.
+pub func wants_headless(arguments: list[str]) -> bool:
+    return "--script" in arguments
+
+## Run the script `arguments` name; the process's status.
+pub func run_headless(arguments: list[str]) -> int!:
+    var script = ""
+    var documents: list[str] = []
+    var index = 0
+    while index < arguments.length:
+        if arguments[index] == "--script" and index + 1 < arguments.length:
+            script = arguments[index + 1]
+            index += 2
+            continue
+        documents.append(arguments[index])
+        index += 1
+    if script == "":
+        print("usage: luced-2d --script SCRIPT.luc [FILE...]")
+        return 2
+    let settings = Store().load()
+    let workspace = Workspace(settings.canvas_width, settings.canvas_height)
+    # The first document binds to a device of its own; the rest share it.
+    let anchor = Canvas(1, 1)
+    anchor.bind_headless()
+    for path in documents:
+        workspace.open(path)
+        workspace.canvas.bind_beside(anchor)
+    workspace.canvas.bind_beside(anchor)
+    let host = ScriptHost(workspace)
+    host.run_to_end(files.read_text(script, limit = 4194304))
+    print(host.console.trim())
+    host.close()
+    anchor.close()
+    return 0 if host.succeeded else 1

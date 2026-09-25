@@ -1,0 +1,333 @@
+## What a script's lines do. A script run by the editor prints one line for
+## each call into the scripting API (scripting/luced.luc): `@l2d`, the
+## action's name and its fields, tab-separated, with tabs, newlines and
+## backslashes escaped. `parse_line` reads such a line back; `ScriptCommands`
+## does the action to the workspace, as the menus and tools would.
+from workspace import Workspace
+from actions import Actions
+from canvas import Canvas
+from adjustments import Adjustment, adjustments, filter_table, gradient_map, blur_kind, noise_kind, first_filter_kind
+import transfer
+import ui
+
+## One action a script asked for: its name and fields.
+pub class ScriptLine:
+    pub let action: str
+    pub let fields: list[str]
+
+    pub func init(self, action: str, fields: list[str]):
+        self.action = action
+        self.fields = fields
+
+## The action in a line a script printed, or none for plain output.
+pub func parse_line(text: str) -> ScriptLine?:
+    if not text.starts_with("@l2d "):
+        return none
+    let parts = text[5..<text.length].split("\t")
+    var fields: list[str] = []
+    var index = 1
+    while index < parts.length:
+        fields.append(unescape(parts[index]))
+        index += 1
+    return ScriptLine(parts[0], fields)
+
+## A field with its escapes (\\t, \\n, \\\\) undone.
+func unescape(text: str) -> str:
+    if not text.contains("\\"):
+        return text
+    var plain = ""
+    var escaped = false
+    for character in text:
+        if escaped:
+            plain = plain + ("\t" if character == "t" else ("\n" if character == "n" else character))
+            escaped = false
+        elif character == "\\":
+            escaped = true
+        else:
+            plain = plain + character
+    return plain
+
+pub class ScriptCommands:
+    let workspace: Workspace
+    ## The menu commands, for `run`; none headless without them.
+    let actions: Actions?
+    ## A tiny canvas on the documents' device, alive for the whole run, that
+    ## documents a script opens bind beside (the one open when it started may
+    ## close: opening a file replaces an untouched Untitled).
+    var anchor: Canvas? = none
+
+    pub func init(self, workspace: Workspace, actions: Actions? = none):
+        self.workspace = workspace
+        self.actions = actions
+
+    ## Before a run: the anchor on the device the open document is bound to
+    ## (drawn in the window, or bound headless).
+    pub func prepare(self) -> unit!:
+        if self.anchor != none or not self.workspace.canvas.is_bound():
+            return
+        let anchor = Canvas(1, 1)
+        anchor.bind_beside(self.workspace.canvas)
+        self.anchor = anchor
+
+    ## A document just opened or made, ready to edit at once — without a
+    ## window to draw it first — on the documents' device.
+    func bind_new(self) -> unit!:
+        let anchor = self.anchor else return
+        if not self.workspace.canvas.is_bound():
+            self.workspace.canvas.bind_beside(anchor)
+
+    pub func close(self):
+        if let anchor = self.anchor:
+            anchor.close()
+        self.anchor = none
+
+    ## Do `line`'s action; a wrong field or a failed action fails with why.
+    pub func apply(self, line: ScriptLine) -> unit!:
+        let workspace = self.workspace
+        let action = line.action
+        let fields = line.fields
+        if action == "new_document":
+            workspace.create(number(fields, 0), number(fields, 1))
+            self.bind_new()
+        elif action == "open":
+            workspace.open(field(fields, 0))
+            self.bind_new()
+        elif action == "save":
+            workspace.save(field(fields, 0))
+        elif action == "export":
+            workspace.export(field(fields, 0), number(fields, 1))
+        elif action == "place":
+            workspace.place_file(field(fields, 0), float(workspace.width()) * 0.5, float(workspace.height()) * 0.5)
+        elif action == "undo":
+            workspace.undo()
+        elif action == "redo":
+            workspace.redo()
+        elif action == "run":
+            self.run(field(fields, 0))
+        else:
+            self.apply_layers(action, fields)
+
+    ## Layers, painting and selections.
+    func apply_layers(self, action: str, fields: list[str]) -> unit!:
+        let workspace = self.workspace
+        if action == "add_layer":
+            workspace.add_layer()
+            workspace.rename(field(fields, 0))
+        elif action == "select_layer":
+            let index = number(fields, 0)
+            if index < 0 or index >= workspace.layer_count():
+                error(ui.invalid, f"there is no layer {index}")
+            workspace.select(index)
+        elif action == "select_layer_named":
+            workspace.select(self.layer_named(field(fields, 0)))
+        elif action == "rename_layer":
+            workspace.rename(field(fields, 0))
+        elif action == "delete_layer":
+            workspace.delete_layer()
+        elif action == "duplicate_layer":
+            workspace.duplicate()
+        elif action == "merge_down":
+            workspace.merge_down()
+        elif action == "reorder":
+            let steps = number(fields, 0)
+            var moved = 0
+            while moved < (steps if steps > 0 else -steps):
+                workspace.reorder(1 if steps > 0 else -1)
+                moved += 1
+        elif action == "set_opacity":
+            workspace.set_opacity(decimal(fields, 0))
+        elif action == "set_blend":
+            workspace.set_blend(blend_named(field(fields, 0)))
+        elif action == "set_visible":
+            if workspace.canvas.layer_visible(workspace.selected) != flag(fields, 0):
+                workspace.toggle_visibility()
+        elif action == "move_by":
+            workspace.move_layer(number(fields, 0), number(fields, 1))
+        elif action == "add_mask":
+            if not workspace.canvas.layer_masked(workspace.selected):
+                workspace.toggle_mask()
+        else:
+            self.apply_painting(action, fields)
+
+    func apply_painting(self, action: str, fields: list[str]) -> unit!:
+        let workspace = self.workspace
+        if action == "set_color":
+            workspace.set_palette(linear(fields, 0), linear(fields, 1), linear(fields, 2), false)
+        elif action == "set_background":
+            workspace.set_palette(linear(fields, 0), linear(fields, 1), linear(fields, 2), true)
+        elif action == "set_brush":
+            workspace.brush.diameter = decimal(fields, 0)
+            workspace.brush.hardness = decimal(fields, 1)
+            workspace.brush.opacity = decimal(fields, 2)
+        elif action == "stroke":
+            self.stroke(flag(fields, 0), fields)
+        elif action == "fill":
+            workspace.fill_selection(false)
+        elif action == "clear":
+            workspace.fill_selection(true)
+        elif action == "gradient":
+            let radial = workspace.gradient_radial
+            workspace.gradient_radial = flag(fields, 4)
+            workspace.fill_gradient(decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3)) catch failure:
+                workspace.gradient_radial = radial
+                error(failure.code, failure.message)
+            workspace.gradient_radial = radial
+        elif action == "text":
+            self.text_layer(decimal(fields, 0), decimal(fields, 1), field(fields, 2), decimal(fields, 3))
+        elif action == "select_rectangle":
+            workspace.canvas.select_rectangle(number(fields, 0), number(fields, 1), number(fields, 2), number(fields, 3), number(fields, 4))
+        elif action == "select_ellipse":
+            workspace.canvas.select_ellipse(number(fields, 0), number(fields, 1), number(fields, 2), number(fields, 3), number(fields, 4))
+        elif action == "select_all":
+            workspace.select_all()
+        elif action == "deselect":
+            workspace.deselect()
+        elif action == "invert_selection":
+            workspace.invert_selection()
+        elif action == "select_subject":
+            workspace.select_subject(false)
+        else:
+            self.apply_pixels(action, fields)
+
+    ## Adjustments, filters and the canvas.
+    func apply_pixels(self, action: str, fields: list[str]) -> unit!:
+        let workspace = self.workspace
+        if action == "adjust" or action == "adjustment_layer":
+            let spec = find(adjustments(), field(fields, 0))
+            var numbers = spec.engine(settings(spec, fields))
+            if spec.kind == gradient_map:
+                numbers = numbers + workspace.colors_encoded()
+            if action == "adjust":
+                workspace.adjust(spec.kind, numbers)
+            else:
+                discard(workspace.add_adjustment_layer(spec.kind, spec.name, numbers))
+        elif action == "filter":
+            self.filter(field(fields, 0), fields)
+        elif action == "content_aware_fill":
+            workspace.content_aware_fill()
+        elif action == "remove_background":
+            workspace.remove_background()
+        elif action == "resize_image":
+            workspace.resize_image(number(fields, 0), number(fields, 1))
+        elif action == "resize_canvas":
+            workspace.resize_canvas(number(fields, 0), number(fields, 1), number(fields, 2), number(fields, 3))
+        elif action == "crop":
+            workspace.resize_canvas(number(fields, 2), number(fields, 3), -number(fields, 0), -number(fields, 1))
+        elif action == "flip_canvas":
+            workspace.flip_canvas(flag(fields, 0))
+        else:
+            error(ui.invalid, f"no such action: {action}")
+
+    ## A menu command by id, as the user would choose it.
+    func run(self, id: str) -> unit!:
+        let actions = self.actions else error(ui.invalid, "menu commands need the editor's window")
+        for command in actions.all:
+            if command.id() == id:
+                if not command.is_enabled():
+                    error(ui.invalid, f"{id} cannot be done now")
+                command.trigger()
+                return
+        error(ui.invalid, f"no such command: {id}")
+
+    ## One stroke through the x, y pairs after the first field, with the brush
+    ## or, erasing, the eraser — whatever tool is in hand.
+    func stroke(self, erase: bool, fields: list[str]) -> unit!:
+        let workspace = self.workspace
+        if fields.length < 3:
+            error(ui.invalid, "a stroke needs at least one point")
+        let tool = workspace.tool
+        let erasing = workspace.erasing
+        workspace.tool = "eraser" if erase else "brush"
+        workspace.erasing = erase
+        self.draw(fields) catch failure:
+            workspace.tool = tool
+            workspace.erasing = erasing
+            error(failure.code, failure.message)
+        workspace.tool = tool
+        workspace.erasing = erasing
+
+    func draw(self, fields: list[str]) -> unit!:
+        let workspace = self.workspace
+        workspace.begin_stroke(decimal(fields, 1), decimal(fields, 2))
+        var index = 3
+        while index + 1 < fields.length:
+            workspace.extend_stroke(decimal(fields, index), decimal(fields, index + 1))
+            index += 2
+        workspace.end_stroke()
+
+    ## A text layer of `words` at (`x`, `y`), `size` points, in the foreground color.
+    func text_layer(self, x: float, y: float, words: str, size: float) -> unit!:
+        let workspace = self.workspace
+        let options = workspace.typing
+        workspace.as_one("Add Text", func () -> unit!:
+            workspace.add_layer()
+            workspace.canvas.set_type(workspace.selected_id(), words, options.family, options.style, size, workspace.red, workspace.green, workspace.blue, x, y)
+            workspace.rename(words))
+
+    ## A filter by its dialog's name, with its settings as the dialog shows them.
+    func filter(self, name: str, fields: list[str]) -> unit!:
+        let workspace = self.workspace
+        let spec = find(filter_table(), name)
+        let values = settings(spec, fields)
+        let numbers = spec.engine(values)
+        if spec.kind == blur_kind:
+            workspace.blur(values[0])
+        elif spec.kind == noise_kind:
+            workspace.canvas.add_noise(workspace.selected_id(), numbers[0], values[1] != 0.0, 1, values[2] != 0.0)
+            workspace.touch()
+        else:
+            let padded = numbers + [0.0, 0.0]
+            workspace.canvas.filter_layer(workspace.selected_id(), spec.kind - first_filter_kind, padded[0], padded[1], padded[2])
+            workspace.touch()
+
+    ## The topmost layer called `name`.
+    func layer_named(self, name: str) -> int!:
+        var index = self.workspace.layer_count() - 1
+        while index >= 0:
+            if self.workspace.canvas.layer_name(index) == name:
+                return index
+            index -= 1
+        error(ui.invalid, f"no layer is called {name}")
+
+## The adjustment or filter called `name` (case aside) in `table`.
+func find(table: list[Adjustment], name: str) -> Adjustment!:
+    for spec in table:
+        if spec.name.lower() == name.lower() or spec.name.replace(" / ", "/").lower() == name.lower():
+            return spec
+    error(ui.invalid, f"no adjustment or filter is called {name}")
+
+## `spec`'s shown values: the fields after its name in place of its defaults.
+func settings(spec: Adjustment, fields: list[str]) -> list[float]!:
+    var values = spec.defaults()
+    var index = 1
+    while index < fields.length and index - 1 < values.length:
+        values[index - 1] = decimal(fields, index)
+        index += 1
+    return values
+
+## The blend mode called `name` (case aside), by number.
+func blend_named(name: str) -> int!:
+    var mode = 0
+    while mode < Canvas.blend_mode_count():
+        if Canvas.blend_mode_name(mode).lower() == name.lower():
+            return mode
+        mode += 1
+    error(ui.invalid, f"no blend mode is called {name}")
+
+func field(fields: list[str], index: int) -> str!:
+    if index >= fields.length:
+        error(ui.invalid, f"field {index + 1} is missing")
+    return fields[index]
+
+func number(fields: list[str], index: int) -> int!:
+    return int(float(field(fields, index)))
+
+func decimal(fields: list[str], index: int) -> float!:
+    return float(field(fields, index))
+
+func flag(fields: list[str], index: int) -> bool!:
+    return bool(field(fields, index))
+
+## An sRGB field as the linear value the workspace keeps.
+func linear(fields: list[str], index: int) -> float!:
+    return transfer.srgb_decode(decimal(fields, index))

@@ -34,9 +34,9 @@ pub class DocumentFiles:
     pub func open_document(self) -> unit!:
         if let app = self.app:
             # Off macOS an .l2d (a folder) cannot be picked itself; its document.prisma opens it.
-            let what = "Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF or EXR picture" if ui.on_macos() else "Open a .psd, PNG, JPEG, TIFF or EXR picture, or an .l2d's document.prisma"
+            let what = "Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF, EXR or SVG picture" if ui.on_macos() else "Open a .psd, PNG, JPEG, TIFF, EXR or SVG picture, or an .l2d's document.prisma"
             let chosen = app.open_file(what) catch failure:
-                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.path, "Open")
                 return
             if chosen != "":
                 self.workspace.open(chosen) catch failure:
@@ -44,13 +44,13 @@ pub class DocumentFiles:
                     return
                 self.refresh()
             return
-        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
+        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.path, "Open")
 
     ## File › Import Image…: a picture chosen in the open panel becomes a new
     ## layer of this document, centred, as a picture dropped on Layers does.
     pub func import_image(self) -> unit!:
         let app = self.app else return
-        let chosen = app.open_files("Import PNG, JPEG, TIFF, EXR or Photoshop pictures, each as a layer") catch failure:
+        let chosen = app.open_files("Import PNG, JPEG, TIFF, EXR, SVG or Photoshop pictures, each as a layer") catch failure:
             self.prompts.tell(f"Could not import: {failure.message}")
             return
         if chosen == "":

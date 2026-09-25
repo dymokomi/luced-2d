@@ -1,0 +1,159 @@
+## Running a script. The editor writes the script into a sandbox folder
+## (~/.luced-2d/run) beside the scripting API (`luced`, embedded from
+## scripting/luced.luc) and a snapshot of the document (`document`), then has
+## Luce's interpreter run it there — `luce run --sandbox`, which keeps the
+## script's own file access inside the folder — in the background. Each
+## `@l2d` line the script prints is done as it arrives; anything else it
+## prints, and whatever goes wrong, goes to the console. The whole run is one
+## undo step.
+from process import Command
+from canvas import Canvas
+from workspace import Workspace
+from actions import Actions
+from script_commands import ScriptCommands, parse_line
+from script_api_text import api_source
+import files
+import paths
+import platform
+import thread
+
+pub class ScriptHost:
+    let workspace: Workspace
+    let commands: ScriptCommands
+    let folder: str
+    var command: Command? = none
+    ## How many characters of the script's output have been dealt with.
+    var consumed: int = 0
+    ## The canvas the run's undo step was opened on.
+    var editing: Canvas? = none
+    ## What the script printed and what went wrong, for the console.
+    pub var console: str = ""
+    ## Whether the last run ended without a failure.
+    pub var succeeded: bool = true
+
+    pub func init(self, workspace: Workspace, actions: Actions? = none, folder: str = "") -> unit!:
+        self.workspace = workspace
+        self.commands = ScriptCommands(workspace, actions)
+        self.folder = folder if folder != "" else paths.join(paths.join(files.home_directory(), ".luced-2d"), "run")
+
+    pub func running(self) -> bool:
+        return self.command != none
+
+    ## Run `source`, a Luce program that imports `luced`.
+    pub func start(self, source: str) -> unit!:
+        if self.running():
+            return
+        files.ensure_directory(self.folder)
+        files.write_text(paths.join(self.folder, "luced.luc"), api_source)
+        files.write_text(paths.join(self.folder, "document.luc"), snapshot(self.workspace))
+        files.write_text(paths.join(self.folder, "script.luc"), source)
+        self.console = ""
+        self.consumed = 0
+        self.succeeded = true
+        self.commands.prepare()
+        let canvas = self.workspace.canvas
+        canvas.begin_edit("Script")
+        self.editing = canvas
+        self.command = Command(luce_program(), ["run", "--sandbox", self.folder, paths.join(self.folder, "script.luc")], directory = self.folder, output_limit = 16777216) catch failure:
+            self.finish()
+            error(failure.code, failure.message)
+
+    ## Stop the script where it is; what it did stays, one undo step.
+    pub func stop(self):
+        if let command = self.command:
+            command.cancel()
+            self.say("[stopped]")
+
+    ## Deal with what the script printed since the last look; true when
+    ## anything happened (the document or the console changed, or it ended).
+    pub func poll(self) -> bool!:
+        let command = self.command else return false
+        let finished = command.is_finished()
+        let output = command.output()
+        var changed = false
+        # Whole lines only while it runs; the last, unended one once it is done.
+        while self.consumed < output.length:
+            let rest = output[self.consumed..<output.length]
+            let ending = rest.index_of("\n")
+            if ending == none and not finished:
+                break
+            let length = ending else rest.length
+            self.handle(rest[0..<length])
+            self.consumed += length + (1 if ending != none else 0)
+            changed = true
+        if finished:
+            let code = command.exit_code() else -1
+            let failure = command.error_message()
+            if failure != "":
+                self.say(failure)
+            if code != 0:
+                self.succeeded = false
+                self.say(f"[the script ended with status {code}]")
+            command.close()
+            self.command = none
+            self.finish()
+            changed = true
+        return changed
+
+    ## Run `source` to its end, waiting: headless, without a window.
+    pub func run_to_end(self, source: str) -> unit!:
+        self.start(source)
+        while self.running():
+            if not self.poll():
+                thread.sleep(5)
+
+    func handle(self, text: str) -> unit!:
+        let line = parse_line(text) else return self.say(text)
+        if not self.succeeded:
+            return
+        self.commands.apply(line) catch failure:
+            # The first failed action stops the run: what follows depended on it.
+            self.succeeded = false
+            self.say(f"[{line.action} failed: {failure.message}]")
+            if let command = self.command:
+                command.cancel()
+
+    func say(self, text: str):
+        self.console = self.console + text + "\n"
+
+    ## Close the run's undo step.
+    func finish(self):
+        if let canvas = self.editing:
+            canvas.end_edit()
+        self.editing = none
+        self.workspace.touch()
+
+    pub func close(self):
+        if let command = self.command:
+            command.close()
+        self.command = none
+        self.finish()
+        self.commands.close()
+
+## The document as a script's queries see it: a module of constants.
+pub func snapshot(workspace: Workspace) -> str!:
+    var names = ""
+    var index = 0
+    while index < workspace.layer_count():
+        names = names + (", " if index > 0 else "") + quoted(workspace.canvas.layer_name(index))
+        index += 1
+    var text = "## The document when the script started; written by the editor for each run.\n"
+    text = text + f"pub func width() -> int:\n    return {workspace.width()}\n\n"
+    text = text + f"pub func height() -> int:\n    return {workspace.height()}\n\n"
+    text = text + "pub func layers() -> list[str]:\n    return [" + names + "]\n\n"
+    text = text + f"pub func selected() -> int:\n    return {workspace.selected}\n\n"
+    text = text + "pub func path() -> str:\n    return " + quoted(workspace.path) + "\n"
+    return text
+
+## `text` as a Luce string literal.
+func quoted(text: str) -> str:
+    return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t") + "\""
+
+## Luce where its installer puts it, else wherever PATH finds it.
+func luce_program() -> str!:
+    let name = "luce.exe" if platform.windows else "luce"
+    let installed = paths.join(paths.join(paths.join(files.home_directory(), ".local"), "luce"), paths.join("bin", name))
+    let kind = files.path_kind(installed) catch failure:
+        discard(failure)
+        return "luce"
+    return installed if kind == files.FileKind.regular else "luce"

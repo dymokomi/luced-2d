@@ -1,7 +1,11 @@
-## luced-2d's entry point: run the application with the command line.
+## luced-2d's entry point: run the application with the command line, or
+## with `--script` a script headless (headless.luc).
 from app import Luce2D
+from headless import wants_headless, run_headless
 
 pub func main(arguments: list[str]) -> int!:
+    if wants_headless(arguments):
+        return run_headless(arguments)
     let editor = Luce2D()
     editor.run(arguments)
     editor.close()

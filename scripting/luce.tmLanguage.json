@@ -1,0 +1,75 @@
+{
+  "name": "Luce",
+  "scopeName": "source.luce",
+  "fileTypes": ["luc", "lucb"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#constant" },
+    { "include": "#keyword" },
+    { "include": "#builtin-type" },
+    { "include": "#type-name" },
+    { "include": "#function-call" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        { "match": "^\\s*#\\s*mark:.*$", "name": "comment.section.luce" },
+        { "match": "#.*$", "name": "comment.line.number-sign.luce" }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "begin": "[rbf]?\"\"\"",
+          "end": "\"\"\"",
+          "name": "string.quoted.triple.double.luce",
+          "patterns": [{ "match": "\\\\." , "name": "constant.character.escape.luce" }]
+        },
+        {
+          "begin": "[rbf]?'''",
+          "end": "'''",
+          "name": "string.quoted.triple.single.luce",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.luce" }]
+        },
+        {
+          "begin": "[rbf]?\"",
+          "end": "\"",
+          "name": "string.quoted.double.luce",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.luce" }]
+        },
+        {
+          "begin": "[rbf]?'",
+          "end": "'",
+          "name": "string.quoted.single.luce",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.luce" }]
+        }
+      ]
+    },
+    "number": {
+      "match": "\\b(0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9_]+)?([eE][+-]?[0-9]+)?)\\b",
+      "name": "constant.numeric.luce"
+    },
+    "constant": {
+      "match": "\\b(true|false|none)\\b",
+      "name": "constant.language.luce"
+    },
+    "keyword": {
+      "match": "\\b(and|as|break|catch|class|const|continue|defer|elif|else|enum|errdefer|extern|for|from|func|if|import|in|init|interface|is|let|match|mutating|new|not|or|pub|recover|return|self|spawn|static|struct|test|try|type|var|wait|while|with|alloc|free|discard)\\b",
+      "name": "keyword.control.luce"
+    },
+    "builtin-type": {
+      "match": "\\b(int|float|bool|str|bytes|unit|never|list|map|set|Error|ErrorCode|Weak|task|char|i8|i16|i32|i64|u8|u16|u32|u64|usize|isize|f32|f64|void)\\b",
+      "name": "storage.type.luce"
+    },
+    "type-name": {
+      "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+      "name": "entity.name.type.luce"
+    },
+    "function-call": {
+      "match": "\\b([a-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+      "name": "entity.name.function.luce"
+    }
+  }
+}

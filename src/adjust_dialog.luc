@@ -8,7 +8,8 @@
 from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox
 from workspace import Workspace
 from kit import Kit
-from adjustment_controls import AdjustmentControls, blur_kind, noise_kind, first_filter_kind
+from adjustment_controls import AdjustmentControls
+from adjustments import blur_kind, noise_kind, first_filter_kind
 import time
 
 pub class AdjustDialog:
@@ -28,6 +29,8 @@ pub class AdjustDialog:
     let preview_box: Checkbox
     ## Whether the edit shows on the layer (Preview checked).
     var showing: bool = true
+    ## A control moved since the last preview.
+    var pending: bool = false
     let workspace: Workspace
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
@@ -35,7 +38,7 @@ pub class AdjustDialog:
         self.workspace = workspace
         self.title = Text("", font = kit.font)
         self.controls = AdjustmentControls(workspace, kit)
-        self.controls.changed = self.preview
+        self.controls.changed = self.request_preview
         self.controls.failed = self.fail
         var items: list[Widget] = [self.title, self.controls.view]
         # Preview unchecked shows the layer as it was, the settings kept (Alt-P toggles it).
@@ -87,6 +90,9 @@ pub class AdjustDialog:
     ## Set one slider from code, as if moved.
     pub func set_control(self, kind: int, slot: int, value: float) -> unit!:
         self.controls.set_control(kind, slot, value)
+        # From code, at once: nothing waits for a frame.
+        if self.pending:
+            self.preview()
 
     func close_preview(self, keep: bool) -> unit!:
         if self.kind >= 0 and self.workspace.previewing():
@@ -99,6 +105,9 @@ pub class AdjustDialog:
         self.refresh()
 
     pub func apply(self) -> unit!:
+        # What the controls say is what is kept, even if its frame has not come yet.
+        if self.pending:
+            self.preview()
         self.close(true)
 
     pub func cancel(self) -> unit!:
@@ -119,8 +128,20 @@ pub class AdjustDialog:
         self.controls.show(self.kind, [])
         self.preview()
 
+    ## A control moved: preview at the next frame. Moves coming faster than a
+    ## large picture renders are folded into one, so a drag never queues up
+    ## work behind it.
+    pub func request_preview(self) -> unit!:
+        self.pending = true
+
+    ## Each frame: the preview a control asked for, if any.
+    pub func poll(self) -> unit!:
+        if self.pending:
+            self.preview()
+
     ## Show the open kind with the controls as they are, on the pixels' preview.
     pub func preview(self) -> unit!:
+        self.pending = false
         let kind = self.kind
         if kind < 0 or not self.workspace.previewing():
             return

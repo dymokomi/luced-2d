@@ -291,7 +291,7 @@ pub class Workspace:
     ## Whether `path` is a picture that can become a layer.
     pub func can_place(self, path: str) -> bool:
         let lowered = path.lower()
-        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr"]:
+        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".svg"]:
             if lowered.ends_with(suffix):
                 return true
         return false

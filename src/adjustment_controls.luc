@@ -8,17 +8,11 @@
 from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor
 from workspace import Workspace
 from kit import Kit, SliderField
-from adjustments import Adjustment, Knob, Toggle, adjustments, gradient_map, curves_adjustment
+from adjustments import Adjustment, adjustments, filter_table, gradient_map, curves_adjustment, blur_kind
 from levels_graph import LevelsGraph
 from map_colors import MapColors
 import math
 
-## The rows past the adjustments' (0..16): the filters, in the dialog.
-pub let blur_kind: int = 17
-pub let noise_kind: int = 18
-## The filters luce-image numbers 0..3 (`Canvas.filter_layer`) from here:
-## Motion Blur, Lens Correction, Bloom, Tonal Contrast.
-pub let first_filter_kind: int = 19
 ## Levels: its kind, and five values per page.
 let levels_kind: int = 3
 ## Hue/Saturation: its pages are Master, then the six ranges from Reds.
@@ -58,15 +52,7 @@ pub class AdjustmentControls:
         self.workspace = workspace
         self.kit = kit
         self.table = adjustments()
-        self.filters = [Adjustment(blur_kind, "Gaussian Blur", [Knob("Radius", 0.5, 250.0, 8.0, 1.0, 1, " px")], layerable = false),
-                        # Photoshop's Add Noise amount: at 300% the grain's deviation is full scale.
-                        Adjustment(noise_kind, "Add Noise", [Knob("Amount", 0.0, 300.0, 12.0, 1.0 / 300.0, 1, "%")], toggles = [Toggle("Monochromatic"), Toggle("Uniform")], layerable = false),
-                        Adjustment(first_filter_kind, "Motion Blur", [Knob("Angle", -180.0, 180.0, 0.0, 1.0, 0, "°"), Knob("Distance", 1.0, 999.0, 10.0, 1.0, 0, " px")], layerable = false),
-                        Adjustment(first_filter_kind + 1, "Lens Correction", [Knob("Distortion", -100.0, 100.0, 0.0, 0.01), Knob("Red–Cyan Fringe", -100.0, 100.0, 0.0, 0.01),
-                                                                              Knob("Blue–Yellow Fringe", -100.0, 100.0, 0.0, 0.01)], layerable = false),
-                        Adjustment(first_filter_kind + 2, "Bloom", [Knob("Threshold", 0.0, 100.0, 70.0, 0.01, 0, "%"), Knob("Radius", 1.0, 250.0, 20.0, 1.0, 0, " px"),
-                                                                    Knob("Strength", 0.0, 200.0, 60.0, 0.01, 0, "%")], layerable = false),
-                        Adjustment(first_filter_kind + 3, "Tonal Contrast", [Knob("Amount", 0.0, 200.0, 60.0, 0.01, 0, "%"), Knob("Radius", 1.0, 250.0, 30.0, 1.0, 0, " px")], layerable = false)]
+        self.filters = filter_table()
         self.rows = []
         self.controls = []
         self.checkboxes = []

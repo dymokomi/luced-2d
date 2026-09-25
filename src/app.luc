@@ -13,7 +13,7 @@ import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.60"
+pub let version: str = "0.1.61"
 
 pub class Luce2D:
     pub let app: Application
@@ -43,6 +43,7 @@ pub class Luce2D:
         app.focus(panels.view.layout())
         app.set_close_handler(panels.files.can_quit)
         panels.settings_dialog.app = app
+        panels.scripts.app = app
         # Whether a newer release is out, asked in the background and told once.
         let update = UpdateCheck(version)
         update.start()
@@ -50,6 +51,8 @@ pub class Luce2D:
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()
+            panels.scripts.poll()
+            panels.adjust.poll()
             panels.refresh_if_changed()
             if update.poll():
                 panels.status.set_text(update.notice)))

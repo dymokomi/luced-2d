@@ -19,6 +19,8 @@ pub class Actions:
     pub let save: Command
     pub let save_as: Command
     pub let close_document: Command
+    ## File › Script Editor…: write and run scripts over these commands.
+    pub let script_editor: Command
     pub let next_document: Command
     pub let previous_document: Command
     # Edit
@@ -136,6 +138,7 @@ pub class Actions:
         self.save = Command("Save", Shortcut(Key.s, primary = true), id = "save")
         self.save_as = Command("Save As…", Shortcut(Key.s, primary = true, shift = true), id = "save_as")
         self.close_document = Command("Close", Shortcut(Key.w, primary = true), id = "close_document")
+        self.script_editor = Command("Script Editor…", Shortcut(Key.e, primary = true, alt = true), id = "script_editor")
         self.next_document = Command("Next Document", Shortcut(Key.right_bracket, primary = true, alt = true), id = "next_document")
         self.previous_document = Command("Previous Document", Shortcut(Key.left_bracket, primary = true, alt = true), id = "previous_document")
         self.undo = Command("Undo", Shortcut(Key.z, primary = true), id = "undo")
@@ -239,7 +242,7 @@ pub class Actions:
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
-        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.content_aware_fill, self.select_subject, self.select_object, self.remove_background, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
+        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.content_aware_fill, self.select_subject, self.select_object, self.remove_background, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,

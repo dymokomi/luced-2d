@@ -32,6 +32,7 @@ from tools import tools
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
 from text_editing import TextEditing
+from script_editor import ScriptEditor
 from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
 from canvas import Canvas
 import math
@@ -56,6 +57,8 @@ pub class Panels:
     pub let brush: BrushSettings
     pub let adjust: AdjustDialog
     pub let style: StyleDialog
+    ## File › Script Editor…
+    pub let scripts: ScriptEditor
     pub let properties: Properties
     pub let prompts: Prompts
     pub let crash: CrashDialog
@@ -125,6 +128,8 @@ pub class Panels:
         self.style.pick_color = func (title: str, hex: str, changed: func(str) -> unit!) -> unit!:
             self.picker.open_for(title, hex, changed)
         self.layers_panel.open_style = self.style.open
+        self.scripts = ScriptEditor(workspace, actions, kit)
+        self.scripts.changed = self.refresh
         self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.style.open)
         # Both places that show a Gradient Map pick its colors with the picker.
         self.adjust.controls.map_colors.pick_color = self.pick_any_color
@@ -194,7 +199,7 @@ pub class Panels:
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
-                            self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
+                            self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
                             self.picker.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
@@ -272,6 +277,7 @@ pub class Panels:
                 self.status.set_text("Nothing lies past the canvas")
             self.refresh())
         kit.bind(actions.blur, self.adjust.blur)
+        kit.bind(actions.script_editor, self.scripts.open)
         var filter = 0
         for command in actions.filters:
             let chosen = filter

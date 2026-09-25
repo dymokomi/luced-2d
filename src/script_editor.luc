@@ -1,0 +1,172 @@
+## File › Script Editor…: luced-2d's scripts, written and run in the editor,
+## after Maya's Script Editor. A floating card holds the script — Luce,
+## highlighted with luced's grammar — above the console where its output and
+## errors appear, with New, Open, Save, Run and Stop. A script imports `luced`
+## (scripting/luced.luc) and each call does one editor action; a run is one
+## undo step. Scripts live in ~/.luced-2d/scripts unless saved elsewhere.
+from ui import Text, HStack, Spacer, Widget, Dialog, TextEditor, Highlight, Size, Application
+from gpu import Color
+from tm import Grammar, Tokenizer
+from workspace import Workspace
+from actions import Actions
+from kit import Kit
+from script_host import ScriptHost
+from script_api_text import grammar_source
+import files
+import paths
+
+## What a new script starts as: a small example of the API.
+let starter: str = "import luced\n\n## A row of dots in the foreground color on a layer of their own.\npub func main(arguments: list[str]) -> int!:\n    luced.add_layer(\"Dots\")\n    luced.set_brush(12.0, 1.0, 1.0)\n    var x = 20.0\n    while x < float(luced.document_width()):\n        luced.line(x, 40.0, x + 0.5, 40.0)\n        x += 24.0\n    print(f\"{luced.document_width()} by {luced.document_height()}, {luced.layer_names().length} layers before\")\n    return 0\n"
+
+pub class ScriptEditor:
+    pub let dialog: Dialog
+    pub let editor: TextEditor
+    let console: TextEditor
+    let status: Text
+    pub let host: ScriptHost
+    let highlighter: ScriptHighlighter?
+    let kit: Kit
+    let workspace: Workspace
+    ## The script's file, or "" before it is saved.
+    pub var path: str = ""
+    ## For the open and save panels.
+    pub var app: Application? = none
+    ## The document changed (the script did something): redraw.
+    pub var changed: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, actions: Actions, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.host = ScriptHost(workspace, actions)
+        self.editor = TextEditor(starter, font = kit.font)
+        self.editor.layout().set_limits(Size(640.0, 320.0), Size(640.0, 320.0))
+        self.console = TextEditor("", read_only = true, line_numbers = false, font = kit.font, wrap = true)
+        self.console.layout().set_limits(Size(640.0, 110.0), Size(640.0, 110.0))
+        self.status = Text("A script imports luced; each call is one action, the run one undo step.", font = kit.font)
+        self.highlighter = none
+        # Without the grammar the script is plain text, never an error.
+        let grammar: Grammar? = Grammar(grammar_source) catch failure:
+            discard(failure)
+            recover none
+        if let loaded = grammar:
+            self.highlighter = ScriptHighlighter(self.editor, loaded, workspace.look.accent)
+        let buttons = HStack([Text("Script Editor", font = kit.font), Spacer(), kit.button("New", self.new_script), kit.button("Open…", self.open_script),
+                              kit.button("Save", self.save_script), kit.button("Stop", self.stop), kit.button("Run", self.run)], spacing = 8.0)
+        let items: list[Widget] = [buttons, self.editor, self.console, HStack([self.status, Spacer(), kit.button("Close", self.close)], spacing = 8.0)]
+        self.dialog = Dialog(items, width = 680.0)
+        kit.dialog_keys(self.dialog, self.close, self.run)
+
+    pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
+        self.dialog.open()
+        self.refresh()
+
+    pub func close(self) -> unit!:
+        self.dialog.hide()
+        self.refresh()
+
+    ## Run the script in the editor.
+    pub func run(self) -> unit!:
+        if self.host.running():
+            return
+        self.host.start(self.editor.text()) catch failure:
+            self.console.set_text(f"Could not run: {failure.message}\n")
+            return
+        self.status.set_text("Running…")
+        self.console.set_text("")
+
+    pub func stop(self) -> unit!:
+        self.host.stop()
+
+    ## Each frame: highlight the script, and take in what a run printed.
+    pub func poll(self) -> unit!:
+        if let highlighter = self.highlighter:
+            highlighter.update()
+        if not self.host.poll():
+            return
+        self.console.set_text(self.host.console)
+        if not self.host.running():
+            self.status.set_text("Done: one undo step." if self.host.succeeded else "Stopped by an error; what ran is one undo step.")
+        if let changed = self.changed:
+            changed()
+
+    ## A fresh script from the starter.
+    func new_script(self) -> unit!:
+        self.path = ""
+        self.editor.set_text(starter)
+        self.status.set_text("New script")
+
+    func open_script(self) -> unit!:
+        let app = self.app else return
+        let chosen = app.open_file("Open a Luce script (.luc)")
+        if chosen == "":
+            return
+        self.editor.set_text(files.read_text(chosen, limit = 4194304))
+        self.path = chosen
+        self.status.set_text(paths.base(chosen))
+
+    ## Save where it was opened from or last saved; the first time, ask where
+    ## (the scripts folder is the place to start).
+    func save_script(self) -> unit!:
+        var target = self.path
+        if target == "":
+            let app = self.app else return
+            files.ensure_directory(scripts_folder())
+            target = app.save_file("Save the script", "script.luc")
+            if target == "":
+                return
+        files.write_text(target, self.editor.text())
+        self.path = target
+        self.status.set_text(f"Saved {paths.base(target)}")
+
+    func refresh(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+## Where scripts are kept by default.
+pub func scripts_folder() -> str!:
+    return paths.join(paths.join(files.home_directory(), ".luced-2d"), "scripts")
+
+## The script's colors, by TextMate scope, redone whenever it changes.
+class ScriptHighlighter:
+    let editor: TextEditor
+    let tokenizer: Tokenizer
+    let accent: Color
+    var version: int = -1
+
+    pub func init(self, editor: TextEditor, grammar: Grammar, accent: Color) -> unit!:
+        self.editor = editor
+        self.tokenizer = Tokenizer(grammar)
+        self.accent = accent
+
+    pub func update(self) -> unit!:
+        let revision = self.editor.version()
+        if revision == self.version:
+            return
+        let length = self.editor.length()
+        let count = self.tokenizer.tokenize(self.editor.text_range(0, length))
+        var spans: list[Highlight] = []
+        var index = 0
+        while index < count:
+            if let color = self.color_for(self.tokenizer.span_scope(index)):
+                spans.append(Highlight(self.tokenizer.span_start(index), self.tokenizer.span_end(index), color))
+            index += 1
+        if self.editor.update_highlights(0, length, spans, revision):
+            self.version = revision
+
+    ## Keywords in the accent, the rest in muted tones for the grey editor.
+    func color_for(self, scope: str) -> Color?:
+        if scope.starts_with("comment"):
+            return Color(0.52, 0.52, 0.52)
+        if scope.starts_with("string") or scope.starts_with("constant.character"):
+            return Color(0.60, 0.78, 0.48)
+        if scope.starts_with("constant"):
+            return Color(0.86, 0.62, 0.36)
+        if scope.starts_with("keyword") or scope.starts_with("storage.modifier"):
+            return self.accent
+        if scope.starts_with("storage.type") or scope.starts_with("entity.name.type") or scope.starts_with("support.type"):
+            return Color(0.48, 0.72, 0.86)
+        if scope.starts_with("entity.name.function") or scope.starts_with("support.function"):
+            return Color(0.86, 0.82, 0.58)
+        return none
