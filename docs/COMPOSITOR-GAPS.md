@@ -92,9 +92,11 @@ Found beyond the old list, and first because they lose work:
     documents; drag a layer onto a tab; paste in place.
 19. [x] Filters: Motion Blur, Grain (and as a layer), Vignette, Bloom, Tonal
     Contrast, Lens Correction; blur and noise as adjustment layers.
-20. [ ] Heavy: Content-Aware Fill, Select Subject, Object Selection, Remove
+20. [x] Heavy: Content-Aware Fill, Select Subject, Object Selection, Remove
     Background, Camera Raw Filter; update feed; remembered tool options;
-    floating, movable adjustment panels.
+    floating, movable adjustment panels. Subjects are found by color
+    (GrabCut's idea, no trained model): a model would do better on busy
+    pictures. Object Selection takes the marquee as its box, not a tool yet.
 
 Then: the Script editor (from luced's code editor) and scripting — the Luce
 interpreter bundled as luc does it, a Maya-like API over Commands, and a

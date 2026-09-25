@@ -55,6 +55,7 @@ pub func main(arguments: list[str]) -> int!:
     filter_dialogs()
     tool_options_kept()
     update_versions()
+    subject_selection()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -866,3 +867,22 @@ func tool_options_kept() -> unit!:
 func update_versions() -> unit!:
     assert(newer("0.1.58", "0.1.57") and newer("0.2.0", "0.1.99") and newer("1.0.0", "0.9.9"))
     assert(not newer("0.1.57", "0.1.57") and not newer("0.1.9", "0.1.10") and not newer("error: offline", "0.1.57") and not newer("", "0.1.57"))
+
+## Select Subject, Object in Selection and Remove Background find a disc on a ground.
+func subject_selection() -> unit!:
+    let workspace = Workspace(96, 64)
+    workspace.canvas.bind_headless()
+    workspace.set_color(0.0, 0.0, 1.0)
+    workspace.fill_selection(false)
+    workspace.canvas.select_ellipse(33, 17, 30, 30, 0)
+    workspace.set_color(1.0, 0.8, 0.0)
+    workspace.fill_selection(false)
+    workspace.canvas.deselect()
+    workspace.select_subject(false)
+    assert(workspace.canvas.has_selection() and workspace.canvas.undo_name() == "Select Subject")
+    workspace.canvas.select_rectangle(28, 12, 40, 40, 0)
+    workspace.select_subject(true)
+    assert(workspace.canvas.undo_name() == "Object Selection")
+    workspace.canvas.deselect()
+    workspace.remove_background()
+    assert(workspace.canvas.layer_masked(workspace.selected) and not workspace.canvas.has_selection() and workspace.canvas.undo_name() == "Remove Background")

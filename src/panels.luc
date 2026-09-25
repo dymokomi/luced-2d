@@ -253,6 +253,11 @@ pub class Panels:
         kit.bind(actions.swap_colors, self.then_refresh(self.workspace.swap_colors))
         kit.bind(actions.reset_colors, self.then_refresh(self.workspace.reset_colors))
         kit.bind(actions.select_all, self.then_refresh(self.workspace.select_all))
+        kit.bind(actions.select_subject, self.attempting("Select Subject", func () -> unit!:
+            self.workspace.select_subject(false)))
+        kit.bind(actions.select_object, self.attempting("Object Selection", func () -> unit!:
+            self.workspace.select_subject(true)))
+        kit.bind(actions.remove_background, self.attempting("Remove Background", self.workspace.remove_background))
         kit.bind(actions.deselect, self.then_refresh(self.workspace.deselect))
         kit.bind(actions.inverse, self.then_refresh(self.workspace.invert_selection))
         kit.bind(actions.expand, func () -> unit!:
