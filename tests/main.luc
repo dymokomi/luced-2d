@@ -37,6 +37,7 @@ pub func main(arguments: list[str]) -> int!:
     size_dialogs()
     selection_tools()
     guides_and_snapping()
+    live_text()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -540,3 +541,33 @@ func guides_and_snapping() -> unit!:
     workspace.snap = false
     snapper.gather(workspace, [], true)
     assert(snapper.snap_x(197.0) == 197.0)
+
+## Live text: a new text layer typed into, committed and named by its words;
+## edited again with its settings; one left empty goes.
+func live_text() -> unit!:
+    let workspace = Workspace(200, 120)
+    workspace.canvas.bind_headless()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let editing = panels.text_editing
+    editing.begin_new(10.0, 10.0, 0.0)
+    assert(editing.active() and workspace.layer_count() == 2 and workspace.canvas.layer_typed(1))
+    editing.replace_text("Hello there")
+    assert(workspace.canvas.layer_text(1) == "Hello there")
+    workspace.typing.size = 20.0
+    editing.restyle()
+    assert(workspace.canvas.layer_type_value(1, 0) == 20.0)
+    actions.commit_text.trigger()
+    assert(not editing.active() and workspace.canvas.layer_name(1) == "Hello there")
+    # Edited again, it brings its own settings; cancelled, it says what it said.
+    workspace.typing.size = 60.0
+    editing.begin_existing(1)
+    assert(workspace.typing.size == 20.0)
+    editing.replace_text("Changed")
+    editing.cancel()
+    assert(workspace.canvas.layer_text(1) == "Hello there")
+    # Left empty, a new one goes.
+    editing.begin_new(50.0, 50.0, 100.0)
+    editing.commit()
+    assert(workspace.layer_count() == 2)
+    panels.close()

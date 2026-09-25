@@ -38,6 +38,7 @@ pub class LayersPanel:
         self.layer_list.layout().set_flex()
         self.layer_list.on_place_files = self.place_files
         self.layer_list.on_rename = self.begin_rename
+        self.layer_list.on_changed = self.refresh
         # The row's menu, its titles fitted to the selection each time it opens.
         self.row_menu = ContextMenu(self.layer_list, [actions.duplicate_layer, actions.rename_layer, actions.delete_layer, divider(),
                                                 actions.toggle_clipped, actions.group_layers, actions.move_out_of_folder, actions.merge_down, divider(),

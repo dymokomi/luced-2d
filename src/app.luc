@@ -11,7 +11,7 @@ import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.38"
+pub let version: str = "0.1.39"
 
 pub class Luce2D:
     pub let app: Application
@@ -54,8 +54,9 @@ pub class Luce2D:
         self.connections = connections
 
     pub func run(self, arguments: list[str]) -> unit!:
+        # Luce's `main` gets the arguments without the program: each is a file to open.
         for argument in arguments:
-            if argument.length > 0 and argument != "--smoke" and argument != arguments[0]:
+            if argument.length > 0 and argument != "--smoke":
                 self.workspace.open(argument)
                 self.panels.refresh()
         self.app.run(frame_limit = 3 if "--smoke" in arguments else 0)

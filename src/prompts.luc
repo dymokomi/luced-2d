@@ -47,17 +47,12 @@ pub class Prompts:
             workspace.open(trimmed) catch failure:
                 self.reject(text, f"Could not open: {failure.message}")
                 return
-        elif mode == "rename" or mode == "text":
+        elif mode == "rename":
             if trimmed == "":
                 return
-            if mode == "rename":
-                workspace.rename(trimmed) catch failure:
-                    self.reject(text, f"Could not rename: {failure.message}")
-                    return
-            else:
-                workspace.draw_text(trimmed) catch failure:
-                    self.reject(text, f"Could not set text: {failure.message}")
-                    return
+            workspace.rename(trimmed) catch failure:
+                self.reject(text, f"Could not rename: {failure.message}")
+                return
         elif mode == "save":
             if trimmed == "":
                 self.reject(text, "Enter a file name with an extension")

@@ -35,6 +35,7 @@ pub class Actions:
     pub let export_png: Command
     pub let export_jpeg: Command
     pub let free_transform: Command
+    pub let commit_text: Command
     pub let flip_horizontal: Command
     pub let flip_vertical: Command
     pub let settings: Command
@@ -131,6 +132,7 @@ pub class Actions:
         self.export_png = Command("Export PNG…", Shortcut(Key.e, primary = true, shift = true), id = "export_png")
         self.export_jpeg = Command("Export JPEG…", Shortcut(Key.s, primary = true, shift = true, alt = true), id = "export_jpeg")
         self.free_transform = Command("Free Transform", Shortcut(Key.t, primary = true), id = "free_transform")
+        self.commit_text = Command("Commit Text", Shortcut(Key.enter, primary = true), id = "commit_text")
         self.flip_horizontal = Command("Flip Horizontal", id = "flip_horizontal")
         self.flip_vertical = Command("Flip Vertical", id = "flip_vertical")
         self.settings = Command("Settings…", Shortcut(Key.comma, primary = true), id = "settings")
@@ -206,7 +208,7 @@ pub class Actions:
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
-        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.flip_horizontal, self.flip_vertical, self.settings,
+        self.all = [self.new_document, self.open_document, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.fill, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,

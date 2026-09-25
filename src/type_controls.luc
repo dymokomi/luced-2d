@@ -1,0 +1,122 @@
+## The Text tool's header, after Compositor's: the family and its styles, the
+## size, the alignment, the tracking and the leading. A change applies to the
+## text being edited at once; otherwise it is what the next text takes. The
+## families come from the system when the header first shows.
+from ui import HStack, Button, ButtonStyle, NumberField, Menu, Command
+from workspace import Workspace
+from kit import Kit
+from canvas import Canvas
+
+pub class TypeControls:
+    pub let row: HStack
+    let family_menu: Menu
+    let style_menu: Menu
+    let size_field: NumberField
+    let tracking_field: NumberField
+    let leading_field: NumberField
+    let alignments: list[Button]
+    ## Whether the family menu has the system's families yet, and for which
+    ## family the style menu lists styles.
+    var listed: bool = false
+    var styled_family: str = ""
+    ## A change made: the text being edited is set again.
+    pub var changed: func() -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        let font = kit.font
+        # Filled from the system when first shown; a menu starts with one entry.
+        self.family_menu = Menu("Helvetica ▾", [Command("Helvetica", id = "font_family_placeholder")], font = font)
+        self.style_menu = Menu("Regular ▾", [Command("Regular", id = "font_style_placeholder")], font = font)
+        self.size_field = NumberField(48.0, 1.0, 2000.0, 1.0, suffix = " px", font = font, cells = 8.0)
+        kit.keep(self.size_field.on_change(func (value: float) -> unit!:
+            self.workspace.typing.size = value
+            self.apply()))
+        self.tracking_field = NumberField(0.0, -500.0, 2000.0, 1.0, font = font, cells = 6.0)
+        kit.keep(self.tracking_field.on_change(func (value: float) -> unit!:
+            self.workspace.typing.tracking = value
+            self.apply()))
+        self.leading_field = NumberField(0.0, 0.0, 10000.0, 1.0, suffix = " px", font = font, cells = 7.0)
+        kit.keep(self.leading_field.on_change(func (value: float) -> unit!:
+            self.workspace.typing.leading = value
+            self.apply()))
+        self.alignments = []
+        var index = 0
+        for icon in ["align-left", "align-horizontal-center", "align-right", "distribute-horizontal"]:
+            let alignment = index
+            let button = kit.icon_button(icon, func () -> unit!:
+                self.workspace.typing.alignment = alignment
+                self.apply())
+            button.layout().set_size(26.0, 24.0)
+            self.alignments.append(button)
+            index += 1
+        self.row = HStack([self.family_menu, self.style_menu, kit.labelled("Size", self.size_field),
+                           HStack([self.alignments[0], self.alignments[1], self.alignments[2], self.alignments[3]], spacing = 2.0),
+                           kit.labelled("Tracking", self.tracking_field), kit.labelled("Leading", self.leading_field)], spacing = 12.0)
+
+    ## The settings as they are; the family menu filled the first time the canvas can list fonts.
+    pub func show(self) -> unit!:
+        let options = self.workspace.typing
+        let canvas = self.workspace.canvas
+        if not self.listed and canvas.is_bound():
+            self.list_families(canvas)
+        if self.styled_family != options.family:
+            self.list_styles(options.family)
+        self.family_menu.set_text(options.family + " ▾")
+        self.style_menu.set_text(options.style + " ▾")
+        self.size_field.set_value(options.size)
+        self.tracking_field.set_value(options.tracking)
+        self.leading_field.set_value(options.leading)
+        var index = 0
+        for button in self.alignments:
+            button.set_style(ButtonStyle.selected if index == options.alignment else ButtonStyle.plain)
+            index += 1
+
+    func list_families(self, canvas: Canvas) -> unit!:
+        self.listed = true
+        var commands: list[Command] = []
+        var index = 0
+        while index < canvas.font_family_count():
+            let family = canvas.font_family(index)
+            let command = Command(family, id = f"font_family_{index}")
+            self.kit.bind(command, func () -> unit!:
+                self.choose_family(family))
+            commands.append(command)
+            index += 1
+        self.family_menu.set_actions(commands)
+
+    func list_styles(self, family: str) -> unit!:
+        self.styled_family = family
+        var commands: list[Command] = []
+        var index = 0
+        while index < Canvas.font_style_count(family):
+            let style = Canvas.font_style(family, index)
+            let command = Command(style, id = f"font_style_{index}")
+            self.kit.bind(command, func () -> unit!:
+                self.workspace.typing.style = style
+                self.apply())
+            commands.append(command)
+            index += 1
+        self.style_menu.set_actions(commands)
+
+    ## A family chosen: its Regular style if it has one, else its first.
+    func choose_family(self, family: str) -> unit!:
+        let options = self.workspace.typing
+        options.family = family
+        var style = ""
+        var index = 0
+        while index < Canvas.font_style_count(family):
+            let found = Canvas.font_style(family, index)
+            if found == "Regular" or style == "":
+                style = found
+            index += 1
+        options.style = style if style != "" else "Regular"
+        self.apply()
+
+    func apply(self) -> unit!:
+        self.show()
+        if let changed = self.changed:
+            changed()

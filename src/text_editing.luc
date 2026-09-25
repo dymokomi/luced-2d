@@ -1,0 +1,169 @@
+## Live type, after Compositor's: the Text tool clicks a new text layer into
+## place (or drags a box for it to wrap in), or clicks an existing one to edit
+## it, and the words are typed in a floating editor while the layer is set
+## again at every keystroke. Commit (Cmd-Return) keeps it — a new layer named
+## by its first words, or gone if left empty; Cancel puts it back as it was.
+from ui import Text, HStack, Spacer, Size, Dialog, TextEditor
+from interop import Connection
+from workspace import Workspace
+from kit import Kit
+
+pub class TextEditing:
+    pub let dialog: Dialog
+    let editor: TextEditor
+    ## The text layer being edited (0: none), and whether it was made for this.
+    pub var id: int = 0
+    var created: bool = false
+    ## Where it is set: the first line's top-left, and the box it wraps in (0: point text).
+    var x: float = 0.0
+    var y: float = 0.0
+    var box_width: float = 0.0
+    ## What an existing layer said before, for Cancel.
+    var original: str = ""
+    ## Set while the editor is filled from code, so that is not taken as typing.
+    var loading: bool = false
+    let connections: list[Connection]
+    ## The window redraws after each change; what failed is said.
+    pub var changed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.connections = []
+        self.editor = TextEditor("", line_numbers = false, font = kit.font, wrap = true)
+        self.editor.layout().set_limits(Size(360.0, 120.0), Size(360.0, 240.0))
+        self.connections.append(self.editor.on_change(self.typed))
+        self.dialog = Dialog([Text("Text", font = kit.font), self.editor,
+                              HStack([Text("Cmd-Return commits", font = kit.font, muted = true), Spacer(), kit.button("Cancel", self.cancel),
+                                      kit.button("Commit", self.commit)], spacing = 8.0)], width = 400.0)
+        self.dialog.layout().set_modal(false)
+
+    pub func active(self) -> bool:
+        return self.id != 0
+
+    ## A new text layer, its first line's top-left at (`x`, `y`), wrapping in
+    ## `box_width` pixels (0: point text).
+    pub func begin_new(self, x: float, y: float, box_width: float) -> unit!:
+        self.finish_any()
+        let workspace = self.workspace
+        workspace.add_layer()
+        self.id = workspace.selected_id()
+        self.created = true
+        self.x = x
+        self.y = y
+        self.box_width = box_width
+        self.original = ""
+        self.set_words("")
+        self.open("")
+
+    ## The text layer at `index`, edited where it is.
+    pub func begin_existing(self, index: int) -> unit!:
+        self.finish_any()
+        let canvas = self.workspace.canvas
+        self.workspace.select(index)
+        self.id = canvas.layer_id(index)
+        self.created = false
+        self.x = canvas.layer_type_value(index, 4)
+        self.y = canvas.layer_type_value(index, 5)
+        self.box_width = canvas.layer_type_value(index, 6)
+        self.original = canvas.layer_text(index)
+        self.workspace.typing.take(canvas, index)
+        self.open(self.original)
+
+    func open(self, text: str) -> unit!:
+        self.loading = true
+        self.editor.set_text(text)
+        self.loading = false
+        self.dialog.open()
+        self.editor.layout().request_focus()
+        self.refresh()
+
+    ## A keystroke: the layer set again from the editor's words.
+    func typed(self) -> unit!:
+        if self.loading or self.id == 0:
+            return
+        self.set_words(self.editor.text()) catch failure:
+            self.fail(f"Text: {failure.message}")
+
+    ## The editor's words replaced, as if typed.
+    pub func replace_text(self, text: str) -> unit!:
+        self.editor.set_text(text)
+
+    ## The header changed the family, size or the like: set it again.
+    pub func restyle(self) -> unit!:
+        if self.id != 0:
+            self.set_words(self.editor.text())
+
+    func set_words(self, text: str) -> unit!:
+        let workspace = self.workspace
+        let options = workspace.typing
+        workspace.canvas.set_type(self.id, text, options.family, options.style, options.size, workspace.red, workspace.green, workspace.blue,
+                                  self.x, self.y, self.box_width, options.alignment, options.tracking, options.leading)
+        workspace.touch()
+        self.refresh()
+
+    ## Keep it: a new layer takes its first words as its name, or goes if empty.
+    pub func commit(self) -> unit!:
+        if self.id == 0:
+            return
+        let id = self.id
+        let text = self.editor.text()
+        self.close()
+        let workspace = self.workspace
+        let index = workspace.index_of(id)
+        if index < 0 or not self.created:
+            return
+        if text.trim() == "":
+            workspace.canvas.remove_layer(id)
+            workspace.select(0 if workspace.layer_count() > 0 else 0)
+        else:
+            workspace.canvas.rename_layer(id, layer_name_of(text))
+        workspace.touch()
+        self.refresh()
+
+    ## Put it back: a new layer goes, an existing one says what it said.
+    pub func cancel(self) -> unit!:
+        if self.id == 0:
+            return
+        let id = self.id
+        self.close()
+        let workspace = self.workspace
+        if workspace.index_of(id) < 0:
+            return
+        if self.created:
+            workspace.canvas.remove_layer(id)
+            workspace.select(0)
+        else:
+            self.id = id
+            self.set_words(self.original)
+            self.id = 0
+        workspace.touch()
+        self.refresh()
+
+    func close(self):
+        self.id = 0
+        self.dialog.hide()
+
+    ## Another edit starting keeps what the last one typed.
+    func finish_any(self) -> unit!:
+        if self.id != 0:
+            self.commit()
+
+    func refresh(self) -> unit!:
+        if let changed = self.changed:
+            changed()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+    pub func close_all(self):
+        for connection in self.connections:
+            connection.disconnect()
+        self.connections.clear()
+
+## A layer's name from its words: the first line, at most 32 letters.
+func layer_name_of(text: str) -> str:
+    let first = text.trim().lines()[0] if text.trim() != "" else "Text"
+    return first[..<32] if first.length > 32 else first

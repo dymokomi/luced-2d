@@ -23,8 +23,9 @@ pub class Settings:
     pub var shortcuts: map[str, str]
 
     pub func init(self, source: str = "") -> unit!:
+        # What the file says that this version does not know is passed over, so a
+        # file an earlier version wrote still gives the settings this one reads.
         let table = Table(source)
-        table.check_within(["canvas.width", "canvas.height", "theme.accent", "theme.control_radius", "colors.recent", "view.rulers", "view.grid", "view.units"], ["shortcuts"])
         self.canvas_width = int(table.number("canvas.width", 1280.0, 1.0, 30000.0))
         self.canvas_height = int(table.number("canvas.height", 800.0, 1.0, 30000.0))
         self.accent = table.string("theme.accent", "#e7a03f")

@@ -1,0 +1,26 @@
+## The Text tool's settings, as its header shows them: the family and style,
+## the size in pixels, the alignment (0 left, 1 center, 2 right, 3
+## justified), the tracking in thousandths of an em, and the leading (0: the
+## face's). A text layer being edited takes them over; its color is the
+## foreground color.
+from canvas import Canvas
+
+pub class TypeOptions:
+    pub var family: str = "Helvetica"
+    pub var style: str = "Regular"
+    pub var size: float = 48.0
+    pub var alignment: int = 0
+    pub var tracking: float = 0.0
+    pub var leading: float = 0.0
+
+    pub func init(self):
+        self.family = "Helvetica"
+
+    ## Take the settings of the text layer at `index`.
+    pub func take(self, canvas: Canvas, index: int) -> unit!:
+        self.family = canvas.layer_font_family(index)
+        self.style = canvas.layer_font_style(index)
+        self.size = canvas.layer_type_value(index, 0)
+        self.alignment = int(canvas.layer_type_value(index, 7))
+        self.tracking = canvas.layer_type_value(index, 8)
+        self.leading = canvas.layer_type_value(index, 9)

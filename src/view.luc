@@ -26,7 +26,10 @@ pub class CanvasView: Widget:
     let box: Layout
     pub let workspace: Workspace
     ## Called when the text tool clicks, after the position is remembered.
-    pub var on_text: func() -> unit!? = none
+    ## The Text tool: a new text layer at (x, y) wrapping in a box that wide
+    ## (0: point text), or the text layer at an index edited.
+    pub var on_text: func(float, float, float) -> unit!? = none
+    pub var on_edit_text: func(int) -> unit!? = none
     ## Files dropped on the canvas: the ones luced-2d can open.
     pub var on_open_files: func(list[str]) -> unit!? = none
     ## A key let go over the canvas, for spring-loaded tools.
@@ -70,6 +73,8 @@ pub class CanvasView: Widget:
     let selection: SelectionDrag
     ## A gradient drag in progress, from a document point.
     var gradient_dragging: bool = false
+    ## The Text tool pressed: a click sets point text, a drag a box.
+    var text_dragging: bool = false
     var gradient_x: float = 0.0
     var gradient_y: float = 0.0
     ## A move drag: it previews while dragging and commits once, on release —
@@ -159,8 +164,10 @@ pub class CanvasView: Widget:
             outline(painter, Rect(x0, y0, x1 - x0, y1 - y0), theme.border())
         # Marching ants along the selection's edge, at screen resolution, moving
         # with selected pixels being dragged; while a shape is being dragged its
-        # outline is drawn plainly.
-        if workspace.canvas.has_selection():
+        # outline is drawn plainly; while selected pixels float in a transform
+        # the box shows where they go, and the outline follows on Apply.
+        let floating = workspace.canvas.transforming() and workspace.canvas.transform_floats()
+        if workspace.canvas.has_selection() and not floating:
             var ants_left = left
             var ants_top = top
             if self.moving and self.move_pixels:
@@ -433,6 +440,9 @@ pub class CanvasView: Widget:
                     if let session = workspace.transform:
                         session.box.begin(grab, x, y)
                     self.boxing = true
+                    # The header becomes the transform's, with Apply and Cancel.
+                    if let changed = self.on_changed:
+                        changed()
                     return
         if tool == "move" or temporary_move:
             self.start_move(event)
@@ -465,10 +475,10 @@ pub class CanvasView: Widget:
         elif tool == "eyedropper" or workspace.sampling:
             workspace.pick(x, y)
         elif tool == "text":
-            workspace.text_x = x
-            workspace.text_y = y
-            if let place = self.on_text:
-                place()
+            # Where the press was: let go there, a point; dragged, a box.
+            self.text_dragging = true
+            self.gradient_x = x
+            self.gradient_y = y
         elif tool == "wand":
             workspace.select_wand(x, y, workspace.selecting.mode_for(event.shift, event.alt))
         elif tool == "polygon":
@@ -678,6 +688,22 @@ pub class CanvasView: Widget:
                 self.outline_applied_x = dx
                 self.outline_applied_y = dy
 
+    ## The Text tool let go at (`x`, `y`): a click on a text layer edits it; a
+    ## click elsewhere starts point text; a drag, text in a box that wide.
+    func place_text(self, x: float, y: float) -> unit!:
+        let workspace = self.workspace
+        let x0 = self.gradient_x
+        let y0 = self.gradient_y
+        let dragged = math.abs(x - x0) * workspace.zoom > 4.0
+        if not dragged:
+            let index = workspace.canvas.layer_at(int(math.floor(x0)), int(math.floor(y0)))
+            if index >= 0 and workspace.canvas.layer_typed(index):
+                if let edit = self.on_edit_text:
+                    edit(index)
+                return
+        if let place = self.on_text:
+            place(math.min(x0, x) if dragged else x0, math.min(y0, y) if dragged else y0, math.abs(x - x0) if dragged else 0.0)
+
     ## Where a move has got to: the pointer, kept to an axis with Shift, and
     ## pulled so the moved box's edges or middle meet what snaps.
     func moved_to(self, event: Event):
@@ -733,6 +759,9 @@ pub class CanvasView: Widget:
                     workspace.select_wand(x, y, 0)
                 else:
                     workspace.deselect()
+        elif self.text_dragging:
+            self.text_dragging = false
+            self.place_text(x, y)
         elif self.gradient_dragging:
             self.gradient_dragging = false
             # Shift keeps the gradient to 45° steps, as Photoshop's.
@@ -764,7 +793,7 @@ func brushed(tool: str) -> bool:
     return tool == "brush" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear"
 
 ## The digit a number key types, or -1.
-func digit_value(key: Key) -> int:
+pub func digit_value(key: Key) -> int:
     if key == Key.digit_0:
         return 0
     if key == Key.digit_1:

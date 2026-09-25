@@ -31,8 +31,9 @@ from menus import menu_bar
 from tools import tools
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
+from text_editing import TextEditing
 import math
-from units import unit_ids, unit_label
+from units import unit_ids
 
 pub class Panels:
     pub let body: VStack
@@ -68,6 +69,7 @@ pub class Panels:
     var mask_background: bool = false
     pub let document_settings: DocumentSettings
     pub let size_dialogs: SizeDialogs
+    pub let text_editing: TextEditing
     pub let settings_dialog: SettingsDialog
     pub let files: DocumentFiles
     let kit: Kit
@@ -89,6 +91,7 @@ pub class Panels:
         self.view.on_key_up = self.spring_back
         self.view.on_changed = self.refresh
         self.view.on_text = self.place_text
+        self.view.on_edit_text = self.edit_text
         self.view.on_refused = self.prompts.tell
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
@@ -126,6 +129,11 @@ pub class Panels:
                                    kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
         self.document_settings = DocumentSettings(workspace, font)
         self.document_settings.applied = self.refresh
+        self.text_editing = TextEditing(workspace, kit)
+        self.text_editing.changed = self.refresh
+        self.text_editing.failed = self.prompts.tell
+        self.header.type_controls.changed = self.text_editing.restyle
+        kit.bind(actions.commit_text, self.text_editing.commit)
         self.size_dialogs = SizeDialogs(workspace, actions, kit)
         self.size_dialogs.report(self.refresh, self.prompts.tell)
         self.tabs.on_new = self.size_dialogs.new_canvas.open
@@ -171,7 +179,7 @@ pub class Panels:
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
-                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
+                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 
@@ -193,7 +201,13 @@ pub class Panels:
             self.refresh())
         kit.bind(actions.document_settings, self.document_settings.open)
         kit.bind(actions.settings, self.settings_dialog.open)
-        kit.bind(actions.undo, self.then_refresh(self.workspace.undo))
+        kit.bind(actions.undo, func () -> unit!:
+            # During a free transform, undo drops it, as there is nothing kept yet to undo.
+            if self.workspace.transform != none:
+                self.workspace.finish_transform(false)
+            else:
+                self.workspace.undo()
+            self.refresh())
         kit.bind(actions.redo, self.then_refresh(self.workspace.redo))
         kit.bind(actions.fill, func () -> unit!:
             self.workspace.fill_selection(false)
@@ -202,7 +216,11 @@ pub class Panels:
             self.workspace.fill_selection(false, true)
             self.refresh())
         kit.bind(actions.clear, func () -> unit!:
-            self.workspace.fill_selection(true)
+            # Its key (Backspace) takes a Polygonal Lasso corner back while one is drawn.
+            if self.view.polygon.active:
+                self.view.polygon.take_back()
+            else:
+                self.workspace.fill_selection(true)
             self.refresh())
         kit.bind(actions.swap_colors, self.then_refresh(self.workspace.swap_colors))
         kit.bind(actions.reset_colors, self.then_refresh(self.workspace.reset_colors))
@@ -402,8 +420,14 @@ pub class Panels:
         self.refresh()
 
     ## The text tool clicked: ask for the text to set there.
-    func place_text(self) -> unit!:
-        self.prompts.ask("text", "Text to set at the click, in the foreground color", "", "Set")
+    ## The Text tool clicked or dragged a new text layer into place.
+    func place_text(self, x: float, y: float, box_width: float) -> unit!:
+        self.attempt("Text", func () -> unit!:
+            self.text_editing.begin_new(x, y, box_width))
+
+    func edit_text(self, index: int) -> unit!:
+        self.attempt("Text", func () -> unit!:
+            self.text_editing.begin_existing(index))
 
     ## Open the adjustment's sliders with a live preview, or apply the ones
     ## that take no parameters (invert, desaturate) at once.
@@ -535,17 +559,16 @@ pub class Panels:
         self.left_ruler_menu.layout().set_visible(workspace.show_rulers)
         self.top_ruler.layout().invalidate()
         self.left_ruler.layout().invalidate()
-        self.actions.show_rulers.set_text("Show Rulers ✓" if workspace.show_rulers else "Show Rulers")
-        self.actions.show_guides.set_text("Show Guides ✓" if workspace.show_guides else "Show Guides")
-        self.actions.snap.set_text("Snap ✓" if workspace.snap else "Snap")
-        self.actions.lock_guides.set_text("Lock Guides ✓" if workspace.lock_guides else "Lock Guides")
+        self.actions.show_rulers.set_checked(workspace.show_rulers)
+        self.actions.show_guides.set_checked(workspace.show_guides)
+        self.actions.snap.set_checked(workspace.snap)
+        self.actions.lock_guides.set_checked(workspace.lock_guides)
         self.actions.clear_guides.set_enabled(workspace.canvas.guide_count() > 0)
-        self.actions.show_transform_controls.set_text("Show Transform Controls ✓" if workspace.show_transform_controls else "Show Transform Controls")
-        self.actions.show_grid.set_text("Show Grid ✓" if workspace.show_grid else "Show Grid")
+        self.actions.show_transform_controls.set_checked(workspace.show_transform_controls)
+        self.actions.show_grid.set_checked(workspace.show_grid)
         var shown = 0
         for unit_name in unit_ids():
-            let label = unit_label(unit_name)
-            self.actions.units[shown].set_text(label + " ✓" if workspace.units == unit_name else label)
+            self.actions.units[shown].set_checked(workspace.units == unit_name)
             shown += 1
         self.layers.layout().invalidate()
         self.tabs.layout().invalidate()
@@ -557,6 +580,7 @@ pub class Panels:
         self.picker.close()
         self.document_settings.close()
         self.size_dialogs.close()
+        self.text_editing.close_all()
         if self.workspace.previewing():
             self.workspace.end_preview(false) catch failure:
                 discard(failure)

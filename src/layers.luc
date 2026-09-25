@@ -10,7 +10,8 @@ import math
 import time
 from kit import dropped_paths
 from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_inside, drop_above, drop_below
-from layer_ops import duplicate_selected
+from layer_ops import duplicate_selected, OpacityKeys, set_opacity_all
+from view import digit_value
 
 ## The layer list: one 52-point row per shown layer, top layer first, each with
 ## an eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it
@@ -43,14 +44,19 @@ pub class LayerList: Widget:
     ## The last press, for a double-click: its row's layer and when (ms).
     var last_index: int = -1
     var last_time: int = 0
+    ## Digits typed for opacity (layer_ops.OpacityKeys).
+    let opacity_keys: OpacityKeys
     ## Pictures dropped on the list: placed as new layers.
     pub var on_place_files: func(list[str]) -> unit!? = none
+    ## The layers changed from here (a row dropped): the window refreshes.
+    pub var on_changed: func() -> unit!? = none
     ## A double-click on a name: rename the layer at that index, its name at (x, y).
     pub var on_rename: func(int, float, float) -> unit!? = none
 
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
         self.font = font
+        self.opacity_keys = OpacityKeys()
         self.box = Layout()
         self.box.set_focusable(true)
         self.box.set_cursor(Cursor.pointer)
@@ -162,7 +168,7 @@ pub class LayerList: Widget:
                 if index == workspace.selected and canvas.editing_mask():
                     self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), self.workspace.look.accent)
                 x += mask_thumb + 8.0
-            let name = ("↳ " if clipped else "") + canvas.layer_name(index)
+            let name = canvas.layer_name(index)
             painter.text(name, x, top + 10.0, ink, self.font)
             let opacity = int(canvas.layer_opacity(index) * 100.0 + 0.5)
             var subtitle = f"{workspace.blend_name(index)} · {opacity}%"
@@ -227,6 +233,12 @@ pub class LayerList: Widget:
 
     ## The dragged files that can become layers.
     pub func event(self, event: Event) -> unit!:
+        # Digits set the selected layers' opacity here too, as on the canvas.
+        if event.kind == EventKind.key_down and not event.meta and not event.control and not event.repeated and digit_value(event.key) >= 0:
+            set_opacity_all(self.workspace, self.opacity_keys.typed(digit_value(event.key), time.now() // 1000000))
+            if let changed = self.on_changed:
+                changed()
+            return
         if event.kind == EventKind.drag_entered:
             self.box.set_drop_accepted(dropped_paths(self.box, self.workspace.can_place).length > 0)
             return
@@ -246,6 +258,9 @@ pub class LayerList: Widget:
             let index = self.row_of(event.y)
             if index >= 0:
                 self.press(index, event)
+                # The selection or a layer's state changed: Properties and the rest follow.
+                if let changed = self.on_changed:
+                    changed()
             self.box.invalidate()
         elif event.kind == EventKind.pointer_moved and self.eye_swipe:
             let index = self.row_of(event.y)
@@ -265,6 +280,8 @@ pub class LayerList: Widget:
         elif event.kind == EventKind.pointer_up and event.button == 0 and self.drag_index >= 0:
             if self.drag_started:
                 self.drop(event.y, event.alt)
+                if let changed = self.on_changed:
+                    changed()
             self.drag_index = -1
             self.drag_started = false
             self.box.invalidate()

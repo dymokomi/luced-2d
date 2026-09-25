@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -135,6 +135,29 @@ SCENES = {
             editor.panels.refresh()''',
     'guides': '''            discard(editor.workspace.canvas.add_guide(true, 700.0))
             discard(editor.workspace.canvas.add_guide(false, 300.0))
+            editor.panels.refresh()''',
+    # A text layer in a box, centred, being edited, in Georgia Italic.
+    'text': '''            editor.workspace.choose_tool("text")
+            editor.workspace.set_color(1.0, 1.0, 1.0)
+            editor.workspace.typing.family = "Georgia"
+            editor.workspace.typing.style = "Italic"
+            editor.workspace.typing.size = 72.0
+            editor.workspace.typing.alignment = 1
+            editor.workspace.typing.tracking = 40.0
+            editor.panels.text_editing.begin_new(150.0, 120.0, 700.0)
+            editor.panels.text_editing.replace_text("Live type in a box, centred and wrapping as it goes")
+            editor.panels.refresh()''',
+    'newcancel': '''            editor.panels.actions.new_document.trigger()
+            editor.panels.refresh()
+            let dialogs = editor.panels.size_dialogs
+            print(f"NEWCANCEL open {dialogs.new_canvas.dialog.is_open()}")
+            editor.app.layout(1400.0, 900.0)
+            let button = dialogs.new_canvas.cancel_button.layout().bounds()
+            print(f"NEWCANCEL button {button.x},{button.y} {button.width}x{button.height}")
+            editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = button.x + button.width * 0.5, y = button.y + button.height * 0.5))
+            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = button.x + button.width * 0.5, y = button.y + button.height * 0.5, button = 0))
+            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = button.x + button.width * 0.5, y = button.y + button.height * 0.5, button = 0))
+            print(f"NEWCANCEL after {dialogs.new_canvas.dialog.is_open()}")
             editor.panels.refresh()''',
     'closeprompt': '''            editor.workspace.add_layer()
             editor.panels.files.close_document()
@@ -643,10 +666,8 @@ from app import Luce2D
             editor.workspace.choose_tool("wand")
             editor.workspace.select_wand(1100.0, 700.0, 0)
             editor.workspace.set_color(1.0, 1.0, 1.0)
-            editor.workspace.text_size = 96.0
-            editor.workspace.text_x = 640.0
-            editor.workspace.text_y = 560.0
-            editor.workspace.draw_text("luced 2d")
+            let words = editor.workspace.canvas.add_layer("luced 2d")
+            editor.workspace.canvas.set_type(words, "luced 2d", "Menlo", "Regular", 96.0, 1.0, 1.0, 1.0, 640.0, 560.0)
             editor.workspace.set_color(0.75, 0.03, 0.02)
             editor.workspace.select(0)
             editor.workspace.canvas.select_rectangle(0, 700, 1400, 180, 0)
