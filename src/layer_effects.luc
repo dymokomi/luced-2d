@@ -1,0 +1,97 @@
+## A layer's effects as the Layers panel lists them under it, after
+## Compositor's (and Photoshop's): one line per effect with an eye that hides
+## it and shows it again, a cross that deletes it, and Alt-drag onto another
+## layer to copy it there. An effect hidden by its eye stays listed, eye shut,
+## until it is shown again or deleted; one turned off in Layer Style goes.
+from canvas import Canvas
+from workspace import Workspace
+
+## One kind of effect: its name and the style fields it owns, `first` to
+## `last`, the first its on-off switch; the stroke's position lives apart.
+pub class EffectKind:
+    pub let name: str
+    pub let first: int
+    pub let last: int
+
+    pub func init(self, name: str, first: int, last: int):
+        self.name = name
+        self.first = first
+        self.last = last
+
+## The effects in Photoshop's panel order, by luce-image's style fields.
+pub func effect_kinds() -> list[EffectKind]:
+    return [EffectKind("Stroke", 8, 13), EffectKind("Inner Shadow", 26, 33), EffectKind("Inner Glow", 34, 39),
+            EffectKind("Color Overlay", 21, 25), EffectKind("Outer Glow", 14, 19), EffectKind("Drop Shadow", 0, 7)]
+
+## The stroke's position, a field outside its run.
+let stroke_position_field: int = 20
+
+pub class EffectRows:
+    ## "id:kind" for every effect hidden by its eye, so it stays listed.
+    var hidden: list[str]
+    let kinds: list[EffectKind]
+
+    pub func init(self):
+        self.hidden = []
+        self.kinds = effect_kinds()
+
+    pub func kind(self, index: int) -> EffectKind:
+        return self.kinds[index]
+
+    ## The kinds listed under the layer at `index`: those on, and those its eye hid.
+    pub func listed(self, canvas: Canvas, index: int) -> list[int]!:
+        var shown: list[int] = []
+        let id = canvas.layer_id(index)
+        var kind = 0
+        while kind < self.kinds.length:
+            if canvas.style_value(index, self.kinds[kind].first) != 0.0 or f"{id}:{kind}" in self.hidden:
+                shown.append(kind)
+            kind += 1
+        return shown
+
+    ## Whether the effect shows (its eye open).
+    pub func showing(self, canvas: Canvas, index: int, kind: int) -> bool!:
+        return canvas.style_value(index, self.kinds[kind].first) != 0.0
+
+    ## The eye: hide the effect, keeping it listed, or show it again.
+    pub func toggle(self, workspace: Workspace, index: int, kind: int) -> unit!:
+        let canvas = workspace.canvas
+        let id = canvas.layer_id(index)
+        let key = f"{id}:{kind}"
+        let on = self.showing(canvas, index, kind)
+        canvas.set_style_value(id, self.kinds[kind].first, 0.0 if on else 1.0)
+        if on:
+            self.hidden.append(key)
+        else:
+            self.forget(key)
+        workspace.touch()
+
+    ## The cross: the effect goes from the layer and the list.
+    pub func remove(self, workspace: Workspace, index: int, kind: int) -> unit!:
+        let canvas = workspace.canvas
+        let id = canvas.layer_id(index)
+        canvas.set_style_value(id, self.kinds[kind].first, 0.0)
+        self.forget(f"{id}:{kind}")
+        workspace.touch()
+
+    ## Alt-drag onto another layer: the effect with all its settings, shown there.
+    pub func copy(self, workspace: Workspace, from_index: int, kind: int, to_index: int) -> unit!:
+        let canvas = workspace.canvas
+        let effect = self.kinds[kind]
+        let target = canvas.layer_id(to_index)
+        workspace.as_one("Copy Effect", func () -> unit!:
+            var field = effect.first
+            while field <= effect.last:
+                canvas.set_style_value(target, field, canvas.style_value(from_index, field))
+                field += 1
+            if effect.first == 8:
+                canvas.set_style_value(target, stroke_position_field, canvas.style_value(from_index, stroke_position_field))
+            canvas.set_style_value(target, effect.first, 1.0))
+        workspace.touch()
+
+    func forget(self, key: str):
+        var kept: list[str] = []
+        for entry in self.hidden:
+            if entry != key:
+                kept.append(entry)
+        self.hidden = kept

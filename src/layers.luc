@@ -12,6 +12,7 @@ from kit import dropped_paths
 from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_inside, drop_above, drop_below
 from layer_ops import duplicate_selected, OpacityKeys, set_opacity_all
 from view import digit_value
+from layer_effects import EffectRows
 
 ## The layer list: one 52-point row per shown layer, top layer first, each with
 ## an eye, a thumbnail of the layer's own pixels, its mask's thumbnail when it
@@ -27,14 +28,26 @@ from view import digit_value
 ## Shift-click on the mask thumbnail disables the mask; a click on the chain
 ## between the thumbnails unlinks the mask from the pixels (or links it). A
 ## double-click on the name renames the layer there. Alt-click on the line
-## between two rows clips the upper to the lower (or releases it). A row dragged lands above the row
-## it is dropped on, or inside a group dropped on its middle; with Alt a copy
-## lands there instead.
+## between two rows clips the upper to the lower (or releases it). A row
+## dragged lands above the row it is dropped on, or inside a group dropped on
+## its middle; with Alt a copy lands there instead. Under a styled layer its
+## effects are listed, a line each (layer_effects.luc): the eye hides one,
+## the cross deletes it, Alt-drag onto another layer copies it, and a
+## double-click opens Layer Style.
 pub class LayerList: Widget:
     let box: Layout
     pub let workspace: Workspace
     let font: Font
     let row_height: float = 52.0
+    ## A line per effect under a styled layer's row.
+    let effect_height: float = 20.0
+    pub let effects: EffectRows
+    ## An effect line pressed: its layer index and effect kind, or -1.
+    var effect_index: int = -1
+    var effect_kind: int = -1
+    var effect_y: float = 0.0
+    ## A double-click on an effect line: open Layer Style for its layer.
+    pub var on_open_style: func() -> unit!? = none
     ## A row being dragged to a new place: its layer index and the pointer's y, or -1.
     var drag_index: int = -1
     var drag_y: float = 0.0
@@ -58,6 +71,7 @@ pub class LayerList: Widget:
         self.workspace = workspace
         self.font = font
         self.opacity_keys = OpacityKeys()
+        self.effects = EffectRows()
         self.box = Layout()
         self.box.set_focusable(true)
         self.box.set_cursor(Cursor.pointer)
@@ -69,25 +83,65 @@ pub class LayerList: Widget:
         return self.box
 
     pub func measure(self, available: Constraints) -> Size!:
-        let count = shown_rows(self.workspace).length
-        return Size(252.0, self.row_height * float(count if count > 1 else 1))
+        let tops = self.tops()
+        return Size(252.0, math.max(self.row_height, tops[tops.length - 1]))
 
-    ## The layer index of the row at `y`, or -1.
+    ## A shown row's full height: the layer's own, then a line per listed effect.
+    func height_of(self, index: int) -> float!:
+        return self.row_height + self.effect_height * float(self.effects.listed(self.workspace.canvas, index).length)
+
+    ## Every shown row's top, top layer first, and past the last the whole height.
+    func tops(self) -> list[float]!:
+        var tops: list[float] = []
+        var y = 0.0
+        for index in shown_rows(self.workspace):
+            tops.append(y)
+            y += self.height_of(index)
+        tops.append(y)
+        return tops
+
+    ## The layer index of the row at `y` (its effect lines too), or -1.
     func row_of(self, y: float) -> int!:
         let rows = shown_rows(self.workspace)
-        let row = int(math.floor(y / self.row_height))
-        if row < 0 or row >= rows.length:
-            return -1
-        return rows[row]
+        let tops = self.tops()
+        var row = 0
+        while row < rows.length:
+            if y >= tops[row] and y < tops[row + 1]:
+                return rows[row]
+            row += 1
+        return -1
 
     ## Where the row of the layer at `index` starts, or -1 when it is not shown.
     pub func row_top(self, index: int) -> float!:
+        let rows = shown_rows(self.workspace)
+        let tops = self.tops()
         var row = 0
-        for shown in shown_rows(self.workspace):
-            if shown == index:
-                return float(row) * self.row_height
+        while row < rows.length:
+            if rows[row] == index:
+                return tops[row]
             row += 1
         return -1.0
+
+    ## The effect whose line is at `y` in the row of the layer at `index`, or -1.
+    func effect_at(self, index: int, y: float) -> int!:
+        let below = y - self.row_top(index) - self.row_height
+        if below < 0.0:
+            return -1
+        let listed = self.effects.listed(self.workspace.canvas, index)
+        let line = int(math.floor(below / self.effect_height))
+        return listed[line] if line < listed.length else -1
+
+    ## The row edge nearest `y`: its number among the edges (0 above the top
+    ## row, the row count below the last) and where it is.
+    func edge_near(self, y: float) -> int!:
+        let tops = self.tops()
+        var best = 0
+        var index = 1
+        while index < tops.length:
+            if math.abs(tops[index] - y) < math.abs(tops[best] - y):
+                best = index
+            index += 1
+        return best
 
     ## Where the name of the layer at `index` starts.
     pub func name_left(self, index: int) -> float!:
@@ -110,9 +164,10 @@ pub class LayerList: Widget:
         let focused = self.box.contains_focus()
         let thumb = 36.0
         let mask_thumb = 30.0
+        let tops = self.tops()
         var row = 0
         for index in shown_rows(workspace):
-            let top = float(row) * self.row_height
+            let top = tops[row]
             let selected = workspace.is_selected(index)
             let group = canvas.layer_is_group(index)
             let clipped = canvas.layer_clipped(index)
@@ -187,23 +242,43 @@ pub class LayerList: Widget:
             elif clipped:
                 subtitle = f"Clipped · {workspace.blend_name(index)} · {opacity}%"
             painter.text(subtitle, x, top + 30.0, soft, self.font)
-            painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
+            self.draw_effects(painter, target, index, top + self.row_height, size.width)
+            painter.rectangle(Rect(0.0, tops[row + 1] - 1.0, size.width, 1.0), theme.border())
             row += 1
         self.draw_drop_indicator(painter, size.width)
         painter.close()
 
-    ## The drop indicator while a row is dragged: an accent line at the row edge
-    ## it lands on, or a frame round the group it goes into.
+    ## The effect lines under the row of the layer at `index`, from `y`: the
+    ## eye, "fx" and the effect's name, a cross at the right.
+    func draw_effects(self, painter: Painter, target: RenderTarget, index: int, y: float, width: float) -> unit!:
+        let canvas = self.workspace.canvas
+        var line = 0
+        for kind in self.effects.listed(canvas, index):
+            let top = y + float(line) * self.effect_height
+            let showing = self.effects.showing(canvas, index, kind)
+            let ink = theme.text() if showing else theme.text_muted()
+            draw_icon(target, "visible" if showing else "hidden", Rect(8.0, top + 3.0, 14.0, 14.0), ink)
+            painter.text("fx  " + self.effects.kind(kind).name, self.thumb_left(index) + 8.0, top + 3.0, ink, self.font)
+            painter.text("×", width - 18.0, top + 2.0, theme.text_muted(), self.font)
+            line += 1
+
+    ## The drop indicator while a row (or an effect, Alt copying it) is dragged:
+    ## an accent line at the row edge it lands on, or a frame round the group
+    ## (or the layer) it goes into.
     func draw_drop_indicator(self, painter: Painter, width: float) -> unit!:
+        if self.effect_index >= 0 and math.abs(self.drag_y - self.effect_y) > 4.0:
+            let target = self.row_of(self.drag_y)
+            if target >= 0 and target != self.effect_index:
+                self.frame(painter, Rect(0.0, self.row_top(target), width, self.row_height), self.workspace.look.accent)
+            return
         if self.drag_index < 0 or not self.drag_started:
             return
-        let row = int(math.floor(self.drag_y / self.row_height))
         if self.into_group(self.drag_y):
-            self.frame(painter, Rect(0.0, float(row) * self.row_height, width, self.row_height), self.workspace.look.accent)
+            let group = self.row_of(self.drag_y)
+            self.frame(painter, Rect(0.0, self.row_top(group), width, self.row_height), self.workspace.look.accent)
             return
-        let count = shown_rows(self.workspace).length
-        let slot = clamp_int(int(math.floor(self.drag_y / self.row_height + 0.5)), 0, count)
-        painter.rectangle(Rect(0.0, float(slot) * self.row_height - 1.0, width, 2.0), self.workspace.look.accent)
+        let tops = self.tops()
+        painter.rectangle(Rect(0.0, tops[self.edge_near(self.drag_y)] - 1.0, width, 2.0), self.workspace.look.accent)
 
     func frame(self, painter: Painter, rect: Rect, color: Color) -> unit!:
         painter.rectangle(Rect(rect.x, rect.y, rect.width, 2.0), color)
@@ -216,7 +291,7 @@ pub class LayerList: Widget:
         let index = self.row_of(y)
         if index < 0 or not self.workspace.canvas.layer_is_group(index):
             return false
-        let within = y / self.row_height - math.floor(y / self.row_height)
+        let within = (y - self.row_top(index)) / self.row_height
         return within > 0.3 and within < 0.7
 
     ## A drop at `y`: onto a group's middle it goes in; otherwise at the row
@@ -227,7 +302,7 @@ pub class LayerList: Widget:
         let canvas = workspace.canvas
         # Where it lands, by layer id: a copy shifts the rows.
         let rows = shown_rows(workspace)
-        let slot = clamp_int(int(math.floor(y / self.row_height + 0.5)), 0, rows.length)
+        let slot = clamp_int(self.edge_near(y), 0, rows.length)
         let into = self.into_group(y)
         let how = drop_inside if into else (drop_above if slot < rows.length else drop_below)
         let target = canvas.layer_id(self.row_of(y) if into else (rows[slot] if slot < rows.length else rows[rows.length - 1]))
@@ -264,7 +339,9 @@ pub class LayerList: Widget:
                 self.box.invalidate()
                 return
             let index = self.row_of(event.y)
-            if index >= 0:
+            if index >= 0 and self.effect_at(index, event.y) >= 0:
+                self.press_effect(index, self.effect_at(index, event.y), event)
+            elif index >= 0:
                 self.press(index, event)
                 # The selection or a layer's state changed: Properties and the rest follow.
                 if let changed = self.on_changed:
@@ -279,6 +356,19 @@ pub class LayerList: Widget:
                 self.box.invalidate()
         elif event.kind == EventKind.pointer_up and event.button == 0 and self.eye_swipe:
             self.eye_swipe = false
+        elif event.kind == EventKind.pointer_moved and self.effect_index >= 0:
+            self.drag_y = event.y
+            self.box.invalidate()
+        elif event.kind == EventKind.pointer_up and event.button == 0 and self.effect_index >= 0:
+            # An effect dragged with Alt onto another layer is copied there.
+            let target = self.row_of(event.y)
+            if event.alt and target >= 0 and target != self.effect_index and math.abs(event.y - self.effect_y) > 4.0:
+                self.effects.copy(self.workspace, self.effect_index, self.effect_kind, target)
+                if let changed = self.on_changed:
+                    changed()
+            self.effect_index = -1
+            self.effect_kind = -1
+            self.box.invalidate()
         elif event.kind == EventKind.pointer_moved and self.drag_index >= 0:
             if math.abs(event.y - self.drag_y) > 4.0:
                 self.drag_started = true
@@ -294,6 +384,7 @@ pub class LayerList: Widget:
             self.drag_started = false
             self.box.invalidate()
         elif event.cancelled:
+            self.effect_index = -1
             self.drag_index = -1
             self.drag_started = false
             self.eye_swipe = false
@@ -303,8 +394,9 @@ pub class LayerList: Widget:
     ## upper row's layer clipped to the one below, or released. Whether it was.
     func clip_line(self, y: float) -> bool!:
         let rows = shown_rows(self.workspace)
-        let line = int(math.floor(y / self.row_height + 0.5))
-        if line < 1 or line >= rows.length or math.abs(y - float(line) * self.row_height) > 5.0:
+        let tops = self.tops()
+        let line = self.edge_near(y)
+        if line < 1 or line >= rows.length or math.abs(y - tops[line]) > 5.0:
             return false
         let upper = rows[line - 1]
         let canvas = self.workspace.canvas
@@ -314,6 +406,31 @@ pub class LayerList: Widget:
             canvas.set_clipped(canvas.layer_id(upper), not canvas.layer_clipped(upper)))
         self.workspace.touch()
         return true
+
+    ## A press on an effect's line under the layer at `index`: its eye hides or
+    ## shows it, its cross deletes it, a double-click opens Layer Style, and a
+    ## drag (with Alt) copies it to another layer.
+    func press_effect(self, index: int, kind: int, event: Event) -> unit!:
+        let workspace = self.workspace
+        workspace.select(index)
+        if event.x < 28.0:
+            self.effects.toggle(workspace, index, kind)
+            return
+        if event.x > self.box.bounds().width - 24.0:
+            self.effects.remove(workspace, index, kind)
+            return
+        let now = time.now() // 1000000
+        if index == self.last_index and now - self.last_time <= 400:
+            self.last_index = -1
+            if let open = self.on_open_style:
+                open()
+            return
+        self.last_index = index
+        self.last_time = now
+        self.effect_index = index
+        self.effect_kind = kind
+        self.effect_y = event.y
+        self.drag_y = event.y
 
     ## A press on the row of the layer at `index`.
     func press(self, index: int, event: Event) -> unit!:

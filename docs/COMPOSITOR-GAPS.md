@@ -73,8 +73,9 @@ Found beyond the old list, and first because they lose work:
 14. [x] Styles (0.1.52): Drop Shadow by angle and distance (the light's
     angle, Photoshop's convention); Inner Glow (over the overlay, under the
     inner shadow and stroke).
-15. [ ] Effects listed under their layer in Layers, each with an eye, delete,
-    Option-drag to copy.
+15. [x] Effects listed under their layer in Layers (0.1.54): a line each, the
+    eye hides one (listed, eye shut), the cross deletes it, Alt-drag onto
+    another layer copies it, a double-click opens Layer Style.
 16. [ ] Import: File › Import Images…; PSD groups and masks, merged-only PSDs,
     PSB; HEIC, SVG, Camera RAW.
 17. [ ] Tool extras: right-drag sets brush size (Shift: hardness); Spot Healing
