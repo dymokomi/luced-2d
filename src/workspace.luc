@@ -503,12 +503,15 @@ pub class Workspace:
 
     ## Add a mask — revealing the selection when there is one, as Photoshop's
     ## button does, else everything; `hide` hides everything instead — or
-    ## remove the mask the layer has.
+    ## remove the mask the layer has. A new mask is what painting targets
+    ## next, as in Photoshop.
     pub func toggle_mask(self, hide: bool = false) -> unit!:
         if self.canvas.layer_masked(self.selected):
             self.canvas.set_mask(self.selected_id(), false)
+            self.canvas.edit_mask(false)
         else:
             self.canvas.set_mask(self.selected_id(), true, 1 if hide else (2 if self.canvas.has_selection() else 0))
+            self.canvas.edit_mask(true)
         self.touch()
 
     ## Keep the selected layer's mask but stop it hiding anything, or bring it back.

@@ -1,7 +1,7 @@
 #prisma 4.0
 def package "luced-2d" {
     str owner = "dymokomi"
-    str version = "0.1.45"
+    str version = "0.1.46"
     str kind = "application"
     str language = "luce"
     str description = "An image editor written in Luce: layered GPU documents from luce-image, drawn at any zoom, with the look of a brutalist grey-and-orange tool."
@@ -33,7 +33,7 @@ def package "luced-2d" {
 
     def dependency "luce-image" {
         str owner = "dymokomi"
-        str version = "^0.16.3"
+        str version = "^0.16.4"
         str path = "../luce-image"
     }
 
@@ -45,13 +45,13 @@ def package "luced-2d" {
 
     def dependency "luce-window" {
         str owner = "dymokomi"
-        str version = "^0.1.2"
+        str version = "^0.1.3"
         str path = "../luce-window"
     }
 
     def dependency "luce-gpu" {
         str owner = "dymokomi"
-        str version = "^0.1.4"
+        str version = "^0.1.5"
         str path = "../luce-gpu"
     }
 
