@@ -826,8 +826,8 @@ func filter_dialogs() -> unit!:
     panels.adjust.open(12)
     panels.adjust.apply()
     let before = workspace.layer_count()
-    for kind in [12, 13, 14]:
+    for kind in [12, 13, 14, 15]:
         let spec = adjustments()[kind]
         discard(workspace.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults())))
-    assert(workspace.layer_count() == before + 3 and workspace.canvas.layer_adjustment(workspace.selected) == 14)
+    assert(workspace.layer_count() == before + 4 and workspace.canvas.layer_adjustment(workspace.selected) == 15)
     panels.close()

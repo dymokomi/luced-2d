@@ -13,12 +13,12 @@ from levels_graph import LevelsGraph
 from map_colors import MapColors
 import math
 
-## The rows past the adjustments' (0..14): the filters, in the dialog.
-pub let blur_kind: int = 15
-pub let noise_kind: int = 16
+## The rows past the adjustments' (0..15): the filters, in the dialog.
+pub let blur_kind: int = 16
+pub let noise_kind: int = 17
 ## The filters luce-image numbers 0..3 (`Canvas.filter_layer`) from here:
 ## Motion Blur, Lens Correction, Bloom, Tonal Contrast.
-pub let first_filter_kind: int = 17
+pub let first_filter_kind: int = 18
 ## Levels: its kind, and five values per page.
 let levels_kind: int = 3
 ## Hue/Saturation: its pages are Master, then the six ranges from Reds.
