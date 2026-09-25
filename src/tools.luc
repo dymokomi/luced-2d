@@ -44,6 +44,8 @@ pub func tools() -> list[Tool]!:
             Tool("eraser", "Eraser", "Eraser", "eraser-tool", Key.e, "Drag to erase · [ ] size · Space to pan"),
             Tool("clone", "Clone Stamp", "Clone Stamp", "clone-stamp", Key.s, "Alt-click where to copy from · drag to stamp it · [ ] size · digits set opacity"),
             Tool("heal", "Spot Healing Brush", "Spot Healing", "healing-brush", Key.j, "Brush over a spot: it is filled from the picture beside it · [ ] size"),
+            Tool("dodge", "Dodge", "Dodge", "dodge-tool", Key.o, "Brush to lighten · the range and exposure in the header · Tab steps the range · [ ] size"),
+            Tool("burn", "Burn", "Burn", "burn-tool", Key.o, "Brush to darken · the range and exposure in the header · Tab steps the range · [ ] size", shift = true),
             Tool("smear", "Smudge", "Smudge", "smudge-tool", Key.r, "Drag to smudge, blur or push pixels (the mode in the header) · digits set strength"),
             Tool("rectangle", "Rectangle", "Rectangle", "rectangle-tool", Key.u, "Drag a rectangle onto a layer of its own · shift squares it · alt draws from the centre"),
             Tool("shape_ellipse", "Ellipse", "Ellipse", "ellipse-tool", Key.u, "Drag an ellipse onto a layer of its own · shift makes a circle · alt draws from the centre", shift = true),
@@ -64,7 +66,7 @@ pub func tool_by_id(id: str) -> Tool!:
 ## tool; a long press (or a right-click) on it offers the others. Tools in no
 ## group have a button of their own.
 pub func tool_groups() -> list[list[str]]:
-    return [["marquee", "ellipse", "lasso", "polygon"], ["brush", "pencil"], ["rectangle", "shape_ellipse", "line", "shape_polygon"]]
+    return [["marquee", "ellipse", "lasso", "polygon"], ["brush", "pencil"], ["dodge", "burn"], ["rectangle", "shape_ellipse", "line", "shape_polygon"]]
 
 ## The group holding `tool`, as its index in `tool_groups()`, or -1.
 pub func group_of(tool: str) -> int:

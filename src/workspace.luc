@@ -79,6 +79,9 @@ pub class Workspace:
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     ## The Line tool's weight in pixels and the Polygon tool's sides.
+    ## Dodge and Burn: 0 shadows, 1 midtones, 2 highlights, and the exposure 0..1.
+    pub var tone_range: int = 1
+    pub var tone_exposure: float = 0.5
     pub var shape_weight: float = 4.0
     pub var shape_sides: int = 5
     ## Shapes are filled (foreground) and stroked (background, this wide);
@@ -729,6 +732,7 @@ pub class Workspace:
         self.canvas.set_retouch(self.retouch_kind())
         self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
         self.canvas.set_brush_aliased(self.tool == "pencil")
+        self.canvas.set_tone(self.tone_range, self.tone_exposure)
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
 
@@ -741,6 +745,10 @@ pub class Workspace:
             return 2
         if self.tool == "smear":
             return 4 if self.smear_mode == 0 else (3 if self.smear_mode == 1 else 5)
+        if self.tool == "dodge":
+            return 6
+        if self.tool == "burn":
+            return 7
         return 0
 
     ## Tab: the active tool's next mode — a selection tool's new, add,
@@ -753,6 +761,8 @@ pub class Workspace:
             self.selecting.mode = (self.selecting.mode + 1) % 4
         elif tool == "smear":
             self.smear_mode = (self.smear_mode + 1) % 3
+        elif tool == "dodge" or tool == "burn":
+            self.tone_range = (self.tone_range + 1) % 3
         elif tool == "gradient":
             self.gradient_radial = not self.gradient_radial
         elif tool == "clone":

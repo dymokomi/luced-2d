@@ -67,6 +67,7 @@ pub func main(arguments: list[str]) -> int!:
     scripts()
     script_editor()
     groups_and_shapes()
+    dodge_and_burn()
     on_image_adjustment()
     hue_ranges()
     print("PASS luced-2d workspace, view and panels")
@@ -1028,3 +1029,28 @@ func hue_ranges() -> unit!:
     assert(range_of([0.82, 0.52, 0.82]) == 6 and range_of([0.9, 0.6, 0.91]) == 6 and range_of([0.9, 0.2, 0.2]) == 1)
     assert(range_of([0.9, 0.9, 0.1]) == 2 and range_of([0.1, 0.9, 0.1]) == 3 and range_of([0.1, 0.9, 0.9]) == 4)
     assert(range_of([0.1, 0.1, 0.9]) == 5 and range_of([0.5, 0.5, 0.5]) == 0 and range_of([0.9, 0.3, 0.8]) == 6)
+
+## Dodge lightens and Burn darkens a grey where they are brushed; Tab steps the range.
+func dodge_and_burn() -> unit!:
+    let workspace = Workspace(80, 40)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    workspace.set_color(0.2140, 0.2140, 0.2140)
+    workspace.fill_selection(false)
+    panels.choose_tool("dodge")
+    press(view, 20.0, 20.0)
+    release(view, 20.0, 20.0)
+    assert(workspace.canvas.undo_name() == "Dodge")
+    panels.choose_tool("burn")
+    press(view, 60.0, 20.0)
+    release(view, 60.0, 20.0)
+    assert(workspace.canvas.undo_name() == "Burn")
+    let range = workspace.tone_range
+    workspace.cycle_tool_mode()
+    assert(workspace.tone_range == (range + 1) % 3)
+    panels.close()

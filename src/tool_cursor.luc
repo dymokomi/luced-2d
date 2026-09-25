@@ -17,7 +17,7 @@ pub func cursor_for(tool: str, panning: bool, space: bool, small_tip: bool) -> C
         return Cursor.grab
     if tool == "zoom":
         return Cursor.hidden
-    if tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear":
+    if tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn":
         # A tip too small to see as a circle shows cross hairs instead.
         return Cursor.crosshair if small_tip else Cursor.hidden
     if tool == "text":

@@ -44,6 +44,9 @@ pub class ToolHeader:
     pub let gradient_controls: HStack
     ## The Line tool's weight and the Polygon tool's sides.
     pub let weight_row: HStack
+    ## Dodge and Burn's range and exposure.
+    pub let tone_row: HStack
+    let range_menu: Menu
     pub let sides_row: HStack
     ## The shapes' fill and stroke, and a rectangle's corner radius.
     pub let paint_row: HStack
@@ -143,6 +146,16 @@ pub class ToolHeader:
         self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
             self.workspace.gradient_transparent = not self.workspace.gradient_transparent)
         self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
+        let shadows = self.choice("Shadows", "tone_shadows", func () -> unit!:
+            self.workspace.tone_range = 0)
+        let midtones = self.choice("Midtones", "tone_midtones", func () -> unit!:
+            self.workspace.tone_range = 1)
+        let highlights = self.choice("Highlights", "tone_highlights", func () -> unit!:
+            self.workspace.tone_range = 2)
+        self.range_menu = Menu("Midtones ▾", [shadows, midtones, highlights], font = font)
+        let exposure = self.scrubber(workspace.tone_exposure * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.tone_exposure = value / 100.0)
+        self.tone_row = HStack([kit.labelled("Range", self.range_menu), kit.labelled("Exposure", exposure)], spacing = 12.0)
         self.weight_row = kit.labelled("Weight", self.scrubber(workspace.shape_weight, 1.0, 1000.0, " px", func (value: float) -> unit!:
             self.workspace.shape_weight = value
             restyle_selected(self.workspace)))
@@ -162,7 +175,7 @@ pub class ToolHeader:
         self.radius_row = kit.labelled("Radius", self.scrubber(workspace.shape_radius, 0.0, 1000.0, " px", func (value: float) -> unit!:
             self.workspace.shape_radius = value
             restyle_selected(self.workspace)))
-        self.bar = Toolbar([self.title, self.smear_menu, self.paint_row, self.radius_row, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
+        self.bar = Toolbar([self.title, self.smear_menu, self.tone_row, self.paint_row, self.radius_row, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
                             self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
@@ -205,8 +218,10 @@ pub class ToolHeader:
         # A free transform takes over the header until it is applied or cancelled.
         let transforming = workspace.transform != none
         self.title.set_text("Transform" if transforming else (active.title + " on mask" if on_mask else active.title))
-        let retouching = tool == "clone" or tool == "heal" or tool == "smear"
+        let retouching = tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
         self.brush_controls.layout().set_visible(not transforming and (tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or retouching))
+        self.tone_row.layout().set_visible(not transforming and (tool == "dodge" or tool == "burn"))
+        self.range_menu.set_text(["Shadows ▾", "Midtones ▾", "Highlights ▾"][workspace.tone_range])
         self.weight_row.layout().set_visible(not transforming and tool == "line")
         self.sides_row.layout().set_visible(not transforming and tool == "shape_polygon")
         let filled_shape = tool == "rectangle" or tool == "shape_ellipse" or tool == "shape_polygon"

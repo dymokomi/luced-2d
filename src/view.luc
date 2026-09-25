@@ -640,7 +640,7 @@ pub class CanvasView: Widget:
     ## Whether `tool` needs pixels and the selected layer is a group, which has
     ## none: then say so, as Photoshop does, and do nothing.
     func refuses_group(self, tool: str) -> bool!:
-        let paints = tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear"
+        let paints = tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
         # A group's mask is painted like any other.
         if not paints or not self.workspace.canvas.layer_is_group(self.workspace.selected):
             return false
@@ -998,7 +998,7 @@ pub class CanvasView: Widget:
 
 ## Whether `tool` paints with the brush's tip, and so shows its outline.
 func brushed(tool: str) -> bool:
-    return tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear"
+    return tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
 
 ## The digit a number key types, or -1.
 pub func digit_value(key: Key) -> int:
