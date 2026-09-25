@@ -1,6 +1,6 @@
 # The canvas engine: design
 
-Status: proposal for review, 2026-09-25. Builds on
+Status: accepted 2026-09-25 (decisions in §12). Builds on
 [LARGE-CANVAS-RESEARCH.md](../research/LARGE-CANVAS-RESEARCH.md) (how other editors do
 it) and [LARGE-CANVAS-PROFILE.md](../research/LARGE-CANVAS-PROFILE.md) (where
 luced-2d stands).
@@ -52,12 +52,12 @@ These rules are what make the component testable. Every one of them becomes a ch
 
 ## 3. Where it lives
 
-A new package, **luce-tiles**, between luce-gpu and luce-image:
+A new package, **luce-canvas**, between luce-gpu and luce-image:
 
 ```
 luced-2d  ─────────────────────────────── the app: view, tools, dialogs
 luce-image ────────────────────────────── document, compositor, brushes, filters, codecs glue
-luce-tiles ────────────────────────────── the engine (this document)
+luce-canvas ────────────────────────────── the engine (this document)
    ├─ store        tiles, cells, formats, solid/empty, stamps
    ├─ residency    tiers G/R/C/D, pins, LRU, the memory governor
    ├─ pyramid      per-store levels, lazy, stamp-keyed
@@ -72,7 +72,7 @@ Why a package of its own:
 - Its rules can't be bypassed by editor code.
 - luce-image shrinks to image operations over an engine.
 
-`Tiles` moves from `luce_image.tiles` to `luce_tiles.store` with the same name and
+`Tiles` moves from `luce_image.tiles` to `luce_canvas.store` with the same name and
 mostly the same methods, so the move itself is mechanical (§10, step 1).
 
 ## 4. The store
@@ -406,7 +406,7 @@ History snapshots hold stores. Tiles are shared, so a step costs only the tiles 
 Each step ships on its own with the editor working, tested and published. Numbers are
 checked by the acceptance tests of §11.
 
-1. **luce-tiles package; `Tiles` moves in.**
+1. **luce-canvas package; `Tiles` moves in.**
    - The existing API is unchanged. `texture(c, r)` becomes `texture(c, r, batch)` with a
      default "immediate" batch, so callers compile.
    - The per-store cell array gains `Solid`.
@@ -440,7 +440,7 @@ Steps 1–3 are what make big documents feel fast. Steps 4–5 make them always 
 
 ## 11. Acceptance tests
 
-These run as a benchmark suite (`luce-tiles/bench`), on this Mac and on the WINDOWS and
+These run as a benchmark suite (`luce-canvas/bench`), on this Mac and on the WINDOWS and
 LINUX testers, against a synthetic 15000 × 24000 document with 12 layers:
 - 4 photographic layers
 - 4 sparse paint layers
@@ -468,13 +468,11 @@ Plus two checks:
 - An "evict everything" stress mode drops all G and R copies after every operation, and
   the ordinary test suites must still pass under it.
 
-## 12. Decisions for the owner
+## 12. Decisions (2026-09-25)
 
-1. **A new luce-tiles package** (recommended), or keep the engine inside luce-image.
-2. **Per-layer pyramids**, with zoomed-out display composited from downsampled layers as
-   Photoshop and Krita do (recommended). The alternative, a composite-only pyramid, is exact
-   at every zoom but slow to update after adjustments at low zoom.
-3. **Memory settings in Settings**, as in Photoshop: a "Memory usage" percentage and a
-   scratch folder (recommended), rather than automatic only.
-4. **Tile size 256 fixed, with GPU pages sized per platform** (recommended, §4.3), rather
-   than a per-platform tile size.
+1. The engine is a new package, **luce-canvas**.
+2. **Per-layer pyramids.** Zoomed-out display is composited from downsampled layers; 100 %,
+   save and export are exact.
+3. **Automatic budgets plus Settings:** "Memory usage" (default 60 % of RAM), a scratch
+   folder, and the status bar readout.
+4. **256 px tiles everywhere;** GPU pages sized per platform, with batched work.
