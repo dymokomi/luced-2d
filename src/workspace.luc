@@ -302,7 +302,7 @@ pub class Workspace:
         let lowered = path.lower()
         # HEIC and camera raws open through luce-image, as the rest.
         for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".svg", ".heic", ".heif",
-                       ".dng", ".cr2", ".nef", ".arw", ".orf", ".rw2", ".pef", ".raf"]:
+                       ".dng", ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".pef", ".raf"]:
             if lowered.ends_with(suffix):
                 return true
         return false
