@@ -991,6 +991,21 @@ func groups_and_shapes() -> unit!:
     workspace.shape_stroke = true
     restyle_selected(workspace)
     assert(workspace.canvas.layer_shape_value(workspace.selected, 11) == 1.0)
+    # The line scaled 200%: its weight doubles; the header shows it and a restyle keeps it.
+    panels.choose_tool("line")
+    workspace.shape_weight = 3.0
+    restyle_selected(workspace)
+    assert(workspace.begin_transform())
+    if let session = workspace.transform:
+        session.box.set_scale(200.0)
+    workspace.preview_transform()
+    workspace.finish_transform(true)
+    assert(workspace.canvas.layer_shaped(workspace.selected) and math.abs(workspace.canvas.layer_shape_value(workspace.selected, 15) - 6.0) < 1e-6)
+    panels.header.show(false)
+    assert(workspace.shape_weight == 6.0)
+    workspace.shape_sides = 7
+    restyle_selected(workspace)
+    assert(math.abs(workspace.canvas.layer_shape_value(workspace.selected, 15) - 6.0) < 1e-6)
     # The rail's brush group shows the pencil once it is chosen.
     panels.choose_tool("pencil")
     press(view, 90.0, 10.0)

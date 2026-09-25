@@ -8,7 +8,7 @@
 import ui
 from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Checkbox
 from workspace import Workspace
-from shape_tool import restyle_selected
+from shape_tool import restyle_selected, selected_shape_options
 from kit import Kit
 from brush import preset_names
 from tools import tool_by_id
@@ -53,6 +53,12 @@ pub class ToolHeader:
     pub let radius_row: HStack
     let fill_box: Checkbox
     let stroke_box: Checkbox
+    let weight_field: NumberField
+    let sides_field: NumberField
+    let stroke_width_field: NumberField
+    let radius_field: NumberField
+    ## The selected shape layer's values the header last took, so it takes them once.
+    var adopted: str = ""
     pub let box_controls: HStack
     pub let transform_controls: TransformControls
     pub let type_controls: TypeControls
@@ -158,30 +164,58 @@ pub class ToolHeader:
         let exposure = self.scrubber(workspace.tone_exposure * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.tone_exposure = value / 100.0)
         self.tone_row = HStack([kit.labelled("Range", self.range_menu), kit.labelled("Exposure", exposure)], spacing = 12.0)
-        self.weight_row = kit.labelled("Weight", self.scrubber(workspace.shape_weight, 1.0, 1000.0, " px", func (value: float) -> unit!:
+        self.weight_field = self.scrubber(workspace.shape_weight, 1.0, 1000.0, " px", func (value: float) -> unit!:
             self.workspace.shape_weight = value
-            restyle_selected(self.workspace)))
-        self.sides_row = kit.labelled("Sides", self.scrubber(float(workspace.shape_sides), 3.0, 64.0, "", func (value: float) -> unit!:
+            restyle_selected(self.workspace))
+        self.weight_row = kit.labelled("Weight", self.weight_field)
+        self.sides_field = self.scrubber(float(workspace.shape_sides), 3.0, 64.0, "", func (value: float) -> unit!:
             self.workspace.shape_sides = int(value)
-            restyle_selected(self.workspace)))
+            restyle_selected(self.workspace))
+        self.sides_row = kit.labelled("Sides", self.sides_field)
         self.fill_box = kit.checkbox("Fill", func () -> unit!:
             self.workspace.shape_fill = not self.workspace.shape_fill
             restyle_selected(self.workspace))
         self.stroke_box = kit.checkbox("Stroke", func () -> unit!:
             self.workspace.shape_stroke = not self.workspace.shape_stroke
             restyle_selected(self.workspace))
-        let stroke_width = self.scrubber(workspace.shape_stroke_width, 0.5, 500.0, " px", func (value: float) -> unit!:
+        self.stroke_width_field = self.scrubber(workspace.shape_stroke_width, 0.5, 500.0, " px", func (value: float) -> unit!:
             self.workspace.shape_stroke_width = value
             restyle_selected(self.workspace))
-        self.paint_row = HStack([self.fill_box, self.stroke_box, stroke_width], spacing = 8.0)
-        self.radius_row = kit.labelled("Radius", self.scrubber(workspace.shape_radius, 0.0, 1000.0, " px", func (value: float) -> unit!:
+        self.paint_row = HStack([self.fill_box, self.stroke_box, self.stroke_width_field], spacing = 8.0)
+        self.radius_field = self.scrubber(workspace.shape_radius, 0.0, 1000.0, " px", func (value: float) -> unit!:
             self.workspace.shape_radius = value
-            restyle_selected(self.workspace)))
+            restyle_selected(self.workspace))
+        self.radius_row = kit.labelled("Radius", self.radius_field)
         self.bar = Toolbar([self.title, self.smear_menu, self.tone_row, self.paint_row, self.radius_row, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
                             self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
+    ## A shape tool over a selected shape layer shows and edits that layer's
+    ## options, as Photoshop's options bar: the header takes them when the
+    ## layer or its values change (a transform scaling its stroke, say).
+    func adopt_shape(self) -> unit!:
+        let workspace = self.workspace
+        if selected_shape_options(workspace) == none:
+            self.adopted = ""
+        let values = selected_shape_options(workspace) else return
+        let key = f"{workspace.selected_id()} {values.fill} {values.stroke} {values.stroke_width} {values.radius} {values.sides}"
+        if key == self.adopted:
+            return
+        self.adopted = key
+        workspace.shape_sides = values.sides
+        self.sides_field.set_value(float(values.sides))
+        if values.line:
+            workspace.shape_weight = values.stroke_width
+            self.weight_field.set_value(values.stroke_width)
+            return
+        workspace.shape_fill = values.fill
+        workspace.shape_stroke = values.stroke
+        workspace.shape_stroke_width = values.stroke_width
+        workspace.shape_radius = values.radius
+        self.stroke_width_field.set_value(values.stroke_width)
+        self.radius_field.set_value(values.radius)
+
     func scrubber(self, value: float, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
         let field = NumberField(value, minimum, maximum, 1.0, suffix = suffix, font = self.kit.font)
         self.kit.keep(field.on_change(func (changed: float) -> unit!:
@@ -229,6 +263,8 @@ pub class ToolHeader:
         let filled_shape = tool == "rectangle" or tool == "shape_ellipse" or tool == "shape_polygon"
         self.paint_row.layout().set_visible(not transforming and filled_shape)
         self.radius_row.layout().set_visible(not transforming and tool == "rectangle")
+        if filled_shape or tool == "line":
+            self.adopt_shape()
         self.fill_box.set_checked(workspace.shape_fill)
         self.stroke_box.set_checked(workspace.shape_stroke)
         self.clone_controls.layout().set_visible(not transforming and tool == "clone")

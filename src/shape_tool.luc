@@ -9,6 +9,7 @@
 from ui import Painter, Point
 from gpu import Color
 from workspace import Workspace
+from canvas import Canvas
 import math
 
 ## The shape tools' ids, in the group's order.
@@ -150,12 +151,60 @@ pub func draw_line(workspace: Workspace, x0: float, y0: float, x1: float, y1: fl
                          false, 0.0, 0.0, 0.0, true, workspace.red, workspace.green, workspace.blue, workspace.shape_weight))
     workspace.touch()
 
+## A selected shape layer's options, as the header shows them: the stroke
+## width in document pixels, the corner radius scaled with the shape.
+pub class ShapeOptions:
+    pub let line: bool
+    pub let fill: bool
+    pub let stroke: bool
+    pub let stroke_width: float
+    pub let radius: float
+    pub let sides: int
+
+    pub func init(self, line: bool, fill: bool, stroke: bool, stroke_width: float, radius: float, sides: int):
+        self.line = line
+        self.fill = fill
+        self.stroke = stroke
+        self.stroke_width = stroke_width
+        self.radius = radius
+        self.sides = sides
+
+## The selected layer's shape options; none when it is not a shape layer.
+pub func selected_shape_options(workspace: Workspace) -> ShapeOptions?:
+    let canvas = workspace.canvas
+    let index = workspace.selected
+    if index < 0 or index >= workspace.layer_count():
+        return none
+    let options = read_shape_options(canvas, index) catch _:
+        return none
+    return options
+
+func read_shape_options(canvas: Canvas, index: int) -> ShapeOptions?!:
+    if not canvas.layer_shaped(index):
+        return none
+    return ShapeOptions(canvas.layer_shape_value(index, 0) == 2.0, canvas.layer_shape_value(index, 7) != 0.0, canvas.layer_shape_value(index, 11) != 0.0,
+                        round_tenth(canvas.layer_shape_value(index, 15)), round_tenth(canvas.layer_shape_value(index, 6) * shape_scale(canvas, index)),
+                        int(canvas.layer_shape_value(index, 5)))
+
+## The mean factor a shape layer's matrix scales by.
+func shape_scale(canvas: Canvas, index: int) -> float!:
+    let a = canvas.layer_shape_value(index, 16)
+    let b = canvas.layer_shape_value(index, 17)
+    let c = canvas.layer_shape_value(index, 18)
+    let d = canvas.layer_shape_value(index, 19)
+    return math.sqrt(math.abs(a * d - b * c))
+
+func round_tenth(value: float) -> float:
+    return math.round(value * 10.0) / 10.0
+
 ## The header's shape options changed: the selected shape layer takes them.
 pub func restyle_selected(workspace: Workspace) -> unit!:
     let canvas = workspace.canvas
     let index = workspace.selected
     if index < 0 or index >= workspace.layer_count() or not canvas.layer_shaped(index):
         return
+    let scale = shape_scale(canvas, index)
+    let radius = workspace.shape_radius / scale if scale > 1e-9 else workspace.shape_radius
     let line = canvas.layer_shape_value(index, 0) == 2.0
     if line:
         canvas.restyle_shape(workspace.selected_id(), false, 0.0, 0.0, 0.0, true, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
@@ -163,5 +212,5 @@ pub func restyle_selected(workspace: Workspace) -> unit!:
     else:
         canvas.restyle_shape(workspace.selected_id(), workspace.shape_fill, canvas.layer_shape_value(index, 8), canvas.layer_shape_value(index, 9),
                              canvas.layer_shape_value(index, 10), workspace.shape_stroke, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
-                             canvas.layer_shape_value(index, 14), workspace.shape_stroke_width, workspace.shape_radius, workspace.shape_sides)
+                             canvas.layer_shape_value(index, 14), workspace.shape_stroke_width, radius, workspace.shape_sides)
     workspace.touch()
