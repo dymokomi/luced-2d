@@ -1,8 +1,9 @@
-## The Crop tool's box, as in Photoshop: it starts around the whole canvas,
-## its eight handles and edges pull in (or out, past the canvas, to grow it),
-## a drag inside moves it, and a drag outside draws a new one. Shift keeps a
-## corner's proportions. Enter crops to it; what is outside is shaded.
-## Everything is in whole document pixels.
+## The Crop tool's box, as in Photoshop: it starts around the selection, or
+## else the whole canvas; its eight handles and edges pull in (or out, past
+## the canvas, to grow it), a drag inside moves it, and a drag outside draws a
+## new one. A ratio (the header's) holds its proportions, as Shift does a
+## corner's; Alt pulls both sides about the middle. Enter crops to it; what is
+## outside is shaded. Everything is in whole document pixels.
 from ui import Painter, Point
 from gpu import Rect, Color
 import math
@@ -17,6 +18,8 @@ pub class CropBox:
     pub var top: float
     pub var right: float
     pub var bottom: float
+    ## Width over height to keep, or 0 for any.
+    pub var ratio: float = 0.0
     ## The drag under way: what was grabbed, where, and the box as it was.
     pub var grabbed: int = -1
     var start_x: float = 0.0
@@ -26,11 +29,32 @@ pub class CropBox:
     var from_right: float = 0.0
     var from_bottom: float = 0.0
 
-    pub func init(self, width: float, height: float):
-        self.left = 0.0
-        self.top = 0.0
-        self.right = width
-        self.bottom = height
+    ## A box `width` by `height` at (`left`, `top`).
+    pub func init(self, width: float, height: float, left: float = 0.0, top: float = 0.0):
+        self.left = left
+        self.top = top
+        self.right = left + width
+        self.bottom = top + height
+
+    ## Keep `ratio` (0: any) from now on: the box becomes the largest of that
+    ## shape inside it, about its middle.
+    pub func set_ratio(self, ratio: float):
+        self.ratio = ratio
+        if ratio <= 0.0:
+            return
+        let wide = self.right - self.left
+        let tall = self.bottom - self.top
+        let middle_x = (self.left + self.right) * 0.5
+        let middle_y = (self.top + self.bottom) * 0.5
+        var new_wide = wide
+        var new_tall = math.round(wide / ratio)
+        if new_tall > tall:
+            new_tall = tall
+            new_wide = math.round(tall * ratio)
+        self.left = math.round(middle_x - new_wide * 0.5)
+        self.right = self.left + math.max(1.0, new_wide)
+        self.top = math.round(middle_y - new_tall * 0.5)
+        self.bottom = self.top + math.max(1.0, new_tall)
 
     pub func width(self) -> int:
         return int(self.right - self.left)
@@ -85,8 +109,9 @@ pub class CropBox:
         self.top = top
         self.bottom = math.max(bottom, top + 1.0)
 
-    ## The pointer at document point (`x`, `y`), Shift held or not.
-    pub func drag(self, x: float, y: float, shift: bool):
+    ## The pointer at document point (`x`, `y`); Shift keeps a corner's
+    ## proportions, Alt pulls about the middle.
+    pub func drag(self, x: float, y: float, shift: bool, alt: bool = false):
         let px = math.round(x)
         let py = math.round(y)
         let grab = self.grabbed
@@ -100,12 +125,15 @@ pub class CropBox:
         elif grab == crop_new:
             var dx = px - self.start_x
             var dy = py - self.start_y
-            if shift:
+            if self.ratio > 0.0:
+                dy = math.round(math.abs(dx) / self.ratio) * (1.0 if dy >= 0.0 else -1.0)
+            elif shift:
                 let side = math.max(math.abs(dx), math.abs(dy))
                 dx = side if dx >= 0.0 else -side
                 dy = side if dy >= 0.0 else -side
-            self.left = self.start_x
-            self.top = self.start_y
+            # With Alt the press is the middle, not a corner.
+            self.left = self.start_x - dx if alt else self.start_x
+            self.top = self.start_y - dy if alt else self.start_y
             self.right = self.start_x + dx
             self.bottom = self.start_y + dy
         elif grab >= 0 and grab < 8:
@@ -126,16 +154,47 @@ pub class CropBox:
                 self.top = py
             if moves_bottom:
                 self.bottom = py
-            if corner and shift:
-                # Keep the box's proportions: the height follows the width.
-                let wide = self.from_right - self.from_left
-                let tall = self.from_bottom - self.from_top
-                if wide > 0.0:
-                    let new_tall = math.round(math.abs(self.right - self.left) * tall / wide)
-                    if moves_top:
-                        self.top = self.bottom - new_tall
-                    else:
-                        self.bottom = self.top + new_tall
+            # Alt: the opposite side moves as far the other way.
+            if alt:
+                if moves_left:
+                    self.right = self.from_right + (self.from_left - self.left)
+                if moves_right:
+                    self.left = self.from_left - (self.right - self.from_right)
+                if moves_top:
+                    self.bottom = self.from_bottom + (self.from_top - self.top)
+                if moves_bottom:
+                    self.top = self.from_top - (self.bottom - self.from_bottom)
+            let wide = self.from_right - self.from_left
+            let tall = self.from_bottom - self.from_top
+            let keep = self.ratio if self.ratio > 0.0 else (wide / tall if corner and shift and tall > 0.0 else 0.0)
+            if keep > 0.0:
+                if moves_top or moves_bottom and not (moves_left or moves_right):
+                    self.fit_width(keep, moves_left, moves_right)
+                else:
+                    self.fit_height(keep, moves_top, moves_bottom, alt)
+
+    ## The height follows the width at `ratio`: from the edge not dragged, or
+    ## about the middle when neither (an edge handle) or Alt.
+    func fit_height(self, ratio: float, moves_top: bool, moves_bottom: bool, alt: bool):
+        let new_tall = math.round(math.abs(self.right - self.left) / ratio)
+        if moves_top and not alt:
+            self.top = self.bottom - new_tall
+        elif moves_bottom and not alt:
+            self.bottom = self.top + new_tall
+        else:
+            let middle = math.round((self.from_top + self.from_bottom) * 0.5)
+            self.top = middle - math.round(new_tall * 0.5)
+            self.bottom = self.top + new_tall
+
+    ## The width follows the height at `ratio`, about the middle (a top or
+    ## bottom edge handle dragged).
+    func fit_width(self, ratio: float, moves_left: bool, moves_right: bool):
+        discard(moves_left)
+        discard(moves_right)
+        let new_wide = math.round(math.abs(self.bottom - self.top) * ratio)
+        let middle = math.round((self.from_left + self.from_right) * 0.5)
+        self.left = middle - math.round(new_wide * 0.5)
+        self.right = self.left + new_wide
 
     ## The shade outside the box, the box with its thirds, and the handles,
     ## for a view showing `size` points of the document at `zoom` with its

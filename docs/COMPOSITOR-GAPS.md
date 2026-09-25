@@ -55,8 +55,9 @@ Found beyond the old list, and first because they lose work:
     end (Shift: 45°), follows the colors and options, Enter/Apply keeps it,
     Esc/Cancel drops it; on a mask when editing one. (Radial, reverse, to
     transparent and Shift 45° shipped in 0.1.29.)
-11. [ ] Crop: ratios, symmetric (Option), start at the selection, size readout,
-    snapping.
+11. [x] Crop (0.1.47): ratio menu (Free, Original, 1:1 … 9:16) held while
+    dragging, Alt pulls both sides about the middle, the box starts at the
+    selection, a W × H readout in the header; its edges snap.
 12. [ ] Masks: link/unlink and move on their own; masks on groups; invert, blur
     and noise on a mask; copy a mask to another layer; thumbnail background.
 13. [ ] Adjustments: Curves adjustment layers; Levels eyedroppers, three Auto

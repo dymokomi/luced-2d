@@ -636,7 +636,7 @@ pub class CanvasView: Widget:
             self.workspace.preview_transform()
             return
         if let crop = self.workspace.crop_box:
-            crop.drag(snapped_x, snapped_y, shift)
+            crop.drag(snapped_x, snapped_y, shift, alt)
 
     func end_box(self):
         if let session = self.workspace.transform:

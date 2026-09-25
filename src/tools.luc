@@ -32,7 +32,7 @@ pub func tools() -> list[Tool]!:
             Tool("polygon", "Polygonal Lasso", "Polygonal Lasso", "polygon-select-tool", Key.l,
                  "Click the corners · click the first again, double-click or Enter closes · Delete takes one back · Esc cancels", shift = true),
             Tool("wand", "Magic Wand", "Magic Wand", "magic-wand-tool", Key.w, "Click a color to select it · shift adds · alt subtracts"),
-            Tool("crop", "Crop", "Crop", "crop-tool", Key.c, "Drag an edge or corner · inside moves · outside draws anew · Enter crops · Esc resets"),
+            Tool("crop", "Crop", "Crop", "crop-tool", Key.c, "Drag an edge or corner · Alt: about the middle · inside moves · outside draws anew · Enter crops · Esc resets"),
             Tool("text", "Text", "Text", "text-tool", Key.t, "Click where the text starts, then type it"),
             Tool("eyedropper", "Eyedropper", "Eyedropper", "eyedropper-tool", Key.i, "Click a color to make it the foreground color"),
             Tool("gradient", "Gradient", "Gradient", "gradient-tool", Key.g, "Drag from the foreground color to the background color · fills the selection"),

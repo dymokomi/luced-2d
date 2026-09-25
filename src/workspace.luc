@@ -71,6 +71,8 @@ pub class Workspace:
     var controls_revision: int = -1
     ## The Crop tool's box while the tool is active.
     pub var crop_box: CropBox? = none
+    ## Width over height the Crop tool keeps (the header's ratio), 0 for any.
+    pub var crop_ratio: float = 0.0
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     pub var contiguous: bool = true
@@ -157,7 +159,7 @@ pub class Workspace:
         self.next_name = document.next_name
         # The Crop tool's box goes around the document now shown.
         if self.crop_box != none:
-            self.crop_box = CropBox(float(self.width()), float(self.height()))
+            self.crop_box = self.fresh_crop_box()
         self.touch()
 
     ## Add `document` as a new tab and switch to it — or, when the only open
@@ -585,8 +587,25 @@ pub class Workspace:
                 box.end()
                 self.canvas.resize_canvas(box.width(), box.height(), -int(box.left), -int(box.top))
                 self.fitted = false
-            self.crop_box = CropBox(float(self.width()), float(self.height()))
+            self.crop_box = self.fresh_crop_box()
             self.touch()
+
+    ## A Crop tool box around the selection, or else the whole canvas, in the
+    ## header's ratio.
+    func fresh_crop_box(self) -> CropBox:
+        var box = CropBox(float(self.width()), float(self.height()))
+        let canvas = self.canvas
+        if canvas.has_selection() and canvas.selection_width() > 0 and canvas.selection_height() > 0:
+            box = CropBox(float(canvas.selection_width()), float(canvas.selection_height()), float(canvas.selection_left()), float(canvas.selection_top()))
+        box.set_ratio(self.crop_ratio)
+        return box
+
+    ## Keep `ratio` (width over height, 0 for any) in the Crop tool's box.
+    pub func set_crop_ratio(self, ratio: float):
+        self.crop_ratio = ratio
+        if let box = self.crop_box:
+            box.set_ratio(ratio)
+        self.touch()
 
     ## The canvas `width` by `height`, the old one's top-left at (`offset_x`, `offset_y`).
     pub func resize_canvas(self, width: int, height: int, offset_x: int, offset_y: int) -> unit!:
@@ -975,10 +994,10 @@ pub class Workspace:
         self.tool_used = false
         self.tool = tool
         self.erasing = tool == "eraser"
-        # The Crop tool's box starts around the whole canvas, and goes with the tool.
+        # The Crop tool's box starts around the selection or the whole canvas, and goes with the tool.
         if tool == "crop":
             if self.crop_box == none:
-                self.crop_box = CropBox(float(self.width()), float(self.height()))
+                self.crop_box = self.fresh_crop_box()
         else:
             self.crop_box = none
         self.touch()

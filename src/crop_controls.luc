@@ -1,0 +1,60 @@
+## The Crop tool's header, after Compositor's: the ratio the box keeps
+## (Free, the picture's own, or a common one) and the box's size in pixels as
+## it is dragged. Alt pulling about the middle is said in the tool's hint.
+from ui import HStack, Text, Menu, Command
+from workspace import Workspace
+from kit import Kit
+
+pub class CropControls:
+    pub let row: HStack
+    let ratio_menu: Menu
+    let readout: Text
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        var commands: list[Command] = []
+        var index = 0
+        for name in ratio_names():
+            let chosen = index
+            let command = Command(name, id = f"crop_ratio_{index}")
+            kit.bind(command, func () -> unit!:
+                self.choose(chosen))
+            commands.append(command)
+            index += 1
+        self.ratio_menu = Menu("Free ▾", commands, font = kit.font)
+        self.readout = Text("", font = kit.font, muted = true)
+        self.row = HStack([kit.labelled("Ratio", self.ratio_menu), self.readout], spacing = 12.0)
+
+    ## The ratio chosen and the box's size now.
+    pub func show(self) -> unit!:
+        let workspace = self.workspace
+        let names = ratio_names()
+        var shown = "Free"
+        var index = 0
+        while index < names.length:
+            if ratio_value(index, workspace) == workspace.crop_ratio and index > 0:
+                shown = names[index]
+            index += 1
+        self.ratio_menu.set_text(shown + " ▾")
+        if let box = workspace.crop_box:
+            self.readout.set_text(f"{box.width()} × {box.height()} px")
+        else:
+            self.readout.set_text("")
+
+    func choose(self, index: int) -> unit!:
+        self.workspace.set_crop_ratio(ratio_value(index, self.workspace))
+        self.show()
+
+## The ratios offered, in the menu's order.
+func ratio_names() -> list[str]:
+    return ["Free", "Original", "1:1", "4:3", "3:2", "16:9", "5:4", "3:4", "2:3", "9:16"]
+
+## Width over height for ratio `index`: 0 for Free, the canvas's own for Original.
+func ratio_value(index: int, workspace: Workspace) -> float:
+    if index == 0:
+        return 0.0
+    if index == 1:
+        return float(workspace.width()) / float(workspace.height())
+    let values = [1.0, 4.0 / 3.0, 1.5, 16.0 / 9.0, 1.25, 0.75, 2.0 / 3.0, 9.0 / 16.0]
+    return values[index - 2]

@@ -39,6 +39,7 @@ pub func main(arguments: list[str]) -> int!:
     guides_and_snapping()
     live_text()
     live_gradient()
+    crop_box_options()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -648,3 +649,33 @@ func live_gradient() -> unit!:
     view.event(Event(kind = EventKind.key_down, key = Key.escape))
     assert(workspace.gradient == none and workspace.canvas.step_serial() == steps + 2)
     panels.close()
+
+## The Crop tool's box starts at the selection, fits a ratio about its middle,
+## keeps it while dragged, and with Alt pulls both sides about the middle.
+func crop_box_options() -> unit!:
+    let workspace = Workspace(400, 300)
+    workspace.canvas.bind_headless()
+    workspace.canvas.select_rectangle(100, 50, 200, 100)
+    workspace.choose_tool("crop")
+    if let box = workspace.crop_box:
+        assert(box.left == 100.0 and box.top == 50.0 and box.width() == 200 and box.height() == 100)
+    else:
+        assert(false)
+    workspace.set_crop_ratio(1.0)
+    if let box = workspace.crop_box:
+        # Square, the largest inside, about the middle.
+        assert(box.width() == 100 and box.height() == 100 and box.left == 150.0)
+        # The right edge dragged out 40: the height follows, about the middle.
+        box.begin(3, 250.0, 100.0)
+        box.drag(290.0, 100.0, false)
+        box.end()
+        assert(box.width() == 140 and box.height() == 140)
+    workspace.set_crop_ratio(0.0)
+    if let box = workspace.crop_box:
+        # Alt: the left edge moves in as far as the right is pulled out.
+        let left = box.left
+        let right = box.right
+        box.begin(3, right, 100.0)
+        box.drag(right + 10.0, 100.0, false, true)
+        box.end()
+        assert(box.right == right + 10.0 and box.left == left - 10.0)
