@@ -83,8 +83,9 @@ Found beyond the old list, and first because they lose work:
     formats).
 17. [ ] Tool extras. Done (0.1.56): right-drag sets brush size (Shift:
     hardness); eyedropper sample ring; zoom % field; stepped zoom; pixel grid
-    at 800%+; Add Noise Uniform/Gaussian; Spot Healing's Content-Aware and
-    Proximity Match, Tab cycling tool modes, the idle tool (A) (0.1.58).
+    at 800%+; Add Noise Uniform/Gaussian; Tab cycling tool modes, the idle
+    tool (A) (0.1.58). Spot Healing keeps its one fill (Proximity Match):
+    content-aware filling is left to agentic tools through scripting.
     Left: the clone preview in the circle (the painter cannot clip the
     document's tiles to a circle yet).
     Originally: right-drag sets brush size (Shift: hardness); Spot Healing
@@ -95,11 +96,14 @@ Found beyond the old list, and first because they lose work:
     documents; drag a layer onto a tab; paste in place.
 19. [x] Filters: Motion Blur, Grain (and as a layer), Vignette, Bloom, Tonal
     Contrast, Lens Correction; blur and noise as adjustment layers.
-20. [x] Heavy: Content-Aware Fill, Select Subject, Object Selection, Remove
-    Background, Camera Raw Filter; update feed; remembered tool options;
+20. [x] Heavy: Select Subject, Object Selection, Remove Background, Camera
+    Raw Filter; update feed; remembered tool options;
     floating, movable adjustment panels. Subjects are found by color
     (GrabCut's idea, no trained model): a model would do better on busy
     pictures. Object Selection takes the marquee as its box, not a tool yet.
+    Content-Aware Fill was built and then removed (2026-09-25): the editor's
+    own tools stay traditional; smart ones come as agentic tools through
+    scripting.
 
 Then: the Script editor (from luced's code editor) and scripting — the Luce
 interpreter bundled as luc does it, a Maya-like API over Commands, and a

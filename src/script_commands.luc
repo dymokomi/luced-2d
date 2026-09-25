@@ -203,8 +203,6 @@ pub class ScriptCommands:
                 discard(workspace.add_adjustment_layer(spec.kind, spec.name, numbers))
         elif action == "filter":
             self.filter(field(fields, 0), fields)
-        elif action == "content_aware_fill":
-            workspace.content_aware_fill()
         elif action == "remove_background":
             workspace.remove_background()
         elif action == "resize_image":

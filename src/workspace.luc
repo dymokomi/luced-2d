@@ -52,8 +52,6 @@ pub class Workspace:
     pub var clone_aligned: bool = true
     pub var clone_all: bool = false
     pub var smear_mode: int = 0
-    ## Spot Healing fills from all around the spot (Content-Aware) or a patch beside it.
-    pub var heal_content_aware: bool = true
     ## The Gradient tool's options: radial rather than linear, the colors
     ## reversed, and from the foreground to transparent instead of to the
     ## background.
@@ -110,8 +108,6 @@ pub class Workspace:
     ## Layers selected besides `selected` (Cmd- and Shift-click in Layers), by
     ## id; and the groups folded shut in the Layers panel, by id.
     pub var picked: list[int]
-    ## How many content-aware fills were made, each seeding the next differently.
-    var fills: int = 0
     pub var collapsed: list[int]
     ## The selection tools' options (selection_options.luc), and the Text tool's.
     pub let selecting: SelectionOptions
@@ -498,13 +494,6 @@ pub class Workspace:
             self.canvas.deselect())
         self.touch()
 
-    ## Edit › Content-Aware Fill: the selection on the selected layer filled
-    ## from what is around it; each time a different fill.
-    pub func content_aware_fill(self) -> unit!:
-        self.fills += 1
-        self.canvas.content_aware_fill(self.selected_id(), self.fills)
-        self.touch()
-
     ## The clipboard's image where it was copied from, above the selected layer.
     pub func paste_in_place(self) -> unit!:
         let parent = self.canvas.layer_parent(self.selected)
@@ -733,7 +722,6 @@ pub class Workspace:
         self.brush.apply(self.canvas, self.red, self.green, self.blue, self.erasing)
         self.canvas.set_retouch(self.retouch_kind())
         self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
-        self.canvas.set_heal_mode(self.heal_content_aware)
         self.canvas.set_brush_aliased(self.tool == "pencil")
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
@@ -751,7 +739,7 @@ pub class Workspace:
 
     ## Tab: the active tool's next mode — a selection tool's new, add,
     ## subtract, intersect; the Smudge tool's smudge, blur, liquify; the
-    ## gradient's linear or radial; Spot Healing's two fills; the Clone Stamp's
+    ## gradient's linear or radial; the Clone Stamp's
     ## sample; the Move tool's auto-select; the brush and the eraser swap.
     pub func cycle_tool_mode(self) -> unit!:
         let tool = self.tool
@@ -761,8 +749,6 @@ pub class Workspace:
             self.smear_mode = (self.smear_mode + 1) % 3
         elif tool == "gradient":
             self.gradient_radial = not self.gradient_radial
-        elif tool == "heal":
-            self.heal_content_aware = not self.heal_content_aware
         elif tool == "clone":
             self.clone_all = not self.clone_all
         elif tool == "move":

@@ -37,7 +37,6 @@ pub class ToolHeader:
     pub let sample_menu: Menu
     pub let clone_controls: HStack
     pub let smear_menu: Menu
-    pub let heal_menu: Menu
     pub let gradient_menu: Menu
     pub let reverse_box: Checkbox
     pub let transparent_box: Checkbox
@@ -128,11 +127,6 @@ pub class ToolHeader:
         let liquify = self.choice("Liquify", "smear_liquify", func () -> unit!:
             self.workspace.smear_mode = 2)
         self.smear_menu = Menu("Smudge ▾", [smudge, blur, liquify], font = font)
-        let aware = self.choice("Content-Aware", "heal_content_aware", func () -> unit!:
-            self.workspace.heal_content_aware = true)
-        let proximity = self.choice("Proximity Match", "heal_proximity", func () -> unit!:
-            self.workspace.heal_content_aware = false)
-        self.heal_menu = Menu("Content-Aware ▾", [aware, proximity], font = font)
         let linear = self.choice("Linear", "gradient_linear", func () -> unit!:
             self.workspace.gradient_radial = false)
         let radial = self.choice("Radial", "gradient_radial", func () -> unit!:
@@ -147,7 +141,7 @@ pub class ToolHeader:
             self.workspace.shape_weight = value))
         self.sides_row = kit.labelled("Sides", self.scrubber(float(workspace.shape_sides), 3.0, 64.0, "", func (value: float) -> unit!:
             self.workspace.shape_sides = int(value)))
-        self.bar = Toolbar([self.title, self.smear_menu, self.heal_menu, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
+        self.bar = Toolbar([self.title, self.smear_menu, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
                             self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
@@ -199,8 +193,6 @@ pub class ToolHeader:
         self.aligned_box.set_checked(workspace.clone_aligned)
         self.sample_menu.set_text("All Layers ▾" if workspace.clone_all else "This Layer ▾")
         self.smear_menu.set_text(["Smudge ▾", "Blur ▾", "Liquify ▾"][workspace.smear_mode])
-        self.heal_menu.layout().set_visible(not transforming and tool == "heal")
-        self.heal_menu.set_text("Content-Aware ▾" if workspace.heal_content_aware else "Proximity Match ▾")
         self.gradient_controls.layout().set_visible(not transforming and tool == "gradient")
         self.gradient_menu.set_text("Radial ▾" if workspace.gradient_radial else "Linear ▾")
         self.reverse_box.set_checked(workspace.gradient_reverse)

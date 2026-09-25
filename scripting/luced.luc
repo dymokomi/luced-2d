@@ -214,10 +214,6 @@ pub func filter(name: str, settings: list[float]? = none):
         fields.append(str(value))
     send("filter", fields)
 
-## Fill the selection with what is around it.
-pub func content_aware_fill():
-    send("content_aware_fill", [])
-
 ## Hide everything but the selected layer's subject behind a new mask.
 pub func remove_background():
     send("remove_background", [])

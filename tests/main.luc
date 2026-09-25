@@ -834,11 +834,6 @@ func filter_dialogs() -> unit!:
     let panels = Panels(workspace, Actions(), Font())
     workspace.set_color(0.5, 0.5, 0.5)
     workspace.fill_selection(false)
-    # Content-Aware Fill over a selection.
-    workspace.canvas.select_rectangle(10, 10, 8, 8, 0)
-    workspace.content_aware_fill()
-    assert(workspace.canvas.undo_name() == "Content-Aware Fill")
-    workspace.canvas.deselect()
     let names = ["Motion Blur", "Lens Correction", "Bloom", "Tonal Contrast"]
     var filter = 0
     while filter < 4:
@@ -905,10 +900,6 @@ func tool_modes() -> unit!:
     workspace.tool = "marquee"
     workspace.cycle_tool_mode()
     assert(workspace.selecting.mode == 1)
-    workspace.tool = "heal"
-    let before = workspace.heal_content_aware
-    workspace.cycle_tool_mode()
-    assert(workspace.heal_content_aware != before)
     workspace.tool = "brush"
     workspace.cycle_tool_mode()
     assert(workspace.tool == "eraser" and workspace.erasing)

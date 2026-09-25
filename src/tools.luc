@@ -43,7 +43,7 @@ pub func tools() -> list[Tool]!:
             Tool("pencil", "Pencil", "Pencil", "pencil-tool", Key.b, "Drag to draw hard-edged, whole pixels · [ ] size · shift-click draws a line", shift = true),
             Tool("eraser", "Eraser", "Eraser", "eraser-tool", Key.e, "Drag to erase · [ ] size · Space to pan"),
             Tool("clone", "Clone Stamp", "Clone Stamp", "clone-stamp", Key.s, "Alt-click where to copy from · drag to stamp it · [ ] size · digits set opacity"),
-            Tool("heal", "Spot Healing Brush", "Spot Healing", "healing-brush", Key.j, "Brush over a spot: it is filled from around it (the mode in the header) · Tab switches · [ ] size"),
+            Tool("heal", "Spot Healing Brush", "Spot Healing", "healing-brush", Key.j, "Brush over a spot: it is filled from the picture beside it · [ ] size"),
             Tool("smear", "Smudge", "Smudge", "smudge-tool", Key.r, "Drag to smudge, blur or push pixels (the mode in the header) · digits set strength"),
             Tool("rectangle", "Rectangle", "Rectangle", "rectangle-tool", Key.u, "Drag a rectangle onto a layer of its own · shift squares it · alt draws from the centre"),
             Tool("shape_ellipse", "Ellipse", "Ellipse", "ellipse-tool", Key.u, "Drag an ellipse onto a layer of its own · shift makes a circle · alt draws from the centre", shift = true),
