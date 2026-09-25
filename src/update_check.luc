@@ -1,0 +1,80 @@
+## The update feed: when the window opens, luced-2d asks luc for the newest
+## release in the background (`luc latest`, over the registry) and, when it is
+## newer than this build, says so in the status bar with how to get it.
+## Offline, without luc, or with a luc too old to answer, nothing is said.
+from process import Command
+import files
+import paths
+import platform
+
+pub class UpdateCheck:
+    var command: Command? = none
+    let current: str
+    ## What to tell the user, once there is something to tell.
+    pub var notice: str = ""
+
+    pub func init(self, current: str):
+        self.current = current
+
+    ## Ask luc, in the background.
+    pub func start(self) -> unit!:
+        let luc = luc_program()
+        self.command = Command(luc, ["latest", "dymokomi/luced-2d"], output_limit = 4096) catch failure:
+            discard(failure)
+            recover none
+
+    ## Look at luc's answer once it has one: true the one time a newer
+    ## release is found (`notice` says what).
+    pub func poll(self) -> bool!:
+        let command = self.command else return false
+        if not command.is_finished():
+            return false
+        let code = command.exit_code() else -1
+        let answer = command.output().trim()
+        command.close()
+        self.command = none
+        if code != 0 or not newer(answer, self.current):
+            return false
+        self.notice = f"luced-2d {answer} is out (this is {self.current}) — luc install dymokomi/luced-2d updates it"
+        return true
+
+    pub func close(self):
+        if let command = self.command:
+            command.close()
+        self.command = none
+
+## luc where the Luce installer puts it, else wherever PATH finds it.
+func luc_program() -> str!:
+    let name = "luc.exe" if platform.windows else "luc"
+    let installed = paths.join(paths.join(paths.join(files.home_directory(), ".local"), "luce"), paths.join("bin", name))
+    let kind = files.path_kind(installed) catch failure:
+        discard(failure)
+        return "luc"
+    return installed if kind == files.FileKind.regular else "luc"
+
+## Whether dotted version `candidate` is later than `current`; anything that
+## is not a version is not later.
+pub func newer(candidate: str, current: str) -> bool:
+    let a = candidate.split(".")
+    let b = current.split(".")
+    if a.length != 3 or b.length != 3:
+        return false
+    var index = 0
+    while index < 3:
+        let x = number_of(a[index])
+        let y = number_of(b[index])
+        if x < 0 or y < 0:
+            return false
+        if x != y:
+            return x > y
+        index += 1
+    return false
+
+func number_of(text: str) -> int:
+    if text.length == 0 or text.length > 9:
+        return -1
+    var value = 0
+    for character in text:
+        let digit = "0123456789".index_of(character) else return -1
+        value = value * 10 + digit
+    return value

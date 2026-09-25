@@ -151,7 +151,12 @@ pub func adjustments() -> list[Adjustment]:
             # Add Noise (the Filter menu's) makes its grain once; this one is live, on a layer.
             Adjustment(14, "Noise", [Knob("Amount", 0.0, 300.0, 12.0, 1.0 / 300.0, 1, "%")], toggles = [Toggle("Monochromatic"), Toggle("Uniform")], menu = layer_only),
             # Gaussian Blur (the Filter menu's) blurs the pixels once; this one blurs what is below, live.
-            Adjustment(15, "Blur", [Knob("Radius", 0.5, 250.0, 8.0, 1.0, 1, " px")], menu = layer_only)]
+            Adjustment(15, "Blur", [Knob("Radius", 0.5, 250.0, 8.0, 1.0, 1, " px")], menu = layer_only),
+            Adjustment(16, "Camera Raw", [Knob("Temperature", -100.0, 100.0, 0.0, percent), Knob("Tint", -100.0, 100.0, 0.0, percent),
+                                          Knob("Exposure", -5.0, 5.0, 0.0, 1.0, 2), Knob("Contrast", -100.0, 100.0, 0.0, percent),
+                                          Knob("Highlights", -100.0, 100.0, 0.0, percent), Knob("Shadows", -100.0, 100.0, 0.0, percent),
+                                          Knob("Whites", -100.0, 100.0, 0.0, percent), Knob("Blacks", -100.0, 100.0, 0.0, percent),
+                                          Knob("Vibrance", -100.0, 100.0, 0.0, percent), Knob("Saturation", -100.0, 100.0, 0.0, percent)], menu = in_filter)]
 
 ## The Gradient Map's kind: its colors, the foreground to the background, go after its toggle.
 ## The kinds some code treats apart: Curves keeps curves, Gradient Map colors.

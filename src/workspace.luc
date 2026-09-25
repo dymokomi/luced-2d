@@ -105,6 +105,8 @@ pub class Workspace:
     ## Layers selected besides `selected` (Cmd- and Shift-click in Layers), by
     ## id; and the groups folded shut in the Layers panel, by id.
     pub var picked: list[int]
+    ## How many content-aware fills were made, each seeding the next differently.
+    var fills: int = 0
     pub var collapsed: list[int]
     ## The selection tools' options (selection_options.luc), and the Text tool's.
     pub let selecting: SelectionOptions
@@ -470,6 +472,13 @@ pub class Workspace:
             let id = self.canvas.paste(int(x), int(y))
             self.canvas.move_into(id, parent, position + 1)
             self.select_id(id))
+
+    ## Edit › Content-Aware Fill: the selection on the selected layer filled
+    ## from what is around it; each time a different fill.
+    pub func content_aware_fill(self) -> unit!:
+        self.fills += 1
+        self.canvas.content_aware_fill(self.selected_id(), self.fills)
+        self.touch()
 
     ## The clipboard's image where it was copied from, above the selected layer.
     pub func paste_in_place(self) -> unit!:

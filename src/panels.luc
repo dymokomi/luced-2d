@@ -236,6 +236,10 @@ pub class Panels:
         kit.bind(actions.fill, func () -> unit!:
             self.workspace.fill_selection(false)
             self.refresh())
+        kit.bind(actions.content_aware_fill, func () -> unit!:
+            self.attempt("Content-Aware Fill", func () -> unit!:
+                self.workspace.content_aware_fill()
+                self.refresh()))
         kit.bind(actions.fill_background, func () -> unit!:
             self.workspace.fill_selection(false, true)
             self.refresh())

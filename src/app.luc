@@ -7,17 +7,20 @@ from workspace import Workspace
 from panels import Panels
 from actions import Actions
 from settings import Store
+from tool_memory import tools_path, restore_tools, remember_tools
+from update_check import UpdateCheck
 import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.57"
+pub let version: str = "0.1.58"
 
 pub class Luce2D:
     pub let app: Application
     pub let workspace: Workspace
     pub let panels: Panels
     let connections: list[Connection]
+    let update: UpdateCheck
 
     pub func init(self) -> unit!:
         # Crash reports first, so anything below that traps leaves one; then the
@@ -30,18 +33,26 @@ pub class Luce2D:
         let settings = store.load()
         let workspace = Workspace(settings.canvas_width, settings.canvas_height)
         let actions = Actions()
+        # The tool options as the last run left them, the tool in hand with them.
+        restore_tools(workspace, tools_path())
         let panels = Panels(workspace, actions, font, store)
+        panels.choose_tool(workspace.tool)
         let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme(workspace.look))
         panels.files.app = app
         # Keys go to the canvas from the start, so a tool's letter picks the tool.
         app.focus(panels.view.layout())
         app.set_close_handler(panels.files.can_quit)
         panels.settings_dialog.app = app
+        # Whether a newer release is out, asked in the background and told once.
+        let update = UpdateCheck(version)
+        update.start()
         let connections: list[Connection] = []
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
             panels.view.march()
-            panels.refresh_if_changed()))
+            panels.refresh_if_changed()
+            if update.poll():
+                panels.status.set_text(update.notice)))
         app.set_commands(actions.all)
         # What input could not do (a filter on a group, a file that would not
         # open) is said in a prompt rather than ending the run.
@@ -55,6 +66,7 @@ pub class Luce2D:
         self.workspace = workspace
         self.panels = panels
         self.connections = connections
+        self.update = update
 
     pub func run(self, arguments: list[str]) -> unit!:
         # Luce's `main` gets the arguments without the program: each is a file to open.
@@ -65,6 +77,9 @@ pub class Luce2D:
         self.app.run(frame_limit = 3 if "--smoke" in arguments else 0)
 
     pub func close(self):
+        remember_tools(self.workspace, tools_path()) catch failure:
+            discard(failure)
+        self.update.close()
         for connection in self.connections:
             connection.disconnect()
         self.connections.clear()

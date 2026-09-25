@@ -16,6 +16,10 @@ from adjustments import adjustments
 from settings import Settings
 from ui import Event, Application
 from layer_effects import EffectRows
+from update_check import newer
+from tool_memory import tools_path, restore_tools, remember_tools
+import paths
+import files
 from layer_transfer import copy_layers, paste_layers, send_layers
 from input import EventKind, Key
 import math
@@ -49,6 +53,8 @@ pub func main(arguments: list[str]) -> int!:
     brush_sizing()
     whole_layers()
     filter_dialogs()
+    tool_options_kept()
+    update_versions()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -815,6 +821,11 @@ func filter_dialogs() -> unit!:
     let panels = Panels(workspace, Actions(), Font())
     workspace.set_color(0.5, 0.5, 0.5)
     workspace.fill_selection(false)
+    # Content-Aware Fill over a selection.
+    workspace.canvas.select_rectangle(10, 10, 8, 8, 0)
+    workspace.content_aware_fill()
+    assert(workspace.canvas.undo_name() == "Content-Aware Fill")
+    workspace.canvas.deselect()
     let names = ["Motion Blur", "Lens Correction", "Bloom", "Tonal Contrast"]
     var filter = 0
     while filter < 4:
@@ -831,3 +842,27 @@ func filter_dialogs() -> unit!:
         discard(workspace.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults())))
     assert(workspace.layer_count() == before + 4 and workspace.canvas.layer_adjustment(workspace.selected) == 15)
     panels.close()
+
+## Tool options written when the window closes come back when it opens.
+func tool_options_kept() -> unit!:
+    let path = tools_path(paths.join(files.home_directory(), ".luced-2d-test"))
+    let first = Workspace(40, 30)
+    first.tool = "lasso"
+    first.brush.diameter = 77.0
+    first.selecting.feather = 9
+    first.typing.family = "Menlo"
+    first.gradient_radial = true
+    remember_tools(first, path)
+    let second = Workspace(40, 30)
+    restore_tools(second, path)
+    assert(second.tool == "lasso" and second.brush.diameter == 77.0 and second.selecting.feather == 9 and second.typing.family == "Menlo" and second.gradient_radial)
+    # What the file gets wrong keeps its default.
+    files.write_text(path, "[brush]\ndiameter = -5\n[tool]\ncurrent = \"nothing\"\n")
+    let third = Workspace(40, 30)
+    restore_tools(third, path)
+    assert(third.brush.diameter == 32.0 and third.tool == "brush")
+
+## The update feed tells of a later release only.
+func update_versions() -> unit!:
+    assert(newer("0.1.58", "0.1.57") and newer("0.2.0", "0.1.99") and newer("1.0.0", "0.9.9"))
+    assert(not newer("0.1.57", "0.1.57") and not newer("0.1.9", "0.1.10") and not newer("error: offline", "0.1.57") and not newer("", "0.1.57"))

@@ -7,7 +7,7 @@ from adjustments import adjustments, in_adjust, in_filter
 
 pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
     return Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.import_image, actions.save, actions.save_as, actions.export_png, actions.export_jpeg, divider(), actions.close_document], font = font),
-                    Menu("Edit", [actions.undo, actions.redo, divider(), actions.cut, actions.copy, actions.copy_merged, actions.paste, actions.paste_in_place, divider(), actions.free_transform, actions.flip_horizontal, actions.flip_vertical, divider(), actions.fill, actions.fill_background, actions.clear,
+                    Menu("Edit", [actions.undo, actions.redo, divider(), actions.cut, actions.copy, actions.copy_merged, actions.paste, actions.paste_in_place, divider(), actions.free_transform, actions.flip_horizontal, actions.flip_vertical, divider(), actions.fill, actions.content_aware_fill, actions.fill_background, actions.clear,
                                   actions.swap_colors, actions.reset_colors, divider(), actions.settings], font = font),
                     Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
                     Menu("Image", [actions.document_settings, divider(), actions.crop, actions.flip_canvas_horizontal, actions.flip_canvas_vertical, divider(), actions.canvas_size, actions.reveal_all, actions.image_size, actions.trim], font = font),
