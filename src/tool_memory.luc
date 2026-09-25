@@ -1,5 +1,6 @@
 ## Tool options remembered between runs, as Photoshop keeps them: the tool in
-## hand, the brush, the selection, wand, type, gradient, clone and transform
+## hand, the brush, the selection, wand, type, gradient, clone, healing,
+## smudge and transform
 ## options and the crop ratio, in `~/.luced-2d/tools.toml`, written when the
 ## window closes and read when it opens. What the file lacks or gets out of
 ## range keeps its default; an unreadable file is passed over.
@@ -57,6 +58,8 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     workspace.gradient_transparent = boolean(table, "gradient.transparent", workspace.gradient_transparent)
     workspace.clone_aligned = boolean(table, "clone.aligned", workspace.clone_aligned)
     workspace.clone_all = boolean(table, "clone.all_layers", workspace.clone_all)
+    workspace.heal_content_aware = boolean(table, "heal.content_aware", workspace.heal_content_aware)
+    workspace.smear_mode = int(number(table, "smear.mode", float(workspace.smear_mode), 0.0, 2.0))
     workspace.auto_select = boolean(table, "move.auto_select", workspace.auto_select)
     workspace.transform_sampling = int(number(table, "transform.sampling", float(workspace.transform_sampling), 0.0, 2.0))
     workspace.lock_transform_ratio = boolean(table, "transform.lock_ratio", workspace.lock_transform_ratio)
@@ -81,6 +84,7 @@ pub func serialize_tools(workspace: Workspace) -> str:
     text = text + f"[type]\nfamily = \"{typing.family}\"\nstyle = \"{typing.style}\"\nsize = {typing.size}\nalignment = {typing.alignment}\n\n"
     text = text + f"[gradient]\nradial = {flag(workspace.gradient_radial)}\nreverse = {flag(workspace.gradient_reverse)}\ntransparent = {flag(workspace.gradient_transparent)}\n\n"
     text = text + f"[clone]\naligned = {flag(workspace.clone_aligned)}\nall_layers = {flag(workspace.clone_all)}\n\n"
+    text = text + f"[heal]\ncontent_aware = {flag(workspace.heal_content_aware)}\n\n[smear]\nmode = {workspace.smear_mode}\n\n"
     text = text + f"[move]\nauto_select = {flag(workspace.auto_select)}\n\n"
     text = text + f"[transform]\nsampling = {workspace.transform_sampling}\nlock_ratio = {flag(workspace.lock_transform_ratio)}\n\n"
     text = text + f"[crop]\nratio = {workspace.crop_ratio}\n"

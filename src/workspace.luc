@@ -52,6 +52,8 @@ pub class Workspace:
     pub var clone_aligned: bool = true
     pub var clone_all: bool = false
     pub var smear_mode: int = 0
+    ## Spot Healing fills from all around the spot (Content-Aware) or a patch beside it.
+    pub var heal_content_aware: bool = true
     ## The Gradient tool's options: radial rather than linear, the colors
     ## reversed, and from the foreground to transparent instead of to the
     ## background.
@@ -727,6 +729,7 @@ pub class Workspace:
         self.brush.apply(self.canvas, self.red, self.green, self.blue, self.erasing)
         self.canvas.set_retouch(self.retouch_kind())
         self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
+        self.canvas.set_heal_mode(self.heal_content_aware)
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
 
@@ -740,6 +743,29 @@ pub class Workspace:
         if self.tool == "smear":
             return 4 if self.smear_mode == 0 else (3 if self.smear_mode == 1 else 5)
         return 0
+
+    ## Tab: the active tool's next mode — a selection tool's new, add,
+    ## subtract, intersect; the Smudge tool's smudge, blur, liquify; the
+    ## gradient's linear or radial; Spot Healing's two fills; the Clone Stamp's
+    ## sample; the Move tool's auto-select; the brush and the eraser swap.
+    pub func cycle_tool_mode(self) -> unit!:
+        let tool = self.tool
+        if tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "wand":
+            self.selecting.mode = (self.selecting.mode + 1) % 4
+        elif tool == "smear":
+            self.smear_mode = (self.smear_mode + 1) % 3
+        elif tool == "gradient":
+            self.gradient_radial = not self.gradient_radial
+        elif tool == "heal":
+            self.heal_content_aware = not self.heal_content_aware
+        elif tool == "clone":
+            self.clone_all = not self.clone_all
+        elif tool == "move":
+            self.auto_select = not self.auto_select
+        elif tool == "brush" or tool == "eraser":
+            self.tool = "eraser" if tool == "brush" else "brush"
+            self.erasing = self.tool == "eraser"
+        self.touch()
 
     ## Alt-click with the Clone Stamp: where it copies from.
     pub func set_clone_source(self, x: float, y: float):

@@ -82,8 +82,10 @@ Found beyond the old list, and first because they lose work:
     Camera RAW.
 17. [ ] Tool extras. Done (0.1.56): right-drag sets brush size (Shift:
     hardness); eyedropper sample ring; zoom % field; stepped zoom; pixel grid
-    at 800%+; Add Noise Uniform/Gaussian. Left: Spot Healing modes, clone
-    preview in the circle, Tab cycling tool modes, the idle tool (A).
+    at 800%+; Add Noise Uniform/Gaussian; Spot Healing's Content-Aware and
+    Proximity Match, Tab cycling tool modes, the idle tool (A) (0.1.58).
+    Left: the clone preview in the circle (the painter cannot clip the
+    document's tiles to a circle yet).
     Originally: right-drag sets brush size (Shift: hardness); Spot Healing
     modes (Create Texture, Proximity Match); clone preview in the circle;
     eyedropper sample ring; Tab cycles tool modes; idle tool (A); zoom % field;

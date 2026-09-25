@@ -427,6 +427,11 @@ pub class CanvasView: Widget:
                     self.workspace.finish_crop(event.key == Key.enter)
                 if let changed = self.on_changed:
                     changed()
+            elif event.key == Key.tab and not event.meta and not event.control and not event.alt and not self.painting:
+                # Tab steps the tool through its modes.
+                self.workspace.cycle_tool_mode()
+                if let changed = self.on_changed:
+                    changed()
             elif not event.meta and not event.control and not event.repeated and digit_value(event.key) >= 0:
                 self.type_digit(digit_value(event.key))
             elif event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down:
@@ -537,6 +542,9 @@ pub class CanvasView: Widget:
             self.zoom_x = event.x
             self.zoom_y = event.y
             self.zoom_start = workspace.zoom
+        elif tool == "idle":
+            # The idle tool rests on the canvas and does nothing there.
+            return
         elif tool == "clone" and event.alt:
             # Alt-click: where the Clone Stamp copies from, as Photoshop's.
             workspace.set_clone_source(x, y)

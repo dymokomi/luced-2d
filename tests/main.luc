@@ -56,6 +56,7 @@ pub func main(arguments: list[str]) -> int!:
     tool_options_kept()
     update_versions()
     subject_selection()
+    tool_modes()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -886,3 +887,24 @@ func subject_selection() -> unit!:
     workspace.canvas.deselect()
     workspace.remove_background()
     assert(workspace.canvas.layer_masked(workspace.selected) and not workspace.canvas.has_selection() and workspace.canvas.undo_name() == "Remove Background")
+
+## Tab steps a tool through its modes; the idle tool leaves the canvas alone.
+func tool_modes() -> unit!:
+    let workspace = Workspace(40, 30)
+    workspace.tool = "marquee"
+    workspace.cycle_tool_mode()
+    assert(workspace.selecting.mode == 1)
+    workspace.tool = "heal"
+    let before = workspace.heal_content_aware
+    workspace.cycle_tool_mode()
+    assert(workspace.heal_content_aware != before)
+    workspace.tool = "brush"
+    workspace.cycle_tool_mode()
+    assert(workspace.tool == "eraser" and workspace.erasing)
+    let panels = Panels(workspace, Actions(), Font())
+    panels.choose_tool("idle")
+    let steps = workspace.canvas.undo_name()
+    press(panels.view, 10.0, 10.0)
+    release(panels.view, 12.0, 12.0)
+    assert(workspace.canvas.undo_name() == steps and workspace.tool == "idle")
+    panels.close()
