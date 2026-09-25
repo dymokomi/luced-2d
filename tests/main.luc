@@ -14,7 +14,7 @@ from guides import GuideDrag
 from snapping import Snapper
 from adjustments import adjustments
 from settings import Settings
-from ui import Event
+from ui import Event, Application
 from input import EventKind, Key
 import math
 import window
@@ -482,6 +482,22 @@ func size_dialogs() -> unit!:
     assert(not dialogs.trim.trim(0, true, true, true, true))
     workspace.canvas.undo()
     assert(workspace.width() == 60)
+    # One dialog at a time: Canvas Size waits while New Canvas is open. Escape
+    # cancels the open one; Enter accepts it (New Canvas creates).
+    let app = Application(panels.body)
+    app.layout(1200.0, 800.0)
+    dialogs.new_canvas.open()
+    dialogs.canvas_size.open()
+    assert(dialogs.new_canvas.dialog.is_open() and not dialogs.canvas_size.dialog.is_open())
+    app.layout(1200.0, 800.0)
+    app.dispatch(Event(kind = EventKind.key_down, key = Key.escape))
+    assert(not dialogs.new_canvas.dialog.is_open())
+    let before = workspace.document_count()
+    dialogs.new_canvas.open()
+    app.layout(1200.0, 800.0)
+    app.dispatch(Event(kind = EventKind.key_down, key = Key.enter))
+    assert(not dialogs.new_canvas.dialog.is_open() and workspace.document_count() == before + 1)
+    app.close()
     panels.close()
 
 ## The Polygonal Lasso and the selection options: corners clicked and closed
@@ -564,8 +580,20 @@ func live_text() -> unit!:
     editing.begin_existing(1)
     assert(workspace.typing.size == 20.0)
     editing.replace_text("Changed")
+    workspace.typing.size = 44.0
+    editing.restyle()
     editing.cancel()
-    assert(workspace.canvas.layer_text(1) == "Hello there")
+    assert(workspace.canvas.layer_text(1) == "Hello there" and workspace.canvas.layer_type_value(1, 0) == 20.0)
+    # Cancelled without a change, the document stays as saved.
+    workspace.canvas.mark_saved()
+    editing.begin_existing(1)
+    editing.cancel()
+    assert(not workspace.canvas.modified())
+    # A new one cancelled goes, leaving nothing changed.
+    editing.begin_new(80.0, 80.0, 0.0)
+    editing.replace_text("Gone")
+    editing.cancel()
+    assert(workspace.layer_count() == 2 and not workspace.canvas.modified())
     # Its box, not only its ink, is where a click edits it; the header restyles it once committed.
     assert(workspace.text_layer_at(12.0, 15.0, 2.0) == 1 and workspace.text_layer_at(190.0, 110.0, 2.0) == -1)
     workspace.select(1)

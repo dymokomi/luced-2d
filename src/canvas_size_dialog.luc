@@ -65,8 +65,11 @@ pub class CanvasSizeDialog:
                               kit.dialog_row("New canvas", self.extension_menu, 110.0),
                               Text("What falls outside stays past the canvas.", font = font, muted = true),
                               HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
     pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
         let workspace = self.workspace
         self.sizes.reset(workspace.width(), workspace.height(), workspace.canvas.resolution())
         self.now_text.set_text(f"Now: {workspace.width()} × {workspace.height()} px")

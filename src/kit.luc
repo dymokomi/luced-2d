@@ -3,7 +3,7 @@
 ## with a number field. A Kit keeps each signal connection it makes; `close`
 ## drops them all. Also two helpers widgets share: a one-point outline, and
 ## the dragged files a drop area takes.
-from ui import Font, Text, Button, HStack, VStack, Size, Checkbox, ButtonStyle, Rule, Widget, Command, Slider, NumberField, Layout, Painter
+from ui import Font, Text, Button, Dialog, HStack, VStack, Size, Checkbox, ButtonStyle, Rule, Widget, Command, Slider, NumberField, Layout, Painter
 from gpu import Rect, Color
 from interop import Connection
 
@@ -31,10 +31,30 @@ pub class SliderField:
 pub class Kit:
     pub let font: Font
     let connections: list[Connection]
+    ## The window's top-level dialogs, one open at a time.
+    let dialogs: list[Dialog]
 
     pub func init(self, font: Font):
         self.font = font
         self.connections = []
+        self.dialogs = []
+
+    ## Escape and Enter on the open `dialog` do what its Cancel and OK buttons
+    ## do. The dialog becomes one of the window's top-level dialogs.
+    pub func dialog_keys(self, dialog: Dialog, cancel: func() -> unit!, accept: func() -> unit!) -> unit!:
+        self.connections.append(dialog.on_cancel(cancel))
+        self.connections.append(dialog.on_accept(accept))
+        self.dialogs.append(dialog)
+
+    ## Whether `dialog` may open: it is open already, or no other top-level
+    ## dialog is (a second would stack over the first, as Ctrl-N twice did).
+    pub func may_open(self, dialog: Dialog) -> bool:
+        if dialog.is_open():
+            return true
+        for other in self.dialogs:
+            if other.is_open():
+                return false
+        return true
 
     ## Keep a connection made elsewhere, so `close` drops it too.
     pub func keep(self, connection: Connection):

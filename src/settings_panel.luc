@@ -223,11 +223,11 @@ pub class SettingsDialog:
         self.conflict.set_text("")
         self.show_selected()
 
-    func cancel(self) -> unit!:
+    pub func cancel(self) -> unit!:
         self.dialog.hide()
 
     ## Save writes the file and applies the draft as the live settings.
-    func save(self) -> unit!:
+    pub func save(self) -> unit!:
         self.settings = self.draft.copy()
         self.store.save(self.settings)
         self.dialog.hide()

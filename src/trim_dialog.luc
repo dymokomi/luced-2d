@@ -7,6 +7,7 @@ from kit import Kit
 
 pub class TrimDialog:
     pub let dialog: Dialog
+    let kit: Kit
     let based_menu: Menu
     let top_box: Checkbox
     let bottom_box: Checkbox
@@ -19,6 +20,7 @@ pub class TrimDialog:
     let workspace: Workspace
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.kit = kit
         self.workspace = workspace
         let font = kit.font
         var choices: list[Command] = []
@@ -40,8 +42,11 @@ pub class TrimDialog:
         self.dialog = Dialog([Text("Trim", font = font), kit.dialog_row("Based on", self.based_menu, 110.0),
                               kit.dialog_row("Trim away", HStack([self.top_box, self.bottom_box, self.left_box, self.right_box], spacing = 12.0), 110.0),
                               HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
     pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
         self.dialog.open()
 
     func cancel(self) -> unit!:

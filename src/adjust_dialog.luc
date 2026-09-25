@@ -13,6 +13,7 @@ import time
 
 pub class AdjustDialog:
     pub let dialog: Dialog
+    let kit: Kit
     pub let title: Text
     pub let controls: AdjustmentControls
     ## The open kind, or -1.
@@ -27,6 +28,7 @@ pub class AdjustDialog:
     let workspace: Workspace
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.kit = kit
         self.workspace = workspace
         self.title = Text("", font = kit.font)
         self.controls = AdjustmentControls(workspace, kit)
@@ -35,6 +37,7 @@ pub class AdjustDialog:
         var items: list[Widget] = [self.title, self.controls.view]
         items.append(HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
         self.dialog = Dialog(items, width = 440.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
     ## Adjust menu: `kind` on the selected layer's pixels.
     pub func open(self, kind: int) -> unit!:
@@ -50,6 +53,8 @@ pub class AdjustDialog:
         self.start(noise_kind)
 
     func start(self, kind: int) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
         self.close_preview(false)
         self.workspace.begin_preview() catch failure:
             self.fail(f"Cannot adjust: {failure.message}")

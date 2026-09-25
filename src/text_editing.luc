@@ -18,8 +18,8 @@ pub class TextEditing:
     var x: float = 0.0
     var y: float = 0.0
     var box_width: float = 0.0
-    ## What an existing layer said before, for Cancel.
-    var original: str = ""
+    ## The history step before the edit began: Cancel undoes back to it.
+    var start: int = 0
     ## Set while the editor is filled from code, so that is not taken as typing.
     var loading: bool = false
     let connections: list[Connection]
@@ -38,6 +38,7 @@ pub class TextEditing:
         self.dialog = Dialog([Text("Text", font = kit.font), self.editor,
                               HStack([Text(commit.shortcut().text() + " commits", font = kit.font, muted = true), Spacer(), kit.button("Cancel", self.cancel),
                                       kit.button("Commit", self.commit)], spacing = 8.0)], width = 400.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.commit)
         self.dialog.layout().set_modal(false)
 
     pub func active(self) -> bool:
@@ -48,6 +49,7 @@ pub class TextEditing:
     pub func begin_new(self, x: float, y: float, box_width: float) -> unit!:
         self.finish_any()
         let workspace = self.workspace
+        self.start = workspace.canvas.step_serial()
         workspace.add_layer()
         self.id = workspace.selected_id()
         # Named by its words when committed; until then, plainly a text layer.
@@ -56,7 +58,6 @@ pub class TextEditing:
         self.x = x
         self.y = y
         self.box_width = box_width
-        self.original = ""
         self.set_words("")
         self.open("")
 
@@ -70,9 +71,11 @@ pub class TextEditing:
         self.x = canvas.layer_type_value(index, 4)
         self.y = canvas.layer_type_value(index, 5)
         self.box_width = canvas.layer_type_value(index, 6)
-        self.original = canvas.layer_text(index)
         self.workspace.typing.take(canvas, index)
-        self.open(self.original)
+        # This edit is its own step, even after typing into the same layer before.
+        canvas.separate_next_step()
+        self.start = canvas.step_serial()
+        self.open(canvas.layer_text(index))
 
     func open(self, text: str) -> unit!:
         self.loading = true
@@ -139,23 +142,17 @@ pub class TextEditing:
         workspace.touch()
         self.refresh()
 
-    ## Put it back: a new layer goes, an existing one says what it said.
+    ## Put it back as it was: the edit's steps are undone, so a new layer goes
+    ## and an existing one has its words and style again; an edit that changed
+    ## nothing leaves the document unmodified.
     pub func cancel(self) -> unit!:
         if self.id == 0:
             return
-        let id = self.id
         self.close()
         let workspace = self.workspace
-        if workspace.index_of(id) < 0:
-            return
-        if self.created:
-            workspace.canvas.remove_layer(id)
-            workspace.select(0)
-        else:
-            self.id = id
-            self.set_words(self.original)
-            self.id = 0
-        workspace.touch()
+        let canvas = workspace.canvas
+        while canvas.step_serial() != self.start and canvas.can_undo() and not canvas.previewing():
+            workspace.undo()
         self.refresh()
 
     func close(self):

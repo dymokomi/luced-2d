@@ -56,8 +56,7 @@ pub class DocumentSettings:
         self.resample = Checkbox("Resample pixels", true, font = font)
         let cancel = Button("Cancel", font = font)
         let apply = Button("Apply", font = font)
-        self.connections.append(cancel.on_click(func () -> unit!:
-            self.dialog.hide()))
+        self.connections.append(cancel.on_click(self.cancel))
         self.connections.append(apply.on_click(self.apply))
         self.dialog = Dialog([Text("Document Settings", font = font),
                               self.row("Width", self.width_field), self.row("Height", self.height_field),
@@ -105,7 +104,10 @@ pub class DocumentSettings:
         return pixels_per(self.units, self.resolution_field.value())
 
     ## Apply: the resolution and profile, then the size, resampled or not.
-    func apply(self) -> unit!:
+    pub func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    pub func apply(self) -> unit!:
         let canvas = self.workspace.canvas
         canvas.set_resolution(self.resolution_field.value())
         canvas.set_profile(self.profile)

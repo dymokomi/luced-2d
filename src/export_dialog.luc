@@ -31,8 +31,11 @@ pub class ExportDialog:
         self.dialog = Dialog([Text("Export JPEG", font = kit.font), kit.dialog_row("Quality", self.quality.row, 80.0),
                               kit.dialog_row("Matte", self.matte_menu, 80.0),
                               HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Export…", self.export)], spacing = 8.0)], width = 360.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.export)
 
     pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
         self.dialog.open()
 
     func set_matte(self, gray: float, name: str) -> unit!:

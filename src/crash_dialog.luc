@@ -17,6 +17,7 @@ pub class CrashDialog:
         self.dialog = Dialog([Text("luced-2d quit unexpectedly last time", font = kit.font),
                               Text("The report is kept in ~/.luce/crashes; nothing is sent anywhere.", font = kit.font, muted = true),
                               self.text, HStack([Spacer(), self.copy, kit.button("Close", self.close)], spacing = 8.0)], width = 640.0)
+        kit.dialog_keys(self.dialog, self.close, self.close)
 
     pub func show(self, report: str) -> unit!:
         self.report = report

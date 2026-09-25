@@ -10,6 +10,7 @@ from size_fields import SizeFields
 
 pub class ImageSizeDialog:
     pub let dialog: Dialog
+    let kit: Kit
     let sizes: SizeFields
     let now_text: Text
     let resolution_field: NumberField
@@ -22,6 +23,7 @@ pub class ImageSizeDialog:
     let workspace: Workspace
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.kit = kit
         self.workspace = workspace
         self.connections = []
         let font = kit.font
@@ -43,8 +45,11 @@ pub class ImageSizeDialog:
                               kit.dialog_row("Sampling", self.sampling_menu, 110.0),
                               Text("Unchecked, only the resolution changes.", font = font, muted = true),
                               HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Resize", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
     pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
         let workspace = self.workspace
         let resolution = workspace.canvas.resolution()
         self.resolution_field.set_value(resolution)

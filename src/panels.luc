@@ -125,10 +125,14 @@ pub class Panels:
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
         self.picker.committed = self.settings_dialog.remember
+        kit.dialog_keys(self.picker.dialog, self.cancel_picker, self.accept_picker)
         self.mask_prompt = Dialog([Text("Mask color", font = font), HStack([kit.button("Black · Hide", self.choose_mask_black),
                                    kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
+        kit.dialog_keys(self.mask_prompt, self.hide_mask_prompt, self.keep_mask_prompt)
         self.document_settings = DocumentSettings(workspace, font)
         self.document_settings.applied = self.refresh
+        kit.dialog_keys(self.document_settings.dialog, self.document_settings.cancel, self.document_settings.apply)
+        kit.dialog_keys(self.settings_dialog.dialog, self.settings_dialog.cancel, self.settings_dialog.save)
         self.text_editing = TextEditing(workspace, kit, actions.commit_text)
         self.text_editing.changed = self.refresh
         self.text_editing.failed = self.prompts.tell
@@ -178,8 +182,9 @@ pub class Panels:
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
-                            self.prompts.prompt, self.picker.dialog, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
-                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
+                            self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
+                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
+                            self.picker.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 
@@ -199,8 +204,12 @@ pub class Panels:
         kit.bind(actions.previous_document, func () -> unit!:
             self.workspace.next_document(-1)
             self.refresh())
-        kit.bind(actions.document_settings, self.document_settings.open)
-        kit.bind(actions.settings, self.settings_dialog.open)
+        kit.bind(actions.document_settings, func () -> unit!:
+            if kit.may_open(self.document_settings.dialog):
+                self.document_settings.open())
+        kit.bind(actions.settings, func () -> unit!:
+            if kit.may_open(self.settings_dialog.dialog):
+                self.settings_dialog.open())
         kit.bind(actions.undo, func () -> unit!:
             # During a free transform, undo drops it, as there is nothing kept yet to undo.
             if self.workspace.transform != none:
@@ -403,10 +412,26 @@ pub class Panels:
     pub func pick_color(self, background: bool) -> unit!:
         self.mask_background = background
         if self.workspace.canvas.editing_mask():
-            self.mask_prompt.open()
+            if self.kit.may_open(self.mask_prompt):
+                self.mask_prompt.open()
+            return
+        if not self.kit.may_open(self.picker.dialog):
             return
         self.picker.open(background)
         self.refresh()
+
+    func cancel_picker(self) -> unit!:
+        self.picker.finish(false)
+
+    func accept_picker(self) -> unit!:
+        self.picker.finish(true)
+
+    func hide_mask_prompt(self) -> unit!:
+        self.mask_prompt.hide()
+
+    ## The mask prompt has no default choice: Enter leaves it open.
+    func keep_mask_prompt(self) -> unit!:
+        return
 
     func choose_mask_black(self) -> unit!:
         self.choose_mask_color(0.0)
@@ -419,13 +444,17 @@ pub class Panels:
         self.mask_prompt.hide()
         self.refresh()
 
-    ## The text tool clicked: ask for the text to set there.
-    ## The Text tool clicked or dragged a new text layer into place.
+    ## The Text tool clicked or dragged a new text layer into place; not while
+    ## another dialog is open, as the editor is one.
     func place_text(self, x: float, y: float, box_width: float) -> unit!:
+        if not self.kit.may_open(self.text_editing.dialog):
+            return
         self.attempt("Text", func () -> unit!:
             self.text_editing.begin_new(x, y, box_width))
 
     func edit_text(self, index: int) -> unit!:
+        if not self.kit.may_open(self.text_editing.dialog):
+            return
         self.attempt("Text", func () -> unit!:
             self.text_editing.begin_existing(index))
 
