@@ -20,6 +20,9 @@ pub class TextEditing:
     var box_width: float = 0.0
     ## The history step before the edit began: Cancel undoes back to it.
     var start: int = 0
+    ## A new layer's making, naming and typing are one undo step, "Add Text",
+    ## held open until it is committed or cancelled.
+    var grouping: bool = false
     ## Set while the editor is filled from code, so that is not taken as typing.
     var loading: bool = false
     let connections: list[Connection]
@@ -50,6 +53,8 @@ pub class TextEditing:
         self.finish_any()
         let workspace = self.workspace
         self.start = workspace.canvas.step_serial()
+        workspace.canvas.begin_edit("Add Text")
+        self.grouping = true
         workspace.add_layer()
         self.id = workspace.selected_id()
         # Named by its words when committed; until then, plainly a text layer.
@@ -127,6 +132,10 @@ pub class TextEditing:
     pub func commit(self) -> unit!:
         if self.id == 0:
             return
+        self.keep_words()
+        self.end_group()
+
+    func keep_words(self) -> unit!:
         let id = self.id
         let text = self.editor.text()
         self.close()
@@ -149,11 +158,18 @@ pub class TextEditing:
         if self.id == 0:
             return
         self.close()
+        self.end_group()
         let workspace = self.workspace
         let canvas = workspace.canvas
         while canvas.step_serial() != self.start and canvas.can_undo() and not canvas.previewing():
             workspace.undo()
         self.refresh()
+
+    ## Close the "Add Text" step, if one is open.
+    func end_group(self):
+        if self.grouping:
+            self.grouping = false
+            self.workspace.canvas.end_edit()
 
     func close(self):
         self.id = 0

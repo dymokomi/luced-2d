@@ -580,6 +580,8 @@ func live_text() -> unit!:
     assert(workspace.canvas.layer_type_value(1, 0) == 20.0)
     actions.commit_text.trigger()
     assert(not editing.active() and workspace.canvas.layer_name(1) == "Hello there")
+    # Making, naming and typing a new text layer is one undo step.
+    assert(workspace.canvas.undo_name() == "Add Text")
     # Edited again, it brings its own settings; cancelled, it says what it said.
     workspace.typing.size = 60.0
     editing.begin_existing(1)
