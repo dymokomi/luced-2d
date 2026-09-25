@@ -300,7 +300,9 @@ pub class Workspace:
     ## Whether `path` is a picture that can become a layer.
     pub func can_place(self, path: str) -> bool:
         let lowered = path.lower()
-        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".svg"]:
+        # HEIC and camera raws open through luce-image, as the rest.
+        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".svg", ".heic", ".heif",
+                       ".dng", ".cr2", ".nef", ".arw", ".orf", ".rw2", ".pef", ".raf"]:
             if lowered.ends_with(suffix):
                 return true
         return false

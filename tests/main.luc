@@ -19,7 +19,7 @@ from layer_effects import EffectRows
 from update_check import newer
 from script_host import ScriptHost
 from tool_cursor import cursor_for
-from shape_tool import restyle_selected
+from shape_tool import restyle_selected, draw_shape
 from adjustment_controls import range_of
 from tools import group_of
 from input import Cursor
@@ -70,6 +70,7 @@ pub func main(arguments: list[str]) -> int!:
     dodge_and_burn()
     on_image_adjustment()
     hue_ranges()
+    opens_photos()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1006,6 +1007,25 @@ func groups_and_shapes() -> unit!:
     workspace.shape_sides = 7
     restyle_selected(workspace)
     assert(math.abs(workspace.canvas.layer_shape_value(workspace.selected, 15) - 6.0) < 1e-6)
+    # The transform box is the shape and its stroke, no more: doubled, the pixels are
+    # twice as wide (the rasteriser leaves no faint residue beside a shape).
+    let big = Workspace(1280, 800)
+    big.canvas.bind_headless()
+    let big_panels = Panels(big, Actions(), Font())
+    big_panels.choose_tool("rectangle")
+    big.shape_stroke = true
+    big.shape_stroke_width = 4.0
+    big.shape_radius = 20.0
+    draw_shape(big, "rectangle", 300.0, 300.0, 219.0, 148.0)
+    assert(big.canvas.measure_content(big.selected_id()) and big.canvas.content_width() == 223 and big.canvas.content_height() == 152)
+    assert(big.begin_transform())
+    if let session = big.transform:
+        session.box.set_width(session.box.width * 2.0, true)
+    big.preview_transform()
+    big.finish_transform(true)
+    assert(big.canvas.measure_content(big.selected_id()) and big.canvas.content_width() >= 446 and big.canvas.content_width() <= 448)
+    assert(big.canvas.layer_shape_value(big.selected, 15) == 8.0)
+    big_panels.close()
     # The rail's brush group shows the pencil once it is chosen.
     panels.choose_tool("pencil")
     press(view, 90.0, 10.0)
@@ -1069,3 +1089,11 @@ func dodge_and_burn() -> unit!:
     workspace.cycle_tool_mode()
     assert(workspace.tone_range == (range + 1) % 3)
     panels.close()
+
+
+## HEIC photos and camera raws open, as the other pictures.
+func opens_photos() -> unit!:
+    let workspace = Workspace(16, 16)
+    for name in ["IMG_0001.HEIC", "a.heif", "b.dng", "c.CR2", "d.nef", "e.arw", "f.orf", "g.rw2", "h.pef", "i.raf"]:
+        assert(workspace.can_open(name) and workspace.can_place(name))
+    assert(not workspace.can_open("notes.txt"))

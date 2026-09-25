@@ -186,6 +186,9 @@ pub class ToolHeader:
             self.workspace.shape_radius = value
             restyle_selected(self.workspace))
         self.radius_row = kit.labelled("Radius", self.radius_field)
+        # A scaled shape's sizes are seldom whole pixels: show a tenth.
+        for field in [self.weight_field, self.stroke_width_field, self.radius_field]:
+            field.set_decimals(1)
         self.bar = Toolbar([self.title, self.smear_menu, self.tone_row, self.paint_row, self.radius_row, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
                             self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
