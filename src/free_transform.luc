@@ -70,6 +70,8 @@ pub func begin_free_transform(canvas: Canvas, ids: list[int], sampling: int, box
 pub func box_around(canvas: Canvas, ids: list[int]) -> TransformBox?!:
     if canvas.has_selection():
         return TransformBox(float(canvas.selection_left()), float(canvas.selection_top()), float(canvas.selection_width()), float(canvas.selection_height()))
+    if not canvas.is_bound():
+        return none
     var found = false
     var left = 0
     var top = 0

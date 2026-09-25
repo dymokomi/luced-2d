@@ -89,6 +89,10 @@ pub class Workspace:
     ## ("px", "mm" or "in"; physical units use the document's resolution).
     pub var show_rulers: bool = true
     pub var show_grid: bool = false
+    ## Guides show, what is dragged snaps, and guides stay put when locked.
+    pub var show_guides: bool = true
+    pub var snap: bool = true
+    pub var lock_guides: bool = false
     pub var units: str = "px"
     ## The picker's history: sRGB hex strings, newest first, at most 16.
     pub var recent: list[str]
@@ -531,7 +535,7 @@ pub class Workspace:
 
     ## The pixel layers a move takes: the selected ones and those inside
     ## selected groups, each once.
-    func moving_ids(self) -> list[int]!:
+    pub func moving_ids(self) -> list[int]!:
         var ids: list[int] = []
         var index = 0
         while index < self.layer_count():

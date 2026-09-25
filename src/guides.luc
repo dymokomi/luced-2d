@@ -1,0 +1,97 @@
+## Guides on the canvas, as Photoshop's: dragged out of a ruler (the top one
+## makes a guide across, the left one a guide down), moved with the Move tool
+## (or Cmd held), and dragged back onto a ruler to delete. They draw across
+## the whole view in cyan while View › Show Guides is on, pull what is dragged
+## while View › Snap is on, and stay put while View › Lock Guides is on.
+from ui import Painter, Point
+from gpu import Color
+from workspace import Workspace
+from snapping import Snapper
+import math
+
+## Guides' color: Photoshop's cyan.
+pub let guide_ink: Color = Color(0.0, 0.78, 0.9)
+
+pub class GuideDrag:
+    pub var active: bool = false
+    ## The guide dragged: its index, or -1 for one coming out of a ruler.
+    var index: int = -1
+    var vertical: bool = false
+    var position: float = 0.0
+    ## Over a ruler: letting go there deletes it (or makes nothing).
+    var outside: bool = false
+    let snapper: Snapper
+
+    pub func init(self):
+        self.snapper = Snapper()
+
+    ## The guide at document point (`x`, `y`) within `reach` pixels, or -1.
+    pub func hit(self, workspace: Workspace, x: float, y: float, reach: float) -> int!:
+        if not workspace.show_guides or workspace.lock_guides:
+            return -1
+        let canvas = workspace.canvas
+        var index = canvas.guide_count() - 1
+        while index >= 0:
+            let place = canvas.guide_position(index)
+            if (canvas.guide_vertical(index) and math.abs(x - place) <= reach) or (not canvas.guide_vertical(index) and math.abs(y - place) <= reach):
+                return index
+            index -= 1
+        return -1
+
+    ## A new guide out of a ruler: down (`vertical`) from the left one, across from the top.
+    pub func begin_new(self, workspace: Workspace, vertical: bool) -> unit!:
+        self.start(workspace, -1, vertical, 0.0)
+        self.outside = true
+
+    ## Guide `index` taken up to move.
+    pub func begin(self, workspace: Workspace, index: int) -> unit!:
+        let canvas = workspace.canvas
+        self.start(workspace, index, canvas.guide_vertical(index), canvas.guide_position(index))
+
+    func start(self, workspace: Workspace, index: int, vertical: bool, position: float) -> unit!:
+        self.active = true
+        self.index = index
+        self.vertical = vertical
+        self.position = position
+        self.outside = false
+        # Guides pull to the canvas, the other guides and the layers, not to themselves.
+        self.snapper.gather(workspace, [], true)
+
+    ## The pointer at document point (`x`, `y`); `outside` when over a ruler.
+    pub func drag(self, x: float, y: float, outside: bool):
+        self.outside = outside
+        self.position = self.snapper.snap_x(x) if self.vertical else self.snapper.snap_y(y)
+
+    ## Let go: the new guide added, the moved one moved — or, over a ruler, deleted.
+    pub func finish(self, workspace: Workspace) -> unit!:
+        self.active = false
+        let canvas = workspace.canvas
+        if self.outside:
+            if self.index >= 0:
+                canvas.remove_guide(self.index)
+        elif self.index < 0:
+            discard(canvas.add_guide(self.vertical, self.position))
+        else:
+            canvas.move_guide(self.index, self.position)
+        workspace.touch()
+
+    ## Every guide across a view `width` by `height` (as the workspace's zoom
+    ## and offset place the document), and the one being dragged.
+    pub func draw(self, painter: Painter, workspace: Workspace, width: float, height: float) -> unit!:
+        let canvas = workspace.canvas
+        if workspace.show_guides:
+            var index = 0
+            while index < canvas.guide_count():
+                if not (self.active and index == self.index):
+                    self.line(painter, workspace, canvas.guide_vertical(index), canvas.guide_position(index), width, height)
+                index += 1
+        if self.active and not self.outside:
+            self.line(painter, workspace, self.vertical, self.position, width, height)
+
+    func line(self, painter: Painter, workspace: Workspace, vertical: bool, position: float, width: float, height: float) -> unit!:
+        if vertical:
+            let x = math.floor(position * workspace.zoom + workspace.offset_x) + 0.5
+            painter.line(Point(x, 0.0), Point(x, height), 1.0, guide_ink)
+        else:
+            let y = math.floor(position * workspace.zoom + workspace.offset_y) + 0.5
+            painter.line(Point(0.0, y), Point(width, y), 1.0, guide_ink)

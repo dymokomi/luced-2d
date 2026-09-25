@@ -277,6 +277,18 @@ pub class Panels:
         kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.load_transparency))
         kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
         kit.bind(actions.toggle_visibility, self.toggle_visibility)
+        kit.bind(actions.show_guides, func () -> unit!:
+            self.workspace.show_guides = not self.workspace.show_guides
+            self.view_changed())
+        kit.bind(actions.snap, func () -> unit!:
+            self.workspace.snap = not self.workspace.snap
+            self.view_changed())
+        kit.bind(actions.lock_guides, func () -> unit!:
+            self.workspace.lock_guides = not self.workspace.lock_guides
+            self.view_changed())
+        kit.bind(actions.clear_guides, self.attempting("Clear Guides", func () -> unit!:
+            self.workspace.canvas.clear_guides()
+            self.workspace.touch()))
         kit.bind(actions.show_transform_controls, func () -> unit!:
             self.workspace.show_transform_controls = not self.workspace.show_transform_controls
             self.workspace.touch()
@@ -524,6 +536,10 @@ pub class Panels:
         self.top_ruler.layout().invalidate()
         self.left_ruler.layout().invalidate()
         self.actions.show_rulers.set_text("Show Rulers ✓" if workspace.show_rulers else "Show Rulers")
+        self.actions.show_guides.set_text("Show Guides ✓" if workspace.show_guides else "Show Guides")
+        self.actions.snap.set_text("Snap ✓" if workspace.snap else "Snap")
+        self.actions.lock_guides.set_text("Lock Guides ✓" if workspace.lock_guides else "Lock Guides")
+        self.actions.clear_guides.set_enabled(workspace.canvas.guide_count() > 0)
         self.actions.show_transform_controls.set_text("Show Transform Controls ✓" if workspace.show_transform_controls else "Show Transform Controls")
         self.actions.show_grid.set_text("Show Grid ✓" if workspace.show_grid else "Show Grid")
         var shown = 0

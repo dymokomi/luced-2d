@@ -89,6 +89,10 @@ pub class Actions:
     pub let fit: Command
     pub let show_rulers: Command
     pub let show_transform_controls: Command
+    pub let show_guides: Command
+    pub let snap: Command
+    pub let lock_guides: Command
+    pub let clear_guides: Command
     pub let show_grid: Command
     ## Rulers and sizes in pixels, millimeters or inches.
     pub let units: list[Command]
@@ -183,6 +187,10 @@ pub class Actions:
         self.fit = Command("Fit", Shortcut(Key.digit_0, primary = true), id = "fit")
         self.show_rulers = Command("Show Rulers", Shortcut(Key.r, primary = true), id = "show_rulers")
         self.show_transform_controls = Command("Show Transform Controls", Shortcut(Key.h, primary = true), id = "show_transform_controls")
+        self.show_guides = Command("Show Guides", Shortcut(Key.semicolon, primary = true), id = "show_guides")
+        self.snap = Command("Snap", Shortcut(Key.semicolon, primary = true, shift = true), id = "snap")
+        self.lock_guides = Command("Lock Guides", Shortcut(Key.semicolon, primary = true, alt = true), id = "lock_guides")
+        self.clear_guides = Command("Clear Guides", id = "clear_guides")
         self.show_grid = Command("Show Grid", Shortcut(Key.apostrophe, primary = true), id = "show_grid")
         self.units = []
         for unit_id in unit_ids():
@@ -204,7 +212,7 @@ pub class Actions:
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.adjustment_layers + self.blends + self.tools + self.units
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.adjustment_layers + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:

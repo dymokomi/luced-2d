@@ -42,8 +42,10 @@ Found beyond the old list, and first because they lose work:
 7. [x] Selection (0.1.36): Polygonal Lasso (Shift-L); header with the four modes,
    Feather and Anti-alias; wand Sample Size and All Layers; Cmd-arrows move
    selected pixels; marquee autoscroll; selection changes undoable (0.1.30).
-8. [ ] Guides (drag from rulers) and snapping to guides, grid, layers and
-   bounds; Show Guides (Cmd-;), Snap (Shift-Cmd-;), Lock and Clear Guides.
+8. [x] Guides (0.1.37): dragged from the rulers, moved with the Move tool, dragged
+   back to delete; snapping to guides, grid, layers and the canvas for moves,
+   marquees, boxes and guides; Show Guides (Cmd-;), Snap (Shift-Cmd-;), Lock
+   Guides (Opt-Cmd-;), Clear Guides.
 9. [ ] Live, editable text layers: fonts and faces, color, alignment, tracking,
    leading, multi-line boxes, inline editing, double-click to edit, Cmd-Return.
 10. [ ] Gradient: editable end points before Apply; on a mask. (Radial, reverse,

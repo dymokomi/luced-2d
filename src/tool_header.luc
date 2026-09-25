@@ -86,7 +86,7 @@ pub class ToolHeader:
             self.workspace.tolerance = value))
         self.contiguous_button = kit.button("Contiguous ✓", self.toggle_contiguous)
         self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
-        self.selection_controls = SelectionControls(workspace, kit)
+        self.selection_controls = SelectionControls(workspace, kit, self.wand_controls)
         self.text_size_slider = Slider("Size", 8.0, 256.0, workspace.text_size, 1.0, font = font)
         kit.keep(self.text_size_slider.on_change(func (value: float) -> unit!:
             self.workspace.text_size = value))
@@ -131,7 +131,7 @@ pub class ToolHeader:
         self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
             self.workspace.gradient_transparent = not self.workspace.gradient_transparent)
         self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
-        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.wand_controls, self.text_controls, self.move_controls,
+        self.bar = Toolbar([self.title, self.smear_menu, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.text_controls, self.move_controls,
                             self.transform_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
@@ -185,7 +185,6 @@ pub class ToolHeader:
         self.gradient_menu.set_text("Radial ▾" if workspace.gradient_radial else "Linear ▾")
         self.reverse_box.set_checked(workspace.gradient_reverse)
         self.transparent_box.set_checked(workspace.gradient_transparent)
-        self.wand_controls.layout().set_visible(not transforming and tool == "wand")
         let selecting = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "wand"
         self.selection_controls.row.layout().set_visible(not transforming and selecting)
         self.selection_controls.show(tool)

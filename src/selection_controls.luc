@@ -1,7 +1,7 @@
 ## The tool header's options for the marquees, lassos and wand, after
 ## Compositor's: the four modes (new, add, subtract, intersect) as buttons,
 ## Feather, Anti-alias, and for the wand its Sample Size and All Layers.
-from ui import HStack, Button, ButtonStyle, NumberField, Checkbox, Menu, Command
+from ui import Widget, HStack, Button, ButtonStyle, NumberField, Checkbox, Menu, Command
 from workspace import Workspace
 from kit import Kit
 
@@ -15,7 +15,8 @@ pub class SelectionControls:
     let wand_extras: HStack
     let workspace: Workspace
 
-    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+    ## `wand_options` (the tolerance and Contiguous) show with the wand's own.
+    pub func init(self, workspace: Workspace, kit: Kit, wand_options: Widget) -> unit!:
         self.workspace = workspace
         self.modes = []
         var index = 0
@@ -43,7 +44,7 @@ pub class SelectionControls:
         self.sample_menu = Menu("Point Sample ▾", samples, font = kit.font)
         self.all_box = kit.checkbox("All Layers", func () -> unit!:
             self.workspace.selecting.all_layers = not self.workspace.selecting.all_layers)
-        self.wand_extras = HStack([kit.labelled("Sample", self.sample_menu), self.all_box], spacing = 12.0)
+        self.wand_extras = HStack([kit.labelled("Sample", self.sample_menu), self.all_box, wand_options], spacing = 12.0)
         self.row = HStack([HStack([self.modes[0], self.modes[1], self.modes[2], self.modes[3]], spacing = 2.0), kit.labelled("Feather", self.feather_field),
                            self.antialias_box, self.wand_extras], spacing = 12.0)
 

@@ -7,9 +7,12 @@ from input import EventKind, Cursor, Key, ScrollUnit
 from workspace import Workspace
 from selection_drag import SelectionDrag
 from kit import outline, dropped_paths
-from transform_box import grab_move
+from transform_box import grab_move, grab_turn
 from layer_ops import OpacityKeys, set_opacity_all
 from polygon_lasso import PolygonLasso
+from guides import GuideDrag
+from snapping import Snapper
+from free_transform import box_around
 import theme
 import math
 import time
@@ -56,6 +59,14 @@ pub class CanvasView: Widget:
     let opacity_keys: OpacityKeys
     ## The Polygonal Lasso's shape while its corners are clicked.
     pub let polygon: PolygonLasso
+    ## A guide being dragged, and what pulls while a gesture snaps.
+    pub let guides: GuideDrag
+    let snapper: Snapper
+    ## The box of what a move drags, in document pixels, for snapping its edges.
+    var move_left: float = 0.0
+    var move_top: float = 0.0
+    var move_right: float = 0.0
+    var move_bottom: float = 0.0
     let selection: SelectionDrag
     ## A gradient drag in progress, from a document point.
     var gradient_dragging: bool = false
@@ -97,6 +108,8 @@ pub class CanvasView: Widget:
         self.selection = SelectionDrag()
         self.opacity_keys = OpacityKeys()
         self.polygon = PolygonLasso()
+        self.guides = GuideDrag()
+        self.snapper = Snapper()
         self.checker = Image(256, 256)
         for y in 0..<256:
             for x in 0..<256:
@@ -159,6 +172,7 @@ pub class CanvasView: Widget:
         if self.polygon.active and workspace.tool != "polygon":
             self.polygon.cancel()
         self.polygon.draw(painter, workspace.zoom, left, top, theme.text(), theme.backdrop())
+        self.guides.draw(painter, workspace, size.width, size.height)
         self.draw_box(painter, size.width, size.height)
         if self.pointer_inside and not self.panning and brushed(workspace.tool):
             self.draw_brush_outline(painter)
@@ -387,6 +401,14 @@ pub class CanvasView: Widget:
         # A free transform or the Crop tool's box takes presses while it is up;
         # handles answer within 6 points whatever the zoom.
         let reach = 6.0 / workspace.zoom
+        # With the Move tool (or Cmd held) a guide under the pointer is taken up.
+        if (tool == "move" or event.meta or event.control) and workspace.transform == none and workspace.crop_box == none:
+            let guide = self.guides.hit(workspace, x, y, 4.0 / workspace.zoom)
+            if guide >= 0:
+                self.guides.begin(workspace, guide)
+                return
+        if workspace.transform != none or workspace.crop_box != none:
+            self.snapper.gather(workspace, workspace.selected_ids(), false)
         if let session = workspace.transform:
             let grab = session.box.hit(x, y, reach)
             # Alt-dragging inside moves a copy, the original left in place.
@@ -452,7 +474,10 @@ pub class CanvasView: Widget:
         elif tool == "polygon":
             self.polygon.click(workspace, x, y, event.shift, event.alt, 6.0 / workspace.zoom, time.now() // 1000000)
         elif tool == "marquee" or tool == "ellipse" or tool == "lasso":
-            self.selection.begin(workspace, x, y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
+            # A marquee's corners pull to the canvas, the guides and the layers.
+            self.snapper.gather(workspace, [], tool != "lasso")
+            let marquee = tool != "lasso"
+            self.selection.begin(workspace, self.snapper.snap_x(x) if marquee else x, self.snapper.snap_y(y) if marquee else y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
         else:
             self.begin_painting(x, y, event.shift, event.pressure)
 
@@ -538,6 +563,16 @@ pub class CanvasView: Widget:
         self.move_shown_y = 0
         self.move_copy = event.alt
         self.move_pixels = self.workspace.canvas.has_selection()
+        # What is moved snaps by its edges and middle: the selection's box, or the layers'.
+        let ids = workspace.moving_ids()
+        self.snapper.gather(workspace, ids, true)
+        if let found = box_around(workspace.canvas, ids):
+            self.move_left = found.left
+            self.move_top = found.top
+            self.move_right = found.left + found.width
+            self.move_bottom = found.top + found.height
+        else:
+            self.snapper.enabled = false
         if self.move_pixels:
             self.workspace.begin_preview() catch failure:
                 discard(failure)
@@ -567,12 +602,16 @@ pub class CanvasView: Widget:
 
     ## A free transform's or the Crop tool's box dragged to a document point.
     func drag_box(self, x: float, y: float, shift: bool, alt: bool, distort: bool) -> unit!:
+        # Handles pull to what snaps; a box moved whole keeps its offset to the pointer.
+        let snapped_x = self.snapper.snap_x(x)
+        let snapped_y = self.snapper.snap_y(y)
         if let session = self.workspace.transform:
-            session.box.drag(x, y, shift, alt, distort)
+            let moving = session.box.grabbed == grab_move or session.box.grabbed == grab_turn
+            session.box.drag(x if moving else snapped_x, y if moving else snapped_y, shift, alt, distort)
             self.workspace.preview_transform()
             return
         if let crop = self.workspace.crop_box:
-            crop.drag(x, y, shift)
+            crop.drag(snapped_x, snapped_y, shift)
 
     func end_box(self):
         if let session = self.workspace.transform:
@@ -597,7 +636,10 @@ pub class CanvasView: Widget:
 
     ## The pointer moved: carry on the gesture in progress.
     func drag(self, event: Event) -> unit!:
-        if self.boxing:
+        if self.guides.active:
+            # Over a ruler (past the view's top or left edge) a guide goes when let go.
+            self.guides.drag(self.document_x(event.x), self.document_y(event.y), event.x < 0.0 or event.y < 0.0)
+        elif self.boxing:
             # Cmd (Ctrl) on a corner distorts, as in Compositor.
             self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt, event.meta or event.control)
         elif self.panning:
@@ -615,16 +657,12 @@ pub class CanvasView: Widget:
             if self.zoom_moved:
                 self.workspace.zoom_about(self.zoom_start * math.pow(2.0, dx / 100.0) / self.workspace.zoom, self.zoom_x, self.zoom_y)
         elif self.selection.active:
-            self.selection.drag(self.workspace, self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
+            let marquee = not self.selection.lasso
+            let x = self.document_x(event.x)
+            let y = self.document_y(event.y)
+            self.selection.drag(self.workspace, self.snapper.snap_x(x) if marquee else x, self.snapper.snap_y(y) if marquee else y, event.shift, event.alt)
         elif self.moving:
-            self.move_now_x = event.x
-            self.move_now_y = event.y
-            if event.shift:
-                # Shift keeps the move to the axis it goes further along.
-                if math.abs(event.x - self.move_x) >= math.abs(event.y - self.move_y):
-                    self.move_now_y = self.move_y
-                else:
-                    self.move_now_x = self.move_x
+            self.moved_to(event)
             if self.move_pixels:
                 let dx = self.move_whole(self.move_now_x - self.move_x)
                 let dy = self.move_whole(self.move_now_y - self.move_y)
@@ -640,13 +678,32 @@ pub class CanvasView: Widget:
                 self.outline_applied_x = dx
                 self.outline_applied_y = dy
 
+    ## Where a move has got to: the pointer, kept to an axis with Shift, and
+    ## pulled so the moved box's edges or middle meet what snaps.
+    func moved_to(self, event: Event):
+        self.move_now_x = event.x
+        self.move_now_y = event.y
+        if event.shift:
+            # Shift keeps the move to the axis it goes further along.
+            if math.abs(event.x - self.move_x) >= math.abs(event.y - self.move_y):
+                self.move_now_y = self.move_y
+            else:
+                self.move_now_x = self.move_x
+        let zoom = self.workspace.zoom
+        let dx = (self.move_now_x - self.move_x) / zoom
+        let dy = (self.move_now_y - self.move_y) / zoom
+        self.move_now_x += self.snapper.shift_x(self.move_left + dx, self.move_right + dx) * zoom
+        self.move_now_y += self.snapper.shift_y(self.move_top + dy, self.move_bottom + dy) * zoom
+
     ## The button let go: finish the gesture in progress.
     func release(self, event: Event) -> unit!:
         let workspace = self.workspace
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
         self.panning = false
-        if self.boxing:
+        if self.guides.active:
+            self.guides.finish(workspace)
+        elif self.boxing:
             self.boxing = false
             self.end_box()
         elif self.zooming:
@@ -655,15 +712,9 @@ pub class CanvasView: Widget:
                 workspace.zoom_about(0.5 if self.zoom_out else 2.0, self.zoom_x, self.zoom_y)
         elif self.moving:
             self.moving = false
-            var end_x = event.x
-            var end_y = event.y
-            if event.shift:
-                if math.abs(end_x - self.move_x) >= math.abs(end_y - self.move_y):
-                    end_y = self.move_y
-                else:
-                    end_x = self.move_x
-            let dx = self.move_whole(end_x - self.move_x)
-            let dy = self.move_whole(end_y - self.move_y)
+            self.moved_to(event)
+            let dx = self.move_whole(self.move_now_x - self.move_x)
+            let dy = self.move_whole(self.move_now_y - self.move_y)
             if self.move_pixels:
                 self.move_pixels = false
                 if dx == 0 and dy == 0:

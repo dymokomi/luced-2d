@@ -1,0 +1,107 @@
+## Snapping, as Compositor's: while View › Snap is on, what is dragged — a
+## layer moved, a marquee's corner, a crop or transform handle, a guide —
+## pulls to the canvas's edges and middle, the guides, the edges and middles of
+## the other layers, and the grid when it shows, within 8 screen points.
+## The targets are gathered once when the gesture starts.
+from workspace import Workspace
+import math
+
+pub class Snapper:
+    ## Where things pull to, in document pixels: x for vertical lines, y for horizontal.
+    var xs: list[float]
+    var ys: list[float]
+    ## The grid's pitch, when it pulls too (0: it does not).
+    var grid: float = 0.0
+    ## How near pulls, in document pixels.
+    var reach: float = 8.0
+    pub var enabled: bool = false
+
+    pub func init(self):
+        self.xs = []
+        self.ys = []
+
+    ## Gather the targets for a gesture: `skip` are the layers being dragged,
+    ## which do not pull on themselves; `layers` whether other layers pull.
+    pub func gather(self, workspace: Workspace, skip: list[int], layers: bool) -> unit!:
+        self.enabled = workspace.snap
+        self.xs = []
+        self.ys = []
+        self.reach = 8.0 / workspace.zoom
+        self.grid = workspace.grid_major() / float(workspace.grid_divisions()) if workspace.show_grid else 0.0
+        if not self.enabled:
+            return
+        let canvas = workspace.canvas
+        let width = float(workspace.width())
+        let height = float(workspace.height())
+        self.xs = [0.0, width * 0.5, width]
+        self.ys = [0.0, height * 0.5, height]
+        var guide = 0
+        while guide < canvas.guide_count():
+            if canvas.guide_vertical(guide):
+                self.xs.append(canvas.guide_position(guide))
+            else:
+                self.ys.append(canvas.guide_position(guide))
+            guide += 1
+        if not layers or not canvas.is_bound():
+            return
+        # The other visible layers' painted boxes; a few dozen at most, as each is read back.
+        var index = workspace.layer_count() - 1
+        var measured = 0
+        while index >= 0 and measured < 32:
+            let id = canvas.layer_id(index)
+            if canvas.layer_visible(index) and not canvas.layer_is_group(index) and canvas.layer_adjustment(index) < 0 and not skip.contains(id):
+                if canvas.measure_content(id):
+                    let left = float(canvas.content_left())
+                    let top = float(canvas.content_top())
+                    let right = left + float(canvas.content_width())
+                    let bottom = top + float(canvas.content_height())
+                    self.xs.append(left)
+                    self.xs.append((left + right) * 0.5)
+                    self.xs.append(right)
+                    self.ys.append(top)
+                    self.ys.append((top + bottom) * 0.5)
+                    self.ys.append(bottom)
+                measured += 1
+            index -= 1
+
+    ## `x` pulled to the nearest target within reach, or as it was.
+    pub func snap_x(self, x: float) -> float:
+        return x + self.pull(x, self.xs)
+
+    pub func snap_y(self, y: float) -> float:
+        return y + self.pull(y, self.ys)
+
+    ## For a box from `low` to `high` along x moving: the smallest shift that
+    ## brings its low edge, middle or high edge onto a target, or 0.
+    pub func shift_x(self, low: float, high: float) -> float:
+        return self.best([self.pull(low, self.xs), self.pull((low + high) * 0.5, self.xs), self.pull(high, self.xs)])
+
+    pub func shift_y(self, low: float, high: float) -> float:
+        return self.best([self.pull(low, self.ys), self.pull((low + high) * 0.5, self.ys), self.pull(high, self.ys)])
+
+    ## How far `at` moves to reach the nearest of `targets` (or a grid line) within reach; 0 if none.
+    func pull(self, at: float, targets: list[float]) -> float:
+        if not self.enabled:
+            return 0.0
+        var best = 0.0
+        var found = false
+        for target in targets:
+            let distance = target - at
+            if math.abs(distance) <= self.reach and (not found or math.abs(distance) < math.abs(best)):
+                best = distance
+                found = true
+        if self.grid > 0.0:
+            let line = math.round(at / self.grid) * self.grid
+            let distance = line - at
+            if math.abs(distance) <= self.reach and (not found or math.abs(distance) < math.abs(best)):
+                best = distance
+                found = true
+        return best
+
+    ## The shift of the smallest size among `shifts` that is not 0.
+    func best(self, shifts: list[float]) -> float:
+        var chosen = 0.0
+        for shift in shifts:
+            if shift != 0.0 and (chosen == 0.0 or math.abs(shift) < math.abs(chosen)):
+                chosen = shift
+        return chosen

@@ -10,6 +10,8 @@ from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
 from size_fields import SizeFields
 from polygon_lasso import PolygonLasso
+from guides import GuideDrag
+from snapping import Snapper
 from adjustments import adjustments
 from settings import Settings
 from ui import Event
@@ -34,6 +36,7 @@ pub func main(arguments: list[str]) -> int!:
     layer_panel_ops()
     size_dialogs()
     selection_tools()
+    guides_and_snapping()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -506,3 +509,34 @@ func selection_tools() -> unit!:
     workspace.selecting.feather = 3
     workspace.select_shape(50.0, 30.0, 62.0, 46.0, false, workspace.selecting.mode_for(false, false))
     assert(workspace.canvas.selected_at(35, 15) == 255 and workspace.canvas.selected_at(56, 38) > 200 and workspace.canvas.selected_at(50, 38) < 255)
+
+## Guides out of a ruler, moved, dragged back to go; snapping to the canvas,
+## the guides, the other layers and the grid.
+func guides_and_snapping() -> unit!:
+    let workspace = Workspace(200, 100)
+    workspace.canvas.bind_headless()
+    let guides = GuideDrag()
+    guides.begin_new(workspace, true)
+    guides.drag(60.0, 20.0, false)
+    guides.finish(workspace)
+    assert(workspace.canvas.guide_count() == 1 and workspace.canvas.guide_position(0) == 60.0)
+    # Near the middle (100) a guide snaps to it.
+    guides.begin_new(workspace, true)
+    guides.drag(103.0, 20.0, false)
+    guides.finish(workspace)
+    assert(workspace.canvas.guide_position(1) == 100.0)
+    assert(guides.hit(workspace, 61.0, 50.0, 2.0) == 0 and guides.hit(workspace, 80.0, 50.0, 2.0) == -1)
+    # Dragged back over the ruler, a guide goes.
+    guides.begin(workspace, 0)
+    guides.drag(-5.0, 20.0, true)
+    guides.finish(workspace)
+    assert(workspace.canvas.guide_count() == 1)
+    workspace.lock_guides = true
+    assert(guides.hit(workspace, 100.0, 50.0, 2.0) == -1)
+    # The snapper: a box moved near the guide at 100 and the canvas's right edge.
+    let snapper = Snapper()
+    snapper.gather(workspace, [], true)
+    assert(snapper.shift_x(95.0, 120.0) == 5.0 and snapper.snap_x(197.0) == 200.0 and snapper.snap_y(30.0) == 30.0)
+    workspace.snap = false
+    snapper.gather(workspace, [], true)
+    assert(snapper.snap_x(197.0) == 197.0)

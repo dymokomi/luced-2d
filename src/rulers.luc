@@ -1,6 +1,7 @@
 ## The rulers along the top and left of the canvas, and the corner where they
 ## meet.
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from input import EventKind
 from gpu import RenderTarget, Rect
 from workspace import Workspace
 from view import CanvasView
@@ -88,8 +89,26 @@ pub class Ruler: Widget:
             painter.rectangle(Rect(thickness - 1.0, 0.0, 1.0, size.height), theme.backdrop())
         painter.close()
 
+    ## Dragging out of the ruler makes a guide: across from the top one, down
+    ## from the left one; let go back on the ruler, it makes none.
     pub func event(self, event: Event) -> unit!:
-        discard(event)
+        let guides = self.view.guides
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside and self.workspace.show_guides:
+            guides.begin_new(self.workspace, not self.horizontal)
+        elif event.kind == EventKind.pointer_moved and guides.active:
+            # The pointer in the view's own points, and so in document pixels.
+            let mine = self.box.bounds()
+            let view = self.view.layout().bounds()
+            let x = event.x + mine.x - view.x
+            let y = event.y + mine.y - view.y
+            let workspace = self.workspace
+            guides.drag((x - workspace.offset_x) / workspace.zoom, (y - workspace.offset_y) / workspace.zoom, x < 0.0 or y < 0.0)
+            self.view.layout().invalidate()
+        elif event.kind == EventKind.pointer_up and guides.active:
+            guides.finish(self.workspace)
+            self.view.layout().invalidate()
+        elif event.cancelled and guides.active:
+            guides.active = false
 
 ## The corner where the rulers meet.
 pub class RulerCorner: Widget:
