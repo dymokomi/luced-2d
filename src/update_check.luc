@@ -3,9 +3,7 @@
 ## newer than this build, says so in the status bar with how to get it.
 ## Offline, without luc, or with a luc too old to answer, nothing is said.
 from process import Command
-import files
-import paths
-import platform
+from script_host import luce_program
 
 pub class UpdateCheck:
     var command: Command? = none
@@ -18,7 +16,7 @@ pub class UpdateCheck:
 
     ## Ask luc, in the background.
     pub func start(self) -> unit!:
-        let luc = luc_program()
+        let luc = luce_program("luc")
         self.command = Command(luc, ["latest", "dymokomi/luced-2d"], output_limit = 4096) catch failure:
             discard(failure)
             recover none
@@ -42,15 +40,6 @@ pub class UpdateCheck:
         if let command = self.command:
             command.close()
         self.command = none
-
-## luc where the Luce installer puts it, else wherever PATH finds it.
-func luc_program() -> str!:
-    let name = "luc.exe" if platform.windows else "luc"
-    let installed = paths.join(paths.join(paths.join(files.home_directory(), ".local"), "luce"), paths.join("bin", name))
-    let kind = files.path_kind(installed) catch failure:
-        discard(failure)
-        return "luc"
-    return installed if kind == files.FileKind.regular else "luc"
 
 ## Whether dotted version `candidate` is later than `current`; anything that
 ## is not a version is not later.

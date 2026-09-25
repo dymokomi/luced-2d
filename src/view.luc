@@ -217,7 +217,7 @@ pub class CanvasView: Widget:
         self.shape.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
         if self.pointer_inside and not self.panning and not self.space_held and workspace.tool == "zoom":
             draw_magnifier(painter, self.pointer_x, self.pointer_y, self.alt_held, theme.text(), theme.backdrop())
-        if self.pointer_inside and not self.panning and brushed(workspace.tool):
+        if self.pointer_inside and not self.panning and brushed(workspace.tool) and workspace.drag_for == none and workspace.sample_for == none:
             self.draw_brush_outline(painter)
             if workspace.tool == "clone" and workspace.canvas.has_clone_source():
                 self.draw_clone_source(painter)
@@ -401,7 +401,9 @@ pub class CanvasView: Widget:
         elif kind == EventKind.pointer_left:
             self.pointer_inside = false
         self.alt_held = event.alt
-        self.box.set_cursor(cursor_for(self.workspace.tool, self.panning, self.space_held, self.workspace.brush.diameter * self.workspace.zoom < 5.0))
+        # Sampling for a dialog (On Image, an eyedropper) shows cross hairs, whatever the tool.
+        let sampling = self.workspace.drag_for != none or self.workspace.sample_for != none
+        self.box.set_cursor(Cursor.crosshair if sampling and not self.panning else cursor_for(self.workspace.tool, self.panning, self.space_held, self.workspace.brush.diameter * self.workspace.zoom < 5.0))
         self.box.invalidate()
         for linked in self.linked:
             linked.invalidate()

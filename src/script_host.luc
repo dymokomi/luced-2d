@@ -30,6 +30,8 @@ pub class ScriptHost:
     pub var console: str = ""
     ## Whether the last run ended without a failure.
     pub var succeeded: bool = true
+    ## Whether the script runs in Luce's sandbox (not where the host has none).
+    var sandboxed: bool = true
 
     pub func init(self, workspace: Workspace, actions: Actions? = none, folder: str = "") -> unit!:
         self.workspace = workspace
@@ -54,9 +56,18 @@ pub class ScriptHost:
         let canvas = self.workspace.canvas
         canvas.begin_edit("Script")
         self.editing = canvas
-        self.command = Command(luce_program(), ["run", "--sandbox", self.folder, paths.join(self.folder, "script.luc")], directory = self.folder, output_limit = 16777216) catch failure:
+        self.sandboxed = true
+        self.launch() catch failure:
             self.finish()
             error(failure.code, failure.message)
+
+    ## Start Luce on the script: in its sandbox where the host has one; where
+    ## it has none (Windows, for now) plainly, the script's own file access
+    ## then not fenced in.
+    func launch(self) -> unit!:
+        let script = paths.join(self.folder, "script.luc")
+        let arguments = ["run", "--sandbox", self.folder, script] if self.sandboxed else ["run", script]
+        self.command = Command(luce_program(), arguments, directory = self.folder, output_limit = 16777216)
 
     ## Stop the script where it is; what it did stays, one undo step.
     pub func stop(self):
@@ -81,6 +92,14 @@ pub class ScriptHost:
             self.handle(rest[0..<length])
             self.consumed += length + (1 if ending != none else 0)
             changed = true
+        if finished and self.sandboxed and output.contains("sandboxing is not available"):
+            # No sandbox on this host: run it again without one, once.
+            command.close()
+            self.sandboxed = false
+            self.consumed = 0
+            self.console = "[no sandbox on this system: the script runs unfenced]\n"
+            self.launch()
+            return true
         if finished:
             let code = command.exit_code() else -1
             let failure = command.error_message()
@@ -149,11 +168,12 @@ pub func snapshot(workspace: Workspace) -> str!:
 func quoted(text: str) -> str:
     return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t") + "\""
 
-## Luce where its installer puts it, else wherever PATH finds it.
-func luce_program() -> str!:
-    let name = "luce.exe" if platform.windows else "luce"
-    let installed = paths.join(paths.join(paths.join(files.home_directory(), ".local"), "luce"), paths.join("bin", name))
+## Luce where its installer puts it — %LOCALAPPDATA%\luce\bin on Windows,
+## ~/.local/luce/bin elsewhere — else wherever PATH finds it.
+pub func luce_program(tool: str = "luce") -> str!:
+    let home = files.home_directory()
+    let installed = paths.join(paths.join(paths.join(paths.join(home, "AppData"), "Local"), "luce"), paths.join("bin", tool + ".exe")) if platform.windows else paths.join(paths.join(paths.join(home, ".local"), "luce"), paths.join("bin", tool))
     let kind = files.path_kind(installed) catch failure:
         discard(failure)
-        return "luce"
-    return installed if kind == files.FileKind.regular else "luce"
+        return tool
+    return installed if kind == files.FileKind.regular else tool
