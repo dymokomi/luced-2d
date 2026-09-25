@@ -76,8 +76,10 @@ Found beyond the old list, and first because they lose work:
 15. [x] Effects listed under their layer in Layers (0.1.54): a line each, the
     eye hides one (listed, eye shut), the cross deletes it, Alt-drag onto
     another layer copies it, a double-click opens Layer Style.
-16. [ ] Import: File › Import Images…; PSD groups and masks, merged-only PSDs,
-    PSB; HEIC, SVG, Camera RAW.
+16. [ ] Import. Done (0.1.55): File › Import Image… (one picture as a layer);
+    PSD groups rebuilt and layer masks kept, merged-only PSDs as one layer,
+    PSB. Left: several files at once, SVG (luce-svg needs colors), HEIC,
+    Camera RAW.
 17. [ ] Tool extras: right-drag sets brush size (Shift: hardness); Spot Healing
     modes (Create Texture, Proximity Match); clone preview in the circle;
     eyedropper sample ring; Tab cycles tool modes; idle tool (A); zoom % field;

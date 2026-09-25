@@ -46,6 +46,21 @@ pub class DocumentFiles:
             return
         self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF or EXR file", self.workspace.path, "Open")
 
+    ## File › Import Image…: a picture chosen in the open panel becomes a new
+    ## layer of this document, centred, as a picture dropped on Layers does.
+    pub func import_image(self) -> unit!:
+        let app = self.app else return
+        let chosen = app.open_file("Import a PNG, JPEG, TIFF, EXR or Photoshop picture as a layer") catch failure:
+            self.prompts.tell(f"Could not import: {failure.message}")
+            return
+        if chosen == "":
+            return
+        let workspace = self.workspace
+        workspace.place_file(chosen, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
+            self.prompts.tell(f"Could not import {chosen}: {failure.message}")
+            return
+        self.refresh()
+
     ## Files dropped on the canvas: each opens in its own tab.
     pub func open_files(self, files: list[str]) -> unit!:
         for path in files:

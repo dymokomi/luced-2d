@@ -198,6 +198,7 @@ pub class Panels:
         let actions = self.actions
         let kit = self.kit
         kit.bind(actions.open_document, self.files.open_document)
+        kit.bind(actions.import_image, self.files.import_image)
         kit.bind(actions.save, self.files.save)
         kit.bind(actions.save_as, self.files.save_as)
         kit.bind(actions.export_png, self.files.export_png)
