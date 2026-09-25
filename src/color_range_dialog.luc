@@ -1,0 +1,123 @@
+## Select › Color Range…, as Photoshop's: while it is up, a click on the
+## canvas samples the color there (Shift-click adds one, Alt-click takes one
+## back out), and the selection shows what falls within Fuzziness of the
+## samples — or the Select menu picks a fixed range: a hue, the highlights,
+## midtones or shadows. It looks at the picture as it shows. OK keeps the
+## selection as one step; Cancel puts the old one back.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command, Checkbox
+from workspace import Workspace
+from kit import Kit, SliderField
+
+func range_names() -> list[str]:
+    return ["Sampled Colors", "Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas", "Highlights", "Midtones", "Shadows"]
+
+pub class ColorRangeDialog:
+    pub let dialog: Dialog
+    let range_menu: Menu
+    let fuzziness: SliderField
+    let invert_box: Checkbox
+    let hint: Text
+    ## 0 the sampled colors, 1..6 reds to magentas, 7 highlights, 8 midtones, 9 shadows.
+    var range: int = 0
+    ## The samples, sRGB triples, and which of them are taken back out.
+    var colors: list[float]
+    var subtract: list[bool]
+    ## Whether the selection shown is the dialog's (one step to take back).
+    var shown: bool = false
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.colors = []
+        self.subtract = []
+        let font = kit.font
+        var choices: list[Command] = []
+        var index = 0
+        while index < range_names().length:
+            let chosen = index
+            let command = Command(range_names()[index], id = f"color_range_{index}")
+            kit.bind(command, func () -> unit!:
+                self.choose(chosen))
+            choices.append(command)
+            index += 1
+        self.range_menu = Menu("Sampled Colors ▾", choices, font = font)
+        self.fuzziness = kit.slider_field(0.0, 200.0, 40.0, 0, "", func (value: float) -> unit!:
+            self.show())
+        self.invert_box = kit.checkbox("Invert", self.show)
+        self.hint = Text("", font = font, muted = true)
+        self.dialog = Dialog([Text("Color Range", font = font), kit.dialog_row("Select", self.range_menu, 110.0),
+                              kit.dialog_row("Fuzziness", self.fuzziness.row, 110.0), self.invert_box, self.hint,
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
+
+    pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
+        self.colors = []
+        self.subtract = []
+        self.shown = false
+        self.choose(0)
+        self.workspace.range_sample_for = self.sampled
+        self.dialog.open()
+
+    func choose(self, range: int) -> unit!:
+        self.range = range
+        self.range_menu.set_text(range_names()[range] + " ▾")
+        self.show()
+
+    ## A color from the canvas: 0 samples anew, 1 adds, 2 takes back out.
+    func sampled(self, color: list[float], how: int) -> unit!:
+        if how == 0:
+            self.colors = []
+            self.subtract = []
+        if self.colors.length // 3 >= 32:
+            return
+        self.colors = self.colors + color
+        self.subtract.append(how == 2)
+        if self.range != 0:
+            self.choose(0)
+        else:
+            self.show()
+
+    ## The selection as the dialog has it now, in place of the last one shown.
+    func show(self) -> unit!:
+        let sampling = self.range == 0
+        self.hint.set_text("Click the picture to sample a color; Shift-click adds, Alt-click takes back out." if sampling and self.colors.length == 0 else
+                           (f"{self.colors.length // 3} sampled." if sampling else "Fuzziness is for sampled colors."))
+        self.take_back()
+        if sampling and self.colors.length == 0:
+            return
+        self.workspace.select_color_range(self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
+            self.fail(f"Color Range: {failure.message}")
+            return
+        self.shown = true
+        self.refresh()
+
+    func take_back(self) -> unit!:
+        if self.shown:
+            self.shown = false
+            self.workspace.undo()
+            self.refresh()
+
+    pub func cancel(self) -> unit!:
+        self.workspace.range_sample_for = none
+        self.dialog.hide()
+        self.take_back()
+
+    func apply(self) -> unit!:
+        self.workspace.range_sample_for = none
+        self.dialog.hide()
+        self.shown = false
+        self.refresh()
+
+    func refresh(self) -> unit!:
+        if let done = self.applied:
+            done()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)

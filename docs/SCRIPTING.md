@@ -58,14 +58,13 @@ The full, commented list is `scripting/luced.luc`.
 - **Painting:** `set_color` and `set_background` (sRGB, 0..1), `set_brush`, `stroke`
   (x, y pairs), `line`, `fill`, `clear`, `gradient`, `text`.
 - **Selections:** `select_rectangle`, `select_ellipse` (mode 0 new, 1 add, 2 subtract,
-  3 intersect), `select_all`, `deselect`, `invert_selection`, `select_subject`.
+  3 intersect), `select_all`, `deselect`, `invert_selection`, `select_color_range`.
 - **Pixels:**
   - `adjust(name, settings)` and `add_adjustment_layer(name, settings)`: settings are in
     the units and order the adjustment's dialog shows, and the ones left out keep
     their defaults.
   - `filter(name, settings)`: "Gaussian Blur", "Add Noise", "Motion Blur",
     "Lens Correction", "Bloom", "Tonal Contrast".
-  - `remove_background`.
 - **Canvas:** `resize_image`, `resize_canvas`, `crop`, `flip_canvas`.
 
 The first action that fails stops the run. What ran before it stays, as one undo step,

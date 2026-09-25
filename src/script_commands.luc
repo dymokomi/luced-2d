@@ -184,8 +184,15 @@ pub class ScriptCommands:
             workspace.deselect()
         elif action == "invert_selection":
             workspace.invert_selection()
-        elif action == "select_subject":
-            workspace.select_subject(false)
+        elif action == "select_color_range":
+            var colors: list[float] = []
+            var subtract: list[bool] = []
+            var at = 3
+            while at + 3 < fields.length:
+                colors = colors + [decimal(fields, at), decimal(fields, at + 1), decimal(fields, at + 2)]
+                subtract.append(flag(fields, at + 3))
+                at += 4
+            workspace.select_color_range(number(fields, 0), decimal(fields, 1), flag(fields, 2), colors, subtract)
         else:
             self.apply_pixels(action, fields)
 
@@ -203,8 +210,6 @@ pub class ScriptCommands:
                 discard(workspace.add_adjustment_layer(spec.kind, spec.name, numbers))
         elif action == "filter":
             self.filter(field(fields, 0), fields)
-        elif action == "remove_background":
-            workspace.remove_background()
         elif action == "resize_image":
             workspace.resize_image(number(fields, 0), number(fields, 1))
         elif action == "resize_canvas":

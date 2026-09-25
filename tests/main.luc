@@ -62,7 +62,7 @@ pub func main(arguments: list[str]) -> int!:
     filter_dialogs()
     tool_options_kept()
     update_versions()
-    subject_selection()
+    color_range()
     tool_modes()
     scripts()
     script_editor()
@@ -878,24 +878,40 @@ func update_versions() -> unit!:
     assert(newer("0.1.58", "0.1.57") and newer("0.2.0", "0.1.99") and newer("1.0.0", "0.9.9"))
     assert(not newer("0.1.57", "0.1.57") and not newer("0.1.9", "0.1.10") and not newer("error: offline", "0.1.57") and not newer("", "0.1.57"))
 
-## Select Subject, Object in Selection and Remove Background find a disc on a ground.
-func subject_selection() -> unit!:
+## Color Range: a click on the disc samples its color and selects it; Shift
+## adds the ground, Cancel puts the old selection back; OK keeps it as one step.
+func color_range() -> unit!:
     let workspace = Workspace(96, 64)
     workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
     workspace.set_color(0.0, 0.0, 1.0)
     workspace.fill_selection(false)
     workspace.canvas.select_ellipse(33, 17, 30, 30, 0)
     workspace.set_color(1.0, 0.8, 0.0)
     workspace.fill_selection(false)
     workspace.canvas.deselect()
-    workspace.select_subject(false)
-    assert(workspace.canvas.has_selection() and workspace.canvas.undo_name() == "Select Subject")
-    workspace.canvas.select_rectangle(28, 12, 40, 40, 0)
-    workspace.select_subject(true)
-    assert(workspace.canvas.undo_name() == "Object Selection")
-    workspace.canvas.deselect()
-    workspace.remove_background()
-    assert(workspace.canvas.layer_masked(workspace.selected) and not workspace.canvas.has_selection() and workspace.canvas.undo_name() == "Remove Background")
+    workspace.canvas.select_rectangle(0, 0, 8, 8, 0)
+    panels.color_range.open()
+    assert(workspace.range_sample_for != none)
+    press(view, 48.0, 32.0)
+    release(view, 48.0, 32.0)
+    assert(workspace.canvas.undo_name() == "Color Range" and workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 0)
+    press(view, 4.0, 4.0, shift = true)
+    release(view, 4.0, 4.0)
+    assert(workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 255)
+    panels.color_range.cancel()
+    assert(workspace.range_sample_for == none and workspace.canvas.undo_name() == "Select" and workspace.canvas.selected_at(48, 32) == 0)
+    # Headless, from a script: the disc's color and the shadows.
+    workspace.select_color_range(0, 40.0, false, [1.0, 0.9, 0.0], [false])
+    assert(workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 0)
+    workspace.select_color_range(9, 40.0, false, [], [])
+    assert(workspace.canvas.selected_at(48, 32) == 0)
+    panels.close()
 
 ## Tab steps a tool through its modes; the idle tool leaves the canvas alone.
 func tool_modes() -> unit!:
@@ -942,8 +958,10 @@ func scripts() -> unit!:
     let panels = Panels(workspace, actions, Font())
     let commands = ScriptCommands(workspace, actions)
     commands.apply(parse_line("@l2d select_rectangle\t10\t10\t30\t30\t0") else trap("line"))
-    commands.apply(parse_line("@l2d run\tselect_object") else trap("line"))
-    assert(workspace.canvas.undo_name() == "Object Selection")
+    commands.apply(parse_line("@l2d run\tinverse") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Inverse")
+    commands.apply(parse_line("@l2d select_color_range\t9\t40\tfalse") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Color Range")
     panels.close()
 
 ## The Script editor opens with a starter script that runs: dots on a layer.

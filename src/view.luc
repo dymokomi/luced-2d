@@ -222,7 +222,7 @@ pub class CanvasView: Widget:
         self.shape.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
         if self.pointer_inside and not self.panning and not self.space_held and workspace.tool == "zoom":
             draw_magnifier(painter, self.pointer_x, self.pointer_y, self.alt_held, theme.text(), theme.backdrop())
-        if self.pointer_inside and not self.panning and brushed(workspace.tool) and workspace.drag_for == none and workspace.sample_for == none:
+        if self.pointer_inside and not self.panning and brushed(workspace.tool) and workspace.drag_for == none and workspace.sample_for == none and workspace.range_sample_for == none:
             self.draw_brush_outline(painter)
             if workspace.tool == "clone" and workspace.canvas.has_clone_source():
                 self.draw_clone_preview(painter)
@@ -425,7 +425,7 @@ pub class CanvasView: Widget:
             self.pointer_inside = false
         self.alt_held = event.alt
         # Sampling for a dialog (On Image, an eyedropper) shows cross hairs, whatever the tool.
-        let sampling = self.workspace.drag_for != none or self.workspace.sample_for != none
+        let sampling = self.workspace.drag_for != none or self.workspace.sample_for != none or self.workspace.range_sample_for != none
         self.box.set_cursor(Cursor.crosshair if sampling and not self.panning else cursor_for(self.workspace.tool, self.panning, self.space_held, self.workspace.brush.diameter * self.workspace.zoom < 5.0))
         self.box.invalidate()
         for linked in self.linked:
@@ -557,6 +557,12 @@ pub class CanvasView: Widget:
             self.adjust_dragging = true
             self.adjust_x = event.x
             workspace.adjust_drag(x, y, 0.0, event.meta or event.control, true)
+            return
+        # Color Range's eyedropper takes clicks while its dialog is up: a click
+        # samples, Shift-click adds, Alt-click subtracts.
+        if workspace.range_sample_to(x, y, event.shift, event.alt):
+            if let changed = self.on_changed:
+                changed()
             return
         # Cmd (Ctrl) held makes most tools the Move tool for the drag, as in Photoshop.
         let temporary_move = (event.meta or event.control) and tool != "hand" and tool != "zoom"

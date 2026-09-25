@@ -220,7 +220,7 @@ pub class ToolHeader:
         self.radius_field.set_value(values.radius)
 
     func scrubber(self, value: float, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> NumberField!:
-        let field = NumberField(value, minimum, maximum, 1.0, suffix = suffix, font = self.kit.font)
+        let field = NumberField(value, minimum, maximum, 1.0, suffix = suffix, font = self.kit.font, cells = 8.5)
         self.kit.keep(field.on_change(func (changed: float) -> unit!:
             apply(changed)
             self.workspace.touch()))

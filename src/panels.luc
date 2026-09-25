@@ -30,6 +30,7 @@ from crash_dialog import CrashDialog
 from menus import menu_bar
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
+from color_range_dialog import ColorRangeDialog
 from text_editing import TextEditing
 from script_editor import ScriptEditor
 from tool_rail import ToolRail
@@ -79,6 +80,7 @@ pub class Panels:
     var mask_background: bool = false
     pub let document_settings: DocumentSettings
     pub let size_dialogs: SizeDialogs
+    pub let color_range: ColorRangeDialog
     pub let text_editing: TextEditing
     pub let settings_dialog: SettingsDialog
     pub let files: DocumentFiles
@@ -159,6 +161,10 @@ pub class Panels:
         self.size_dialogs = SizeDialogs(workspace, actions, kit)
         self.size_dialogs.report(self.refresh, self.prompts.tell)
         self.tabs.on_new = self.size_dialogs.new_canvas.open
+        self.color_range = ColorRangeDialog(workspace, kit)
+        self.color_range.applied = self.refresh
+        self.color_range.failed = self.prompts.tell
+        kit.bind(actions.color_range, self.color_range.open)
         self.connect()
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
         # tool selected, and the palette below them.
@@ -196,7 +202,7 @@ pub class Panels:
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
-                            self.picker.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
+                            self.picker.dialog, self.color_range.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 
@@ -249,11 +255,6 @@ pub class Panels:
         kit.bind(actions.swap_colors, self.then_refresh(self.workspace.swap_colors))
         kit.bind(actions.reset_colors, self.then_refresh(self.workspace.reset_colors))
         kit.bind(actions.select_all, self.then_refresh(self.workspace.select_all))
-        kit.bind(actions.select_subject, self.attempting("Select Subject", func () -> unit!:
-            self.workspace.select_subject(false)))
-        kit.bind(actions.select_object, self.attempting("Object Selection", func () -> unit!:
-            self.workspace.select_subject(true)))
-        kit.bind(actions.remove_background, self.attempting("Remove Background", self.workspace.remove_background))
         kit.bind(actions.deselect, self.then_refresh(self.workspace.deselect))
         kit.bind(actions.inverse, self.then_refresh(self.workspace.invert_selection))
         kit.bind(actions.expand, func () -> unit!:

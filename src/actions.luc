@@ -50,9 +50,7 @@ pub class Actions:
     # Select
     pub let select_all: Command
     ## Select › Subject and Object in Selection; Layer › Remove Background.
-    pub let select_subject: Command
-    pub let select_object: Command
-    pub let remove_background: Command
+    pub let color_range: Command
     pub let deselect: Command
     pub let inverse: Command
     pub let expand: Command
@@ -160,9 +158,7 @@ pub class Actions:
         self.flip_vertical = Command("Flip Vertical", id = "flip_vertical")
         self.settings = Command("Settings…", Shortcut(Key.comma, primary = true), id = "settings")
         self.select_all = Command("All", Shortcut(Key.a, primary = true), id = "select_all")
-        self.select_subject = Command("Subject", id = "select_subject")
-        self.select_object = Command("Object in Selection", id = "select_object")
-        self.remove_background = Command("Remove Background", id = "remove_background")
+        self.color_range = Command("Color Range…", id = "color_range")
         self.deselect = Command("Deselect", Shortcut(Key.d, primary = true), id = "deselect")
         self.inverse = Command("Inverse", Shortcut(Key.i, primary = true, shift = true), id = "inverse")
         self.expand = Command("Expand…", id = "expand")
@@ -241,7 +237,7 @@ pub class Actions:
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
-        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.select_subject, self.select_object, self.remove_background, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
+        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
@@ -286,9 +282,7 @@ pub class Actions:
         self.add_noise.set_enabled(not previewing and not group)
         for command in self.filters:
             command.set_enabled(not previewing and not group)
-        self.select_subject.set_enabled(not previewing)
-        self.select_object.set_enabled(not previewing and canvas.has_selection())
-        self.remove_background.set_enabled(not previewing and not group and not canvas.layer_masked(workspace.selected))
+        self.color_range.set_enabled(not previewing)
         for command in self.adjustment_layers:
             command.set_enabled(not previewing)
         self.free_transform.set_enabled(not previewing)

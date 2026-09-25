@@ -96,11 +96,12 @@ Found beyond the old list, and first because they lose work:
     documents; drag a layer onto a tab; paste in place.
 19. [x] Filters: Motion Blur, Grain (and as a layer), Vignette, Bloom, Tonal
     Contrast, Lens Correction; blur and noise as adjustment layers.
-20. [x] Heavy: Select Subject, Object Selection, Remove Background, Camera
-    Raw Filter; update feed; remembered tool options;
-    floating, movable adjustment panels. Subjects are found by color
-    (GrabCut's idea, no trained model): a model would do better on busy
-    pictures. Object Selection takes the marquee as its box, not a tool yet.
+20. [x] Heavy: Camera Raw Filter; update feed; remembered tool options;
+    floating, movable adjustment panels. Select Subject, Object Selection and
+    Remove Background were built by color statistics and removed (2026-09-25):
+    the built-in selections are the traditional ones — Magic Wand and
+    Select › Color Range (sampled colors with Fuzziness, hues, tones) — and
+    smart selection belongs to agentic tools through scripting.
     Content-Aware Fill was built and then removed (2026-09-25): the editor's
     own tools stay traditional; smart ones come as agentic tools through
     scripting.

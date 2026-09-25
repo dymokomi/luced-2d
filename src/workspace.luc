@@ -486,23 +486,19 @@ pub class Workspace:
             self.canvas.move_into(id, parent, position + 1)
             self.select_id(id))
 
-    ## Select › Subject: what stands out in the selected layer; with `in_box`
-    ## (Object in Selection) the object inside the selection's box.
-    pub func select_subject(self, in_box: bool) -> unit!:
+    ## Select › Color Range: the picture's pixels in `range` (0 the sampled
+    ## colors, sRGB triples in `colors`, with `subtract` marking those taken
+    ## back out, within `fuzziness`; 1..6 reds to magentas; 7 highlights, 8
+    ## midtones, 9 shadows), turned around by `invert`: one step.
+    pub func select_color_range(self, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
         let canvas = self.canvas
-        if in_box:
-            canvas.select_subject(self.selected_id(), canvas.selection_left(), canvas.selection_top(), canvas.selection_width(), canvas.selection_height())
-        else:
-            canvas.select_subject(self.selected_id(), 0, 0, 0, 0)
-        self.touch()
-
-    ## Layer › Remove Background: the selected layer's subject kept by a new
-    ## mask that hides the rest, as one step.
-    pub func remove_background(self) -> unit!:
-        self.as_one("Remove Background", func () -> unit!:
-            self.canvas.select_subject(self.selected_id(), 0, 0, 0, 0)
-            self.canvas.set_mask(self.selected_id(), true, 2)
-            self.canvas.deselect())
+        canvas.clear_range_samples()
+        var at = 0
+        while at + 2 < colors.length:
+            canvas.add_range_sample(transfer.srgb_decode(colors[at]), transfer.srgb_decode(colors[at + 1]), transfer.srgb_decode(colors[at + 2]),
+                                    subtract[at // 3] if at // 3 < subtract.length else false)
+            at += 3
+        canvas.select_color_range(self.selected_id(), range, fuzziness, invert)
         self.touch()
 
     ## The clipboard's image where it was copied from, above the selected layer.
@@ -1092,6 +1088,10 @@ pub class Workspace:
     ## A dialog's eyedropper waiting for a click on the canvas (Levels' black,
     ## gray or white point): given the color there, sRGB-encoded 0..1.
     pub var sample_for: func(list[float]) -> unit!? = none
+    ## Color Range's eyedropper, armed while its dialog is up: every click on
+    ## the canvas hands it the color there (sRGB) and 0 to sample anew, 1 to
+    ## add (Shift) or 2 to subtract (Alt).
+    pub var range_sample_for: func(list[float], int) -> unit!? = none
     ## Hue/Saturation's on-image adjustment, while armed: a drag on the canvas
     ## hands it the color under the press (sRGB), how far the pointer has moved
     ## across (points), whether it changes hue (Cmd or Ctrl held) rather than
@@ -1109,6 +1109,18 @@ pub class Workspace:
         if px < 0 or py < 0 or px >= self.width() or py >= self.height():
             return true
         waiting(self.color_at(px, py))
+        self.touch()
+        return true
+
+    ## Hand the color at a document point to Color Range's eyedropper; false
+    ## when it is not armed.
+    pub func range_sample_to(self, x: float, y: float, adding: bool, subtracting: bool) -> bool!:
+        let waiting = self.range_sample_for else return false
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
+            return true
+        waiting(self.color_at(px, py), 2 if subtracting else (1 if adding else 0))
         self.touch()
         return true
 
