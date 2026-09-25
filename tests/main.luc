@@ -22,7 +22,7 @@ from tool_cursor import cursor_for
 from adjustment_controls import range_of
 from tools import group_of
 from input import Cursor
-from script_commands import parse_line
+from script_commands import parse_line, ScriptCommands
 from tool_memory import tools_path, restore_tools, remember_tools
 import paths
 import files
@@ -942,6 +942,15 @@ func scripts() -> unit!:
     assert(workspace.layer_count() == before)
     host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.select_layer(9)\n    luced.add_layer(\"Never\")\n    return 0\n")
     assert(not host.succeeded and host.console.contains("select_layer failed") and workspace.layer_count() == before)
+    # A menu command that needs a selection runs once the script made one,
+    # with no window to refresh which commands can run.
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d select_rectangle\t10\t10\t30\t30\t0") else trap("line"))
+    commands.apply(parse_line("@l2d run\tselect_object") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Object Selection")
+    panels.close()
 
 ## The Script editor opens with a starter script that runs: dots on a layer.
 func script_editor() -> unit!:

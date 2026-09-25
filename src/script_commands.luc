@@ -221,6 +221,9 @@ pub class ScriptCommands:
     ## A menu command by id, as the user would choose it.
     func run(self, id: str) -> unit!:
         let actions = self.actions else error(ui.invalid, "menu commands need the editor's window")
+        # Which commands can run follows the document as it is now: headless,
+        # no window refreshes it.
+        actions.update(self.workspace)
         for command in actions.all:
             if command.id() == id:
                 if not command.is_enabled():
