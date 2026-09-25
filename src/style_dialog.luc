@@ -9,6 +9,7 @@ from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox, Menu, Command
 from gpu import Color
 from workspace import Workspace
 from kit import Kit, SliderField
+import math
 from hex_color import hex_of_linear, linear_of_hex
 from swatch import Swatch
 
@@ -39,9 +40,16 @@ class Effect:
         self.box = box
         self.swatch = swatch
 
+## How many numbered style settings a layer has (luce-image's style fields).
+let style_fields: int = 40
+
 pub class StyleDialog:
     pub let dialog: Dialog
     let sliders: list[StyleSlider]
+    ## The drop shadow's direction (the light's angle, Photoshop's) and distance,
+    ## which set its x and y offsets together.
+    let shadow_angle: SliderField
+    let shadow_distance: SliderField
     let effects: list[Effect]
     let position_menu: Menu
     ## The layer's style fields when the dialog opened, for Cancel.
@@ -71,7 +79,11 @@ pub class StyleDialog:
             self.set_field(20, 2.0))
         self.position_menu = Menu("Outside ▾", [outside, centered, inside], font = kit.font)
         var items: list[Widget] = [Text("Layer Style", font = kit.font)]
-        self.section(items, 0, 4, "Drop Shadow", [self.slider(1, "X", -100.0, 100.0, 1.0, " px"), self.slider(2, "Y", -100.0, 100.0, 1.0, " px"),
+        self.shadow_angle = kit.slider_field(-180.0, 180.0, 120.0, 0, "°", func (moved: float) -> unit!:
+            self.set_shadow_offset())
+        self.shadow_distance = kit.slider_field(0.0, 100.0, 5.0, 0, " px", func (moved: float) -> unit!:
+            self.set_shadow_offset())
+        self.section(items, 0, 4, "Drop Shadow", [kit.dialog_row("Angle", self.shadow_angle.row, 80.0), kit.dialog_row("Distance", self.shadow_distance.row, 80.0),
                                                   self.slider(3, "Blur", 0.0, 100.0, 1.0, " px"), self.slider(7, "Opacity", 0.0, 100.0, 0.01, "%")])
         self.section(items, 8, 10, "Stroke", [self.slider(9, "Size", 0.0, 100.0, 1.0, " px"), self.slider(13, "Opacity", 0.0, 100.0, 0.01, "%"),
                                               kit.dialog_row("Position", self.position_menu, 80.0)])
@@ -79,6 +91,7 @@ pub class StyleDialog:
         self.section(items, 21, 22, "Color Overlay", [self.slider(25, "Opacity", 0.0, 100.0, 0.01, "%")])
         self.section(items, 26, 30, "Inner Shadow", [self.slider(27, "X", -100.0, 100.0, 1.0, " px"), self.slider(28, "Y", -100.0, 100.0, 1.0, " px"),
                                                      self.slider(29, "Blur", 0.0, 100.0, 1.0, " px"), self.slider(33, "Opacity", 0.0, 100.0, 0.01, "%")])
+        self.section(items, 34, 36, "Inner Glow", [self.slider(35, "Size", 0.0, 100.0, 1.0, " px"), self.slider(39, "Opacity", 0.0, 100.0, 0.01, "%")])
         items.append(HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
         self.dialog = Dialog(items, width = 440.0)
         kit.dialog_keys(self.dialog, self.cancel, self.apply)
@@ -112,7 +125,7 @@ pub class StyleDialog:
             self.workspace.end_preview(false)
         self.before = []
         var field = 0
-        while field < 34:
+        while field < style_fields:
             self.before.append(self.workspace.style_value(field))
             field += 1
         self.show()
@@ -128,8 +141,21 @@ pub class StyleDialog:
             effect.swatch.color = Color(self.workspace.style_value(effect.color_field), self.workspace.style_value(effect.color_field + 1),
                                         self.workspace.style_value(effect.color_field + 2))
             effect.swatch.layout().invalidate()
+        # The shadow's offsets as the angle the light comes from and a distance.
+        let dx = self.workspace.style_value(1)
+        let dy = self.workspace.style_value(2)
+        self.shadow_distance.set_value(math.hypot(dx, dy))
+        if dx != 0.0 or dy != 0.0:
+            self.shadow_angle.set_value(math.round(math.atan2(dy, -dx) * 180.0 / math.pi))
         let position = int(self.workspace.style_value(20))
         self.position_menu.set_text(["Outside ▾", "Center ▾", "Inside ▾"][position])
+
+    ## The shadow falls away from the light: at the angle's opposite, `distance` away.
+    func set_shadow_offset(self) -> unit!:
+        let radians = self.shadow_angle.value() * math.pi / 180.0
+        let distance = self.shadow_distance.value()
+        self.set_field(1, -math.cos(radians) * distance)
+        self.set_field(2, math.sin(radians) * distance)
 
     ## One field of the selected layer's style, live.
     func set_field(self, field: int, value: float) -> unit!:
@@ -162,7 +188,7 @@ pub class StyleDialog:
 
     ## Put the style back as it was when the dialog opened.
     pub func cancel(self) -> unit!:
-        if self.before.length == 34:
+        if self.before.length == style_fields:
             var field = 0
             for value in self.before:
                 self.workspace.set_style_value(field, value)

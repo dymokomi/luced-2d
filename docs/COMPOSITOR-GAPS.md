@@ -70,7 +70,9 @@ Found beyond the old list, and first because they lose work:
     parameters). Originally: Curves adjustment layers; Levels eyedroppers, three Auto
     modes, Reset, Preview toggle (Opt-P); Hue/Sat band sliders, eyedroppers,
     drag on canvas, "outside this range"; Gradient Map colors.
-14. [ ] Styles: Drop Shadow by angle and distance; Inner Glow.
+14. [x] Styles (0.1.52): Drop Shadow by angle and distance (the light's
+    angle, Photoshop's convention); Inner Glow (over the overlay, under the
+    inner shadow and stroke).
 15. [ ] Effects listed under their layer in Layers, each with an eye, delete,
     Option-drag to copy.
 16. [ ] Import: File › Import Images…; PSD groups and masks, merged-only PSDs,
