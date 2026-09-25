@@ -79,6 +79,8 @@ pub class Actions:
     pub let toggle_mask_enabled: Command
     pub let toggle_mask_link: Command
     pub let copy_mask: Command
+    ## An adjustment dialog's Preview, on and off.
+    pub let toggle_preview: Command
     pub let paste_mask: Command
     pub let load_transparency: Command
     pub let toggle_mask_editing: Command
@@ -179,6 +181,7 @@ pub class Actions:
         self.toggle_mask_enabled = Command("Disable / Enable Mask", id = "toggle_mask_enabled")
         self.toggle_mask_link = Command("Unlink / Link Mask", id = "toggle_mask_link")
         self.copy_mask = Command("Copy Mask", id = "copy_mask")
+        self.toggle_preview = Command("Preview On / Off", Shortcut(Key.p, alt = true), id = "toggle_preview")
         self.paste_mask = Command("Paste Mask", id = "paste_mask")
         self.load_transparency = Command("Load Layer Transparency", id = "load_transparency")
         self.toggle_mask_editing = Command("Edit Mask / Pixels", Shortcut(Key.backslash), id = "toggle_mask_editing")
@@ -219,7 +222,7 @@ pub class Actions:
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
-                    self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.load_transparency,
+                    self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.toggle_preview, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
                     self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.adjustment_layers + self.blends + self.tools + self.units
 

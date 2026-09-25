@@ -5,7 +5,7 @@
 ## Adjustments and the Filter menu: Apply keeps the preview as one undo step.
 ## Adjustment layers are the live path; their controls are in the Properties
 ## panel.
-from ui import Text, HStack, Spacer, Widget, Dialog
+from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox
 from workspace import Workspace
 from kit import Kit
 from adjustment_controls import AdjustmentControls, blur_kind, noise_kind
@@ -25,6 +25,9 @@ pub class AdjustDialog:
     pub var changed: func() -> unit!? = none
     pub var refreshed: func() -> unit!? = none
     pub var failed: func(str) -> unit!? = none
+    let preview_box: Checkbox
+    ## Whether the edit shows on the layer (Preview checked).
+    var showing: bool = true
     let workspace: Workspace
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
@@ -35,7 +38,10 @@ pub class AdjustDialog:
         self.controls.changed = self.preview
         self.controls.failed = self.fail
         var items: list[Widget] = [self.title, self.controls.view]
-        items.append(HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
+        # Preview unchecked shows the layer as it was, the settings kept (Alt-P toggles it).
+        self.preview_box = kit.checkbox("Preview", self.toggle_preview)
+        self.preview_box.set_checked(true)
+        items.append(HStack([self.preview_box, kit.button("Reset", self.reset), Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
         self.dialog = Dialog(items, width = 440.0)
         kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
@@ -60,6 +66,8 @@ pub class AdjustDialog:
             self.fail(f"Cannot adjust: {failure.message}")
             return
         self.kind = kind
+        self.showing = true
+        self.preview_box.set_checked(true)
         self.controls.below = -1
         self.controls.show(kind, [])
         self.title.set_text(self.controls.spec(kind).name)
@@ -91,10 +99,31 @@ pub class AdjustDialog:
     pub func cancel(self) -> unit!:
         self.close(false)
 
+    ## Preview on or off (the checkbox, or Alt-P while the dialog is open).
+    pub func toggle_preview(self) -> unit!:
+        if not self.dialog.is_open():
+            return
+        self.showing = not self.showing
+        self.preview_box.set_checked(self.showing)
+        self.preview()
+
+    ## Put every setting of the open kind back to its default.
+    func reset(self) -> unit!:
+        if self.kind < 0:
+            return
+        self.controls.show(self.kind, [])
+        self.preview()
+
     ## Show the open kind with the controls as they are, on the pixels' preview.
     pub func preview(self) -> unit!:
         let kind = self.kind
         if kind < 0 or not self.workspace.previewing():
+            return
+        if not self.showing:
+            self.workspace.canvas.show_preview_original()
+            self.workspace.touch()
+            if let changed = self.changed:
+                changed()
             return
         let values = self.controls.values(kind)
         if kind == blur_kind:

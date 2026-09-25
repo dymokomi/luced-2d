@@ -1012,6 +1012,26 @@ pub class Workspace:
         self.set_palette(0.0, 0.0, 0.0, false)
         self.set_palette(1.0, 1.0, 1.0, true)
 
+    ## A dialog's eyedropper waiting for a click on the canvas (Levels' black,
+    ## gray or white point): given the color there, sRGB-encoded 0..1.
+    pub var sample_for: func(list[float]) -> unit!? = none
+
+    ## Hand the color at a document point to the waiting eyedropper, once; the
+    ## image as it was, not the edit being previewed. False when none waits.
+    pub func sample_to(self, x: float, y: float) -> bool!:
+        let waiting = self.sample_for else return false
+        self.sample_for = none
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if px < 0 or py < 0 or px >= self.width() or py >= self.height():
+            return true
+        if self.canvas.previewing():
+            self.canvas.show_preview_original()
+        self.canvas.pick(px, py)
+        waiting([transfer.srgb_encode(self.canvas.picked_red()), transfer.srgb_encode(self.canvas.picked_green()), transfer.srgb_encode(self.canvas.picked_blue())])
+        self.touch()
+        return true
+
     ## The eyedropper: the flattened color under a document point becomes the
     ## foreground color (the background one while the picker samples for it).
     pub func pick(self, x: float, y: float) -> unit!:

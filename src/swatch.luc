@@ -1,0 +1,35 @@
+## A color swatch, a small bordered patch of its color, that says when it
+## is clicked (the color picker opens on it): a layer style's colors, a
+## Gradient Map's ends.
+from ui import Widget, Layout, Size, Constraints, Event, Painter
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+import theme
+
+pub class Swatch: Widget:
+    let box: Layout
+    pub var color: Color = Color(0.0, 0.0, 0.0)
+    pub var on_click: func() -> unit!? = none
+
+    pub func init(self) -> unit!:
+        self.box = Layout()
+        self.box.set_interactive(true)
+        self.box.set_cursor(Cursor.pointer)
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(28.0, 18.0)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.border())
+        painter.rectangle(Rect(1.0, 1.0, size.width - 2.0, size.height - 2.0), self.color)
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            if let click = self.on_click:
+                click()

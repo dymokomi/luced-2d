@@ -63,7 +63,11 @@ Found beyond the old list, and first because they lose work:
     moves alone); masks on groups (the group flattened on its own, then laid
     down through its mask); adjustments, Gaussian Blur and Add Noise on the
     mask being edited; Copy Mask / Paste Mask; a new mask is the paint target.
-13. [ ] Adjustments: Curves adjustment layers (done, 0.1.50); Levels eyedroppers, three Auto
+13. [ ] Adjustments. Done: Curves adjustment layers (0.1.50); Levels eyedroppers
+    and three Auto modes, Reset, Preview toggle (Alt-P), Gradient Map colors,
+    the Hue/Saturation range eyedropper (0.1.51). Left: Hue/Saturation band
+    sliders, drag on canvas and "outside this range" (they need more engine
+    parameters). Originally: Curves adjustment layers; Levels eyedroppers, three Auto
     modes, Reset, Preview toggle (Opt-P); Hue/Sat band sliders, eyedroppers,
     drag on canvas, "outside this range"; Gradient Map colors.
 14. [ ] Styles: Drop Shadow by angle and distance; Inner Glow.

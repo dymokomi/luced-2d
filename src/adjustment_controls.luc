@@ -10,12 +10,16 @@ from workspace import Workspace
 from kit import Kit, SliderField
 from adjustments import Adjustment, Knob, Toggle, adjustments, gradient_map, curves_adjustment
 from levels_graph import LevelsGraph
+from map_colors import MapColors
+import math
 
 ## The rows past the adjustments' (0..11): the filters, in the dialog.
 pub let blur_kind: int = 12
 pub let noise_kind: int = 13
 ## Levels: its kind, and five values per page.
 let levels_kind: int = 3
+## Hue/Saturation: its pages are Master, then the six ranges from Reds.
+let hue_kind: int = 1
 let curves_kind: int = curves_adjustment
 
 pub class AdjustmentControls:
@@ -32,6 +36,8 @@ pub class AdjustmentControls:
     var pages: list[int]
     pub let levels: LevelsGraph
     pub let curve_editor: CurveEditor
+    ## The Gradient Map's two colors.
+    pub let map_colors: MapColors
     let curve_label: Text
     var curve_channel: int = 0
     ## The kind showing, or -1.
@@ -63,6 +69,8 @@ pub class AdjustmentControls:
         self.curve_editor = CurveEditor()
         kit.keep(self.curve_editor.on_change(self.curve_changed))
         self.curve_label = Text("RGB", font = kit.font)
+        self.map_colors = MapColors(workspace, kit)
+        self.map_colors.changed = self.tell
         for adjustment in self.table + self.filters:
             self.build(adjustment)
         var items: list[Widget] = []
@@ -109,13 +117,34 @@ pub class AdjustmentControls:
             boxes.append(box)
             items.append(box)
             slot += 1
+        if kind == hue_kind:
+            # The eyedropper: a click on the image shows the range its color is in.
+            items.append(HStack([self.kit.button("Pick Range", self.arm_range), Spacer()], spacing = 8.0))
         if kind == levels_kind:
-            items.append(HStack([self.kit.button("Auto", self.auto_levels), Spacer()], spacing = 8.0))
+            # Photoshop's three Auto modes.
+            var modes: list[Command] = []
+            var mode = 0
+            for name in ["Enhance Monochromatic Contrast", "Enhance Per Channel Contrast", "Find Dark & Light Colors"]:
+                let chosen = mode
+                let command = Command(name, id = f"auto_levels_{mode}")
+                self.kit.bind(command, func () -> unit!:
+                    self.auto_levels(chosen))
+                modes.append(command)
+                mode += 1
+            # The eyedroppers: the next click on the image sets that point.
+            var droppers: list[Widget] = [Menu("Auto ▾", modes, font = self.kit.font), Spacer()]
+            var point = 0
+            for name in ["Black", "Gray", "White"]:
+                let chosen = point
+                droppers.append(self.kit.button(name, func () -> unit!:
+                    self.arm_dropper(chosen)))
+                point += 1
+            items.append(HStack(droppers, spacing = 8.0))
         if kind == curves_kind:
             items.append(self.curves_header())
             items.append(self.curve_editor)
         if kind == gradient_map:
-            items.append(Text("From the foreground color to the background color", font = self.kit.font, muted = true))
+            items.append(self.map_colors.row)
         let row = VStack(items, spacing = 10.0)
         row.layout().set_visible(false)
         self.rows.append(row)
@@ -146,7 +175,9 @@ pub class AdjustmentControls:
     ## Show `kind` with `values` (shown units; its defaults when empty).
     ## `staged_curves`: the canvas already holds the curves to show (a Curves
     ## layer's own); otherwise Curves starts from the identity.
-    pub func show(self, kind: int, values: list[float], staged_curves: bool = false) -> unit!:
+    ## `map_colors`: a Gradient Map layer's six color components (empty: the
+    ## foreground and background colors).
+    pub func show(self, kind: int, values: list[float], staged_curves: bool = false, map_colors: list[float]? = none) -> unit!:
         self.kind = kind
         var index = 0
         for row in self.rows:
@@ -156,6 +187,8 @@ pub class AdjustmentControls:
         self.shown[kind] = values if values.length == spec.value_count() else spec.defaults()
         slot_boxes(self.checkboxes[kind], self.shown[kind], spec.page_count() * spec.knobs.length)
         self.show_page(kind, 0)
+        if kind == gradient_map:
+            self.map_colors.take(map_colors else [])
         if kind == curves_kind:
             if not staged_curves:
                 var channel = 0
@@ -189,7 +222,7 @@ pub class AdjustmentControls:
     pub func numbers(self, kind: int) -> list[float]:
         var numbers = self.spec(kind).engine(self.shown[kind])
         if kind == gradient_map:
-            numbers = numbers + self.workspace.colors_encoded()
+            numbers = numbers + self.map_colors.colors
         return numbers
 
     ## The shown values of `kind`, as they are.
@@ -253,36 +286,86 @@ pub class AdjustmentControls:
 
     ## Levels › Auto: each channel's black and white points where 0.1% of the
     ## pixels fall beyond them, as Compositor's Auto Color; RGB's are reset.
-    func auto_levels(self) -> unit!:
-        let canvas = self.workspace.canvas
+    ## Levels' Auto, one of Photoshop's three: 0 stretches the luminosity alike
+    ## in every channel (Monochromatic Contrast), 1 each channel on its own
+    ## (Per Channel Contrast), 2 each channel to its darkest and lightest
+    ## colors, clipping more of the extremes (Find Dark & Light Colors).
+    func auto_levels(self, mode: int) -> unit!:
         if not self.measure():
             self.fail("Auto: nothing to count yet")
             return
         var values = self.spec(levels_kind).defaults()
+        if mode == 0:
+            let ends = self.clipped_ends(0, 1000)
+            values[0] = float(ends[0])
+            values[1] = float(ends[1])
+        else:
+            var channel = 1
+            while channel <= 3:
+                let ends = self.clipped_ends(channel, 1000 if mode == 1 else 200)
+                values[channel * 5] = float(ends[0])
+                values[channel * 5 + 1] = float(ends[1])
+                channel += 1
+        self.shown[levels_kind] = values
+        self.show_page(levels_kind, self.pages[levels_kind])
+        self.tell()
+
+    ## Wait for a click on the image: Hue/Saturation then shows the range of
+    ## the color there (Reds, Yellows … Magentas; a grey keeps Master).
+    func arm_range(self) -> unit!:
+        self.workspace.sample_for = func (color: list[float]) -> unit!:
+            self.show_page(hue_kind, range_of(color))
+
+    ## Wait for a click on the image: 0 sets the black point, 1 the gray, 2 the white.
+    func arm_dropper(self, point: int) -> unit!:
+        self.workspace.sample_for = func (color: list[float]) -> unit!:
+            self.set_point(point, color)
+
+    ## Levels from a sampled color (sRGB 0..1): its channels become each
+    ## channel's input black or white; for gray, each channel's gamma brings
+    ## the color to its own luminosity, neutral.
+    func set_point(self, point: int, color: list[float]) -> unit!:
+        var values = self.shown[levels_kind]
+        let gray = color[0] * 0.3 + color[1] * 0.59 + color[2] * 0.11
         var channel = 1
         while channel <= 3:
-            var total = 0
-            var slot = 0
-            while slot < 256:
-                total += canvas.histogram(channel, slot)
-                slot += 1
-            let clip = total // 1000
-            var low = 0
-            var counted = 0
-            while low < 254 and counted + canvas.histogram(channel, low) <= clip:
-                counted += canvas.histogram(channel, low)
-                low += 1
-            var high = 255
-            counted = 0
-            while high > low + 1 and counted + canvas.histogram(channel, high) <= clip:
-                counted += canvas.histogram(channel, high)
-                high -= 1
-            values[channel * 5] = float(low)
-            values[channel * 5 + 1] = float(high)
+            let value = color[channel - 1] * 255.0
+            let at = channel * 5
+            if point == 0:
+                values[at] = math.min(value, values[at + 1] - 2.0)
+            elif point == 2:
+                values[at + 1] = math.max(value, values[at] + 2.0)
+            else:
+                let spread = math.max(1.0, values[at + 1] - values[at])
+                let x = math.clamp((value - values[at]) / spread, 0.001, 0.999)
+                let target = math.clamp(gray, 0.001, 0.999)
+                values[at + 2] = math.clamp(math.log(x) / math.log(target), 0.1, 9.99)
             channel += 1
         self.shown[levels_kind] = values
         self.show_page(levels_kind, self.pages[levels_kind])
         self.tell()
+
+    ## The histogram bins where `channel`'s darkest and lightest pixels begin,
+    ## 1/`fraction` of them clipped at each end.
+    func clipped_ends(self, channel: int, fraction: int) -> list[int]!:
+        let canvas = self.workspace.canvas
+        var total = 0
+        var slot = 0
+        while slot < 256:
+            total += canvas.histogram(channel, slot)
+            slot += 1
+        let clip = total // fraction
+        var low = 0
+        var counted = 0
+        while low < 254 and counted + canvas.histogram(channel, low) <= clip:
+            counted += canvas.histogram(channel, low)
+            low += 1
+        var high = 255
+        counted = 0
+        while high > low + 1 and counted + canvas.histogram(channel, high) <= clip:
+            counted += canvas.histogram(channel, high)
+            high -= 1
+        return [low, high]
 
     # -- Curves.
 
@@ -330,3 +413,21 @@ func slot_boxes(boxes: list[Checkbox], values: list[float], first: int) -> unit!
 ## The curve channels, in their index order.
 func curve_names() -> list[str]:
     return ["RGB", "Red", "Green", "Blue"]
+
+## Hue/Saturation's page for an sRGB color: 1 Reds, 2 Yellows, 3 Greens,
+## 4 Cyans, 5 Blues, 6 Magentas by the nearest of their hues (every 60°),
+## 0 (Master) for a grey.
+func range_of(color: list[float]) -> int:
+    let high = math.max(color[0], math.max(color[1], color[2]))
+    let low = math.min(color[0], math.min(color[1], color[2]))
+    let chroma = high - low
+    if chroma < 0.02:
+        return 0
+    var hue = 0.0
+    if high == color[0]:
+        hue = math.mod((color[1] - color[2]) / chroma, 6.0)
+    elif high == color[1]:
+        hue = (color[2] - color[0]) / chroma + 2.0
+    else:
+        hue = (color[0] - color[1]) / chroma + 4.0
+    return int(math.mod(math.round(hue), 6.0)) + 1

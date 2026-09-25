@@ -9,7 +9,7 @@ from workspace import Workspace
 from canvas import Canvas
 from kit import Kit
 from adjustment_controls import AdjustmentControls
-from adjustments import curves_adjustment
+from adjustments import curves_adjustment, gradient_map
 
 pub class Properties:
     pub let panel: Panel
@@ -126,7 +126,14 @@ pub class Properties:
         let own_curves = kind == curves_adjustment
         if own_curves:
             canvas.stage_layer_curves(id)
-        self.adjustment.show(kind, spec.shown_of(numbers), own_curves)
+        # A Gradient Map layer's colors come after its values.
+        var map_colors: list[float] = []
+        if kind == gradient_map:
+            var component = 0
+            while component < 6:
+                map_colors.append(canvas.adjustment_value(selected, spec.value_count() + component))
+                component += 1
+        self.adjustment.show(kind, spec.shown_of(numbers), own_curves, map_colors)
         self.adjustment_title.set_text(spec.name)
 
     ## A setting changed: the layer takes it at once.

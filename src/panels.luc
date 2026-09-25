@@ -119,6 +119,9 @@ pub class Panels:
             self.picker.open_for(title, hex, changed)
         self.layers_panel.open_style = self.style.open
         self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.style.open)
+        # Both places that show a Gradient Map pick its colors with the picker.
+        self.adjust.controls.map_colors.pick_color = self.pick_any_color
+        self.properties.adjustment.map_colors.pick_color = self.pick_any_color
         self.properties.changed = self.document_changed
         self.properties.refreshed = self.refresh
         self.crash = CrashDialog(kit)
@@ -307,6 +310,7 @@ pub class Panels:
         kit.bind(actions.toggle_mask_enabled, self.attempting("Mask", self.workspace.toggle_mask_enabled))
         kit.bind(actions.toggle_mask_link, self.attempting("Mask", self.workspace.toggle_mask_link))
         kit.bind(actions.copy_mask, self.attempting("Copy Mask", self.workspace.copy_mask))
+        kit.bind(actions.toggle_preview, self.adjust.toggle_preview)
         kit.bind(actions.paste_mask, self.attempting("Paste Mask", self.workspace.paste_mask))
         kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.load_transparency))
         kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
@@ -426,6 +430,11 @@ pub class Panels:
             return
         self.picker.open(background)
         self.refresh()
+
+    ## The picker on any color: its title, the "#rrggbb" it starts from, where changes go.
+    func pick_any_color(self, title: str, hex: str, changed: func(str) -> unit!) -> unit!:
+        if self.kit.may_open(self.picker.dialog) or self.adjust.dialog.is_open():
+            self.picker.open_for(title, hex, changed)
 
     func cancel_picker(self) -> unit!:
         self.picker.finish(false)

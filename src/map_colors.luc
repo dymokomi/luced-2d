@@ -1,0 +1,63 @@
+## The Gradient Map's two colors, after Compositor's: a swatch for the
+## shadows' end and one for the highlights', each opening the color picker.
+## They start as the foreground and background colors and are the map's own
+## from then on, kept with an adjustment layer.
+from ui import HStack, Text
+from gpu import Color
+from swatch import Swatch
+from workspace import Workspace
+from kit import Kit
+from hex_color import hex_of_srgb, parse_hex
+import transfer
+
+pub class MapColors:
+    pub let row: HStack
+    let swatches: list[Swatch]
+    ## Six sRGB components 0..1: the shadows' color, then the highlights'.
+    pub var colors: list[float]
+    ## Open the picker: a title, the "#rrggbb" to start from, and where each change goes.
+    pub var pick_color: func(str, str, func(str) -> unit!) -> unit!? = none
+    ## A color changed.
+    pub var changed: func() -> unit!? = none
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.colors = workspace.colors_encoded()
+        self.swatches = [Swatch(), Swatch()]
+        var index = 0
+        for swatch in self.swatches:
+            let end = index
+            swatch.on_click = func () -> unit!:
+                self.pick(end)
+            index += 1
+        self.row = HStack([Text("Shadows", font = kit.font, muted = true), self.swatches[0],
+                           Text("Highlights", font = kit.font, muted = true), self.swatches[1]], spacing = 8.0)
+        self.show()
+
+    ## Take `colors` (six sRGB components), or the foreground and background when empty.
+    pub func take(self, colors: list[float]) -> unit!:
+        self.colors = colors if colors.length == 6 else self.workspace.colors_encoded()
+        self.show()
+
+    func show(self) -> unit!:
+        var index = 0
+        for swatch in self.swatches:
+            let at = index * 3
+            swatch.color = Color(transfer.srgb_decode(self.colors[at]), transfer.srgb_decode(self.colors[at + 1]), transfer.srgb_decode(self.colors[at + 2]))
+            swatch.layout().invalidate()
+            index += 1
+
+    func pick(self, end: int) -> unit!:
+        let pick = self.pick_color else return
+        let at = end * 3
+        pick("Shadows Color" if end == 0 else "Highlights Color", hex_of_srgb(self.colors[at], self.colors[at + 1], self.colors[at + 2]), func (hex: str) -> unit!:
+            let values = parse_hex(hex) else return
+            var colors = self.colors
+            colors[at] = values[0]
+            colors[at + 1] = values[1]
+            colors[at + 2] = values[2]
+            self.colors = colors
+            self.show()
+            if let changed = self.changed:
+                changed())

@@ -479,6 +479,10 @@ pub class CanvasView: Widget:
         elif tool == "clone" and event.alt:
             # Alt-click: where the Clone Stamp copies from, as Photoshop's.
             workspace.set_clone_source(x, y)
+        elif workspace.sample_to(x, y):
+            # A dialog's eyedropper took the click (Levels' black, gray or white point).
+            if let changed = self.on_changed:
+                changed()
         elif (tool == "brush" or tool == "gradient") and event.alt:
             # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
             workspace.pick(x, y)

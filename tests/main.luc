@@ -42,6 +42,7 @@ pub func main(arguments: list[str]) -> int!:
     crop_box_options()
     mask_actions()
     stroke_undo()
+    eyedropper_sample()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -720,3 +721,21 @@ func stroke_undo() -> unit!:
     panels.refresh_if_changed()
     assert(workspace.revision == shown)
     panels.close()
+
+class Sampled:
+    pub var color: list[float]
+    pub func init(self):
+        self.color = []
+    pub func take(self, color: list[float]) -> unit!:
+        self.color = color
+
+## A dialog's eyedropper takes one click on the canvas, the color there in sRGB.
+func eyedropper_sample() -> unit!:
+    let workspace = Workspace(40, 30)
+    workspace.canvas.bind_headless()
+    workspace.set_color(1.0, 0.0, 0.0)
+    workspace.fill_selection(false)
+    let sampled = Sampled()
+    assert(not workspace.sample_to(5.0, 5.0))
+    workspace.sample_for = sampled.take
+    assert(workspace.sample_to(5.0, 5.0) and sampled.color.length == 3 and sampled.color[0] > 0.99 and sampled.color[1] < 0.01)

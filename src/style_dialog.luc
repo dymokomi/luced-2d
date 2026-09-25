@@ -5,13 +5,12 @@
 ## the pixels: every change writes the layer's style (luce-image's numbered
 ## style fields) and the compositor draws it live; Cancel puts back what the
 ## layer had when the dialog opened.
-from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox, Menu, Command, Layout, Size, Constraints, Event, Painter
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox, Menu, Command
+from gpu import Color
 from workspace import Workspace
 from kit import Kit, SliderField
 from hex_color import hex_of_linear, linear_of_hex
-import theme
+from swatch import Swatch
 
 ## One slider: the style field it sets, and the factor from what it shows to
 ## what the field holds (percent to 0..1).
@@ -174,32 +173,3 @@ pub class StyleDialog:
     func refresh(self) -> unit!:
         if let refreshed = self.refreshed:
             refreshed()
-
-## A color swatch that opens the picker when clicked.
-class Swatch: Widget:
-    let box: Layout
-    pub var color: Color = Color(0.0, 0.0, 0.0)
-    pub var on_click: func() -> unit!? = none
-
-    pub func init(self) -> unit!:
-        self.box = Layout()
-        self.box.set_interactive(true)
-        self.box.set_cursor(Cursor.pointer)
-
-    pub func layout(self) -> Layout:
-        return self.box
-
-    pub func measure(self, available: Constraints) -> Size!:
-        return Size(28.0, 18.0)
-
-    pub func draw(self, target: RenderTarget) -> unit!:
-        let painter = Painter(target)
-        let size = target.size()
-        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.border())
-        painter.rectangle(Rect(1.0, 1.0, size.width - 2.0, size.height - 2.0), self.color)
-        painter.close()
-
-    pub func event(self, event: Event) -> unit!:
-        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
-            if let click = self.on_click:
-                click()
