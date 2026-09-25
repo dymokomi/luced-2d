@@ -9,6 +9,7 @@ from brush import Brush, preset
 from documents import Document, title_of, blank_canvas
 from hex_color import hex_of_linear, linear_of_hex
 import math
+import ui
 import transfer
 import paths
 from units import pixels_per
@@ -73,6 +74,8 @@ pub class Workspace:
     pub var crop_box: CropBox? = none
     ## Width over height the Crop tool keeps (the header's ratio), 0 for any.
     pub var crop_ratio: float = 0.0
+    ## The layer whose mask Copy Mask took, 0 for none.
+    pub var mask_source: int = 0
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
     pub var contiguous: bool = true
@@ -516,6 +519,32 @@ pub class Workspace:
             self.canvas.edit_mask(true)
         self.touch()
 
+    ## Link the selected layer's mask to its pixels, or unlink it (it stays put
+    ## when they move).
+    pub func toggle_mask_link(self) -> unit!:
+        let index = self.selected
+        self.canvas.link_mask(self.selected_id(), not self.canvas.layer_mask_linked(index))
+        self.touch()
+
+    ## Remember the selected layer's mask for Paste Mask.
+    pub func copy_mask(self) -> unit!:
+        if not self.canvas.layer_masked(self.selected):
+            error(ui.invalid, "the layer has no mask to copy")
+        self.mask_source = self.selected_id()
+
+    ## Give the selected layer a copy of the mask Copy Mask remembered.
+    pub func paste_mask(self) -> unit!:
+        if not self.mask_source_present():
+            error(ui.invalid, "copy a layer's mask first")
+        self.canvas.copy_mask(self.mask_source, self.selected_id())
+        self.canvas.edit_mask(true)
+        self.touch()
+
+    ## Whether the layer Copy Mask remembered is still here with its mask.
+    pub func mask_source_present(self) -> bool!:
+        let index = self.index_of(self.mask_source)
+        return self.mask_source != 0 and index >= 0 and self.canvas.layer_masked(index)
+
     ## Keep the selected layer's mask but stop it hiding anything, or bring it back.
     pub func toggle_mask_enabled(self) -> unit!:
         if self.canvas.layer_masked(self.selected):
@@ -777,9 +806,10 @@ pub class Workspace:
             self.fitted = false
         self.touch()
 
-    ## Start showing edits live on the selected layer; `end_preview` keeps or drops them.
+    ## Start showing edits live on the selected layer — on its mask while that
+    ## is being edited; `end_preview` keeps or drops them.
     pub func begin_preview(self) -> unit!:
-        self.canvas.begin_preview(self.selected_id())
+        self.canvas.begin_preview(self.selected_id(), self.canvas.editing_mask() and self.canvas.layer_masked(self.selected))
 
     pub func previewing(self) -> bool:
         return self.canvas.previewing()

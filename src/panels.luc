@@ -303,6 +303,9 @@ pub class Panels:
         kit.bind(actions.hide_all_mask, self.attempting("Add Mask", func () -> unit!:
             self.workspace.toggle_mask(true)))
         kit.bind(actions.toggle_mask_enabled, self.attempting("Mask", self.workspace.toggle_mask_enabled))
+        kit.bind(actions.toggle_mask_link, self.attempting("Mask", self.workspace.toggle_mask_link))
+        kit.bind(actions.copy_mask, self.attempting("Copy Mask", self.workspace.copy_mask))
+        kit.bind(actions.paste_mask, self.attempting("Paste Mask", self.workspace.paste_mask))
         kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.load_transparency))
         kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
         kit.bind(actions.toggle_visibility, self.toggle_visibility)

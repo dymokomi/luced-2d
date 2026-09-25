@@ -58,8 +58,11 @@ Found beyond the old list, and first because they lose work:
 11. [x] Crop (0.1.47): ratio menu (Free, Original, 1:1 … 9:16) held while
     dragging, Alt pulls both sides about the middle, the box starts at the
     selection, a W × H readout in the header; its edges snap.
-12. [ ] Masks: link/unlink and move on their own; masks on groups; invert, blur
-    and noise on a mask; copy a mask to another layer; thumbnail background.
+12. [x] Masks (0.1.49): the chain between the thumbnails links or unlinks a
+    mask (unlinked it stays when the layer moves or transforms; edited, it
+    moves alone); masks on groups (the group flattened on its own, then laid
+    down through its mask); adjustments, Gaussian Blur and Add Noise on the
+    mask being edited; Copy Mask / Paste Mask; a new mask is the paint target.
 13. [ ] Adjustments: Curves adjustment layers; Levels eyedroppers, three Auto
     modes, Reset, Preview toggle (Opt-P); Hue/Sat band sliders, eyedroppers,
     drag on canvas, "outside this range"; Gradient Map colors.

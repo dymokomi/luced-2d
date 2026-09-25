@@ -40,6 +40,7 @@ pub func main(arguments: list[str]) -> int!:
     live_text()
     live_gradient()
     crop_box_options()
+    mask_actions()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -679,3 +680,20 @@ func crop_box_options() -> unit!:
         box.drag(right + 10.0, 100.0, false, true)
         box.end()
         assert(box.right == right + 10.0 and box.left == left - 10.0)
+
+## Masks: a new one is the target, Unlink keeps it put, Copy and Paste give
+## another layer the same mask.
+func mask_actions() -> unit!:
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    workspace.add_layer()
+    let top = workspace.selected
+    workspace.toggle_mask()
+    assert(workspace.canvas.layer_masked(top) and workspace.canvas.editing_mask())
+    workspace.toggle_mask_link()
+    assert(not workspace.canvas.layer_mask_linked(top))
+    workspace.copy_mask()
+    workspace.select(0)
+    assert(workspace.mask_source_present())
+    workspace.paste_mask()
+    assert(workspace.canvas.layer_masked(0) and workspace.canvas.editing_mask())

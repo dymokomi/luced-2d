@@ -24,9 +24,10 @@ from view import digit_value
 ## dragging on down the eyes sets theirs the same; the mask thumbnail targets
 ## the mask for painting, the layer thumbnail the pixels again; Cmd-click on a
 ## thumbnail loads it as the selection (Shift adds, Alt subtracts) and
-## Shift-click on the mask thumbnail disables the mask. A double-click on the
-## name renames the layer there. Alt-click on the line between two rows clips
-## the upper to the lower (or releases it). A row dragged lands above the row
+## Shift-click on the mask thumbnail disables the mask; a click on the chain
+## between the thumbnails unlinks the mask from the pixels (or links it). A
+## double-click on the name renames the layer there. Alt-click on the line
+## between two rows clips the upper to the lower (or releases it). A row dragged lands above the row
 ## it is dropped on, or inside a group dropped on its middle; with Alt a copy
 ## lands there instead.
 pub class LayerList: Widget:
@@ -151,6 +152,13 @@ pub class LayerList: Widget:
                     self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), self.workspace.look.accent)
                 x += thumb + 8.0
             if masked:
+                # Linked, a chain between the thumbnails, as Photoshop shows it; a click there unlinks.
+                if canvas.layer_mask_linked(index):
+                    let cx = math.floor(x - 4.0)
+                    let cy = math.floor(top + self.row_height * 0.5)
+                    painter.rectangle(Rect(cx - 1.0, cy - 6.0, 3.0, 5.0), soft)
+                    painter.rectangle(Rect(cx - 1.0, cy + 1.0, 3.0, 5.0), soft)
+                    painter.rectangle(Rect(cx, cy - 2.0, 1.0, 4.0), soft)
                 var mw = mask_thumb
                 var mh = mask_thumb
                 if aspect > 1.0:
@@ -316,6 +324,7 @@ pub class LayerList: Widget:
         let mask_left = thumb + 44.0
         let on_thumb = event.x >= thumb and event.x < thumb + 36.0
         let on_mask = canvas.layer_masked(index) and event.x >= mask_left and event.x < mask_left + 30.0
+        let on_link = canvas.layer_masked(index) and event.x >= thumb + 36.0 and event.x < mask_left
         let mode = 1 if event.shift else (2 if event.alt else 0)
         if event.x < 28.0:
             # The eye; a drag on down the eyes gives them the same.
@@ -328,6 +337,10 @@ pub class LayerList: Widget:
         elif command and (on_thumb or on_mask):
             # Cmd-click on a thumbnail: its pixels' transparency (or the mask) as the selection.
             canvas.select_from_layer(canvas.layer_id(index), on_mask, mode)
+            workspace.touch()
+        elif on_link:
+            # Between the thumbnails: link the mask to the pixels, or unlink it.
+            canvas.link_mask(canvas.layer_id(index), not canvas.layer_mask_linked(index))
             workspace.touch()
         elif on_mask and event.shift:
             canvas.enable_mask(canvas.layer_id(index), not canvas.layer_mask_enabled(index))

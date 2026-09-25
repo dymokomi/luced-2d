@@ -42,7 +42,7 @@ pub class LayersPanel:
         # The row's menu, its titles fitted to the selection each time it opens.
         self.row_menu = ContextMenu(self.layer_list, [actions.duplicate_layer, actions.rename_layer, actions.delete_layer, divider(),
                                                 actions.toggle_clipped, actions.group_layers, actions.move_out_of_folder, actions.merge_down, divider(),
-                                                actions.toggle_mask, actions.hide_all_mask, actions.toggle_mask_enabled, divider(),
+                                                actions.toggle_mask, actions.hide_all_mask, actions.toggle_mask_enabled, actions.toggle_mask_link, actions.copy_mask, actions.paste_mask, divider(),
                                                 actions.toggle_visibility, actions.layer_style], font = font)
         kit.keep(self.row_menu.on_open(self.fit_titles))
         # A name is typed where it is shown; Enter or a click away keeps it.
@@ -106,6 +106,10 @@ pub class LayersPanel:
         actions.hide_all_mask.set_enabled(not masked)
         actions.toggle_mask_enabled.set_text("Enable Mask" if masked and not canvas.layer_mask_enabled(index) else "Disable Mask")
         actions.toggle_mask_enabled.set_enabled(masked)
+        actions.toggle_mask_link.set_text("Link Mask" if masked and not canvas.layer_mask_linked(index) else "Unlink Mask")
+        actions.toggle_mask_link.set_enabled(masked)
+        actions.copy_mask.set_enabled(masked)
+        actions.paste_mask.set_enabled(workspace.mask_source_present())
         actions.toggle_visibility.set_text("Show Layer" if not canvas.layer_visible(index) else "Hide Layer")
 
     ## The panel as the document is now.

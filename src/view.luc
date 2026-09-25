@@ -510,7 +510,10 @@ pub class CanvasView: Widget:
     ## none: then say so, as Photoshop does, and do nothing.
     func refuses_group(self, tool: str) -> bool!:
         let paints = tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear"
+        # A group's mask is painted like any other.
         if not paints or not self.workspace.canvas.layer_is_group(self.workspace.selected):
+            return false
+        if self.workspace.canvas.editing_mask() and self.workspace.canvas.layer_masked(self.workspace.selected) and tool != "text":
             return false
         if let refused = self.on_refused:
             refused("The layer is a group: pick a layer inside it to paint on")
