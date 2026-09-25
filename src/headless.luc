@@ -3,8 +3,12 @@
 ## last one is the document the script starts in — or, with none, the script
 ## starts on a new canvas of the settings' size. The script's output goes to
 ## stdout; its status is the process's: 0 when every action succeeded.
+## Menu commands (`luced.run`) work as in the window.
 from workspace import Workspace
 from script_host import ScriptHost
+from actions import Actions
+from panels import Panels
+from ui import Font
 from canvas import Canvas
 from settings import Store
 import files
@@ -37,9 +41,13 @@ pub func run_headless(arguments: list[str]) -> int!:
         workspace.open(path)
         workspace.canvas.bind_beside(anchor)
     workspace.canvas.bind_beside(anchor)
-    let host = ScriptHost(workspace)
+    # The window's panels, never shown: menu commands (`luced.run`) work headless too.
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let host = ScriptHost(workspace, actions)
     host.run_to_end(files.read_text(script, limit = 4194304))
     print(host.console.trim())
     host.close()
+    panels.close()
     anchor.close()
     return 0 if host.succeeded else 1

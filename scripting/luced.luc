@@ -71,7 +71,8 @@ pub func redo():
     send("redo", [])
 
 ## Any menu command by its id, as the Settings dialog's shortcut list names
-## them ("flip_horizontal", "merge_down", "select_subject", ...).
+## them ("flip_horizontal", "merge_down", "select_object", ...), headless too.
+## One that opens a dialog opens it; the parametric calls here are for those.
 pub func run(command: str):
     send("run", [command])
 

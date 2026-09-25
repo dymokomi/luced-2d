@@ -146,6 +146,8 @@ pub class CanvasView: Widget:
                 self.checker.set_pixel(x, y, theme.checker_dark() if (x // 8 + y // 8) % 2 == 1 else theme.checker_light())
         self.box = Layout()
         self.box.set_focusable(true)
+        # Tab steps the tool's modes on the canvas instead of moving focus.
+        self.box.set_accepts_tab(true)
         self.box.set_cursor(Cursor.arrow)
         self.box.set_flex()
         self.box.set_limits(Size(200.0, 160.0), Size(16384.0, 16384.0))
