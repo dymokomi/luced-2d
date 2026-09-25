@@ -505,7 +505,8 @@ pub class Workspace:
         self.canvas.preview_color_range(range, fuzziness, invert)
         self.touch()
 
-    pub func finish_color_range(self, keep: bool, range: int, fuzziness: float, invert: bool) -> unit!:
+    pub func finish_color_range(self, keep: bool, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
+        self.range_samples(colors, subtract)
         self.canvas.finish_color_range(keep, range, fuzziness, invert)
         self.touch()
 

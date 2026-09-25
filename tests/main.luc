@@ -900,10 +900,14 @@ func color_range() -> unit!:
     assert(workspace.range_sample_for != none)
     press(view, 48.0, 32.0)
     release(view, 48.0, 32.0)
+    panels.color_range.poll()
     # Shown live, out of history.
     assert(workspace.canvas.undo_name() == "Select" and workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 0)
     press(view, 4.0, 4.0, shift = true)
     release(view, 4.0, 4.0)
+    # Nothing is worked out until the frame; then the latest change, once.
+    assert(workspace.canvas.selected_at(4, 4) == 0)
+    panels.color_range.poll()
     assert(workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 255)
     panels.color_range.cancel()
     assert(workspace.range_sample_for == none and workspace.canvas.undo_name() == "Select" and not workspace.canvas.can_redo() and workspace.canvas.selected_at(48, 32) == 0)

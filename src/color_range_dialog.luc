@@ -25,6 +25,9 @@ pub class ColorRangeDialog:
     var subtract: list[bool]
     ## Whether the canvas has the dialog's session open.
     var open_session: bool = false
+    ## A change waiting to be shown: changes arriving faster than frames (a
+    ## Fuzziness drag) are shown once, the latest, on the next frame.
+    var pending: bool = false
     pub var applied: func() -> unit!? = none
     pub var failed: func(str) -> unit!? = none
     let workspace: Workspace
@@ -97,6 +100,15 @@ pub class ColorRangeDialog:
         let removed = self.subtract.length - added
         self.hint.set_text("Click the picture to sample a color; Shift-click adds, Alt-click takes back out." if sampling and self.colors.length == 0 else
                            ((f"{added} added, {removed} taken out." if removed > 0 else f"{added} sampled.") if sampling else "Fuzziness is for sampled colors."))
+        self.pending = self.open_session
+        # Wake the loop for the frame that shows it.
+        self.hint.layout().invalidate()
+
+    ## Called every frame: show the latest change, if one waits.
+    pub func poll(self) -> unit!:
+        if not self.pending:
+            return
+        self.pending = false
         if not self.open_session:
             return
         self.workspace.preview_color_range(self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
@@ -114,9 +126,10 @@ pub class ColorRangeDialog:
     func close(self, keep: bool) -> unit!:
         self.workspace.range_sample_for = none
         self.dialog.hide()
+        self.pending = false
         if self.open_session:
             self.open_session = false
-            self.workspace.finish_color_range(keep, self.range, self.fuzziness.value(), self.invert_box.is_checked()) catch failure:
+            self.workspace.finish_color_range(keep, self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
                 self.fail(f"Color Range: {failure.message}")
         self.refresh()
 
