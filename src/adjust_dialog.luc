@@ -8,7 +8,7 @@
 from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox
 from workspace import Workspace
 from kit import Kit
-from adjustment_controls import AdjustmentControls, blur_kind, noise_kind
+from adjustment_controls import AdjustmentControls, blur_kind, noise_kind, first_filter_kind
 import time
 
 pub class AdjustDialog:
@@ -57,6 +57,11 @@ pub class AdjustDialog:
     pub func add_noise(self) -> unit!:
         self.seed = time.now() % 1000000007
         self.start(noise_kind)
+
+    ## Filter menu: luce-image's filter `filter` (Motion Blur, Lens
+    ## Correction, Bloom, Tonal Contrast).
+    pub func filter(self, filter: int) -> unit!:
+        self.start(first_filter_kind + filter)
 
     func start(self, kind: int) -> unit!:
         if not self.kit.may_open(self.dialog):
@@ -130,6 +135,9 @@ pub class AdjustDialog:
             self.workspace.preview_blur(values[0])
         elif kind == noise_kind:
             self.workspace.preview_noise(self.controls.numbers(kind)[0], values[1] != 0.0, self.seed, values[2] != 0.0)
+        elif kind >= first_filter_kind:
+            let numbers = self.controls.numbers(kind) + [0.0, 0.0]
+            self.workspace.preview_filter(kind - first_filter_kind, numbers[0], numbers[1], numbers[2])
         else:
             self.workspace.preview_adjust(kind, self.controls.numbers(kind))
         if let changed = self.changed:

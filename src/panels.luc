@@ -263,6 +263,12 @@ pub class Panels:
                 self.status.set_text("Nothing lies past the canvas")
             self.refresh())
         kit.bind(actions.blur, self.adjust.blur)
+        var filter = 0
+        for command in actions.filters:
+            let chosen = filter
+            kit.bind(command, func () -> unit!:
+                self.adjust.filter(chosen))
+            filter += 1
         kit.bind(actions.free_transform, self.free_transform)
         kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
             self.workspace.flip_layer(true)))

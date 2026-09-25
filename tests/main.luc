@@ -48,6 +48,7 @@ pub func main(arguments: list[str]) -> int!:
     effect_rows()
     brush_sizing()
     whole_layers()
+    filter_dialogs()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -805,3 +806,28 @@ func whole_layers() -> unit!:
     send_layers(workspace, 1)
     assert(workspace.current == 1 and workspace.layer_count() == 2 and workspace.canvas.style_value(1, 0) == 1.0)
     assert(source.layer_count() == 3)
+
+## The Filter menu's dialogs preview on the layer and keep one step each;
+## Vignette, Grain and Noise are also live adjustment layers.
+func filter_dialogs() -> unit!:
+    let workspace = Workspace(80, 60)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    workspace.set_color(0.5, 0.5, 0.5)
+    workspace.fill_selection(false)
+    let names = ["Motion Blur", "Lens Correction", "Bloom", "Tonal Contrast"]
+    var filter = 0
+    while filter < 4:
+        panels.adjust.filter(filter)
+        assert(workspace.previewing())
+        panels.adjust.apply()
+        assert(not workspace.previewing() and workspace.canvas.undo_name() == names[filter])
+        filter += 1
+    panels.adjust.open(12)
+    panels.adjust.apply()
+    let before = workspace.layer_count()
+    for kind in [12, 13, 14]:
+        let spec = adjustments()[kind]
+        discard(workspace.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults())))
+    assert(workspace.layer_count() == before + 3 and workspace.canvas.layer_adjustment(workspace.selected) == 14)
+    panels.close()

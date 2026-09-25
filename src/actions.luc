@@ -65,6 +65,9 @@ pub class Actions:
     ## One per adjustment an adjustment layer can hold: a new one of that kind.
     pub let adjustment_layers: list[Command]
     pub let blur: Command
+    ## Filter menu: luce-image's filters by number (Motion Blur, Lens
+    ## Correction, Bloom, Tonal Contrast).
+    pub let filters: list[Command]
     pub let add_noise: Command
     # Layer
     pub let add_layer: Command
@@ -172,6 +175,8 @@ pub class Actions:
                 self.adjustment_layers.append(Command(f"New {adjustment.name} Layer", id = f"adjust_layer_{adjustment.kind}"))
         self.add_noise = Command("Add Noise…", id = "add_noise")
         self.blur = Command("Gaussian Blur…", id = "blur")
+        self.filters = [Command("Motion Blur…", id = "motion_blur"), Command("Lens Correction…", Shortcut(Key.r, primary = true, shift = true), id = "lens_correction"),
+                        Command("Bloom…", id = "bloom"), Command("Tonal Contrast…", id = "tonal_contrast")]
         self.add_layer = Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer")
         self.duplicate_layer = Command("Duplicate Layer", id = "duplicate_layer")
         self.layer_via_copy = Command("Layer via Copy", Shortcut(Key.j, primary = true), id = "layer_via_copy")
@@ -231,7 +236,7 @@ pub class Actions:
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.toggle_preview, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.adjustment_layers + self.blends + self.tools + self.units
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.filters + self.adjustment_layers + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:
@@ -268,6 +273,8 @@ pub class Actions:
             command.set_enabled(not previewing)
         self.blur.set_enabled(not previewing and not group)
         self.add_noise.set_enabled(not previewing and not group)
+        for command in self.filters:
+            command.set_enabled(not previewing and not group)
         for command in self.adjustment_layers:
             command.set_enabled(not previewing)
         self.free_transform.set_enabled(not previewing)

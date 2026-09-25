@@ -840,6 +840,11 @@ pub class Workspace:
     ## Preview Add Noise: grain of deviation `amount` (0..1), `seed` fixing it.
     pub func preview_noise(self, amount: float, monochrome: bool, seed: int, uniform: bool = false) -> unit!:
         self.canvas.preview_noise(amount, monochrome, seed, uniform)
+
+    ## Show luce-image's filter `filter` with settings `a`, `b` and `c` (see
+    ## `Canvas.filter_layer`) on the previewed layer.
+    pub func preview_filter(self, filter: int, a: float, b: float, c: float) -> unit!:
+        self.canvas.preview_filter(filter, a, b, c)
         self.touch()
 
     ## A new adjustment layer of `kind` named `name`, with the engine's

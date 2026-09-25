@@ -91,7 +91,9 @@ Found beyond the old list, and first because they lose work:
 18. [x] Whole-layer clipboard (masks, styles, groups, adjustments), across
     documents; drag a layer onto a tab; paste in place.
 19. [ ] Filters: Motion Blur, Grain (and as a layer), Vignette, Bloom, Tonal
-    Contrast, Lens Correction; blur and noise as adjustment layers.
+    Contrast, Lens Correction; blur and noise as adjustment layers. Done but
+    blur as a layer: the compositor works a cell at a time and a blur needs
+    its neighbours' backdrop.
 20. [ ] Heavy: Content-Aware Fill, Select Subject, Object Selection, Remove
     Background, Camera Raw Filter; update feed; remembered tool options;
     floating, movable adjustment panels.

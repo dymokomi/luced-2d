@@ -3,6 +3,7 @@
 ## in `Panels`.
 from ui import Font, Toolbar, Menu, Command, Spacer
 from actions import Actions
+from adjustments import adjustments, in_adjust, in_filter
 
 pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
     return Toolbar([Menu("File", [actions.new_document, actions.open_document, actions.import_image, actions.save, actions.save_as, actions.export_png, actions.export_jpeg, divider(), actions.close_document], font = font),
@@ -10,14 +11,15 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
                                   actions.swap_colors, actions.reset_colors, divider(), actions.settings], font = font),
                     Menu("Select", [actions.select_all, actions.deselect, actions.inverse, actions.expand, actions.contract, actions.feather], font = font),
                     Menu("Image", [actions.document_settings, divider(), actions.crop, actions.flip_canvas_horizontal, actions.flip_canvas_vertical, divider(), actions.canvas_size, actions.reveal_all, actions.image_size, actions.trim], font = font),
-                    Menu("Adjust", actions.adjustments + [divider()] + actions.adjustment_layers, font = font),
+                    Menu("Adjust", placed(actions, in_adjust) + [divider()] + actions.adjustment_layers, font = font),
                     Menu("Layer", [actions.add_layer, actions.duplicate_layer, actions.layer_via_copy, actions.layer_via_cut, actions.layer_up, actions.layer_down, actions.merge_down, actions.delete_layer,
                                    divider(), actions.group_layers, actions.ungroup, actions.move_out_of_folder, divider(),
                                    actions.toggle_mask, actions.hide_all_mask, actions.toggle_mask_enabled, actions.toggle_mask_link, actions.copy_mask, actions.paste_mask,
                                    actions.toggle_mask_editing, actions.load_transparency,
                                    divider(), actions.toggle_clipped, actions.toggle_visibility,
                                    actions.rename_layer, actions.layer_style, divider(), actions.next_blend, actions.previous_blend], font = font),
-                    Menu("Filter", [actions.blur, actions.add_noise], font = font),
+                    Menu("Filter", [actions.blur, actions.filters[0], divider(), actions.add_noise] + placed(actions, in_filter) + [divider(), actions.filters[1], divider(),
+                                    actions.filters[2], actions.filters[3]], font = font),
                     Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, divider(), actions.show_rulers, actions.show_grid, actions.show_guides, actions.snap, actions.lock_guides, actions.clear_guides, actions.show_transform_controls]
                                  + actions.units + [divider(), actions.next_document, actions.previous_document], font = font),
                     Spacer()], font = font)
@@ -25,3 +27,11 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
 ## A menu's separator line.
 pub func divider() -> Command!:
     return Command("", divider = true)
+
+## The adjustment commands that apply to pixels from `menu` (in_adjust or in_filter).
+func placed(actions: Actions, menu: int) -> list[Command]:
+    var chosen: list[Command] = []
+    for adjustment in adjustments():
+        if adjustment.menu == menu:
+            chosen.append(actions.adjustments[adjustment.kind])
+    return chosen
