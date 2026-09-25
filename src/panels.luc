@@ -4,7 +4,7 @@
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
-from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, DockPosition, ButtonStyle, Rule, Dialog, ContextMenu, Button
+from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, DockPosition, ButtonStyle, Rule, Dialog, ContextMenu, Button, NumberField
 from input import Key
 from workspace import Workspace
 from actions import Actions
@@ -48,6 +48,8 @@ pub class Panels:
     pub let workspace: Workspace
     pub let actions: Actions
     pub let status: Text
+    ## The zoom as a number to type, in the status bar's corner.
+    let zoom_field: NumberField
     pub let header: ToolHeader
     pub let brush: BrushSettings
     pub let adjust: AdjustDialog
@@ -103,6 +105,8 @@ pub class Panels:
         self.layers_panel.refreshed = self.refresh
         self.layers_panel.failed = self.prompts.tell
         self.status = Text("", font = font)
+        self.zoom_field = NumberField(100.0, 1.0, 6400.0, 1.0, suffix = "%", font = font, cells = 7.0)
+        kit.keep(self.zoom_field.on_change(self.type_zoom))
         self.header = ToolHeader(workspace, kit)
         self.header.brush_settings = self.open_brush
         self.header.refreshed = self.refresh
@@ -186,7 +190,7 @@ pub class Panels:
         self.dock.set_fraction(self.layers_panel.panel, 0.55)
         self.dock.layout().set_flex()
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
-        self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.status, Spacer(), self.header.hint], font = font),
+        self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
                             self.picker.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
@@ -353,9 +357,9 @@ pub class Panels:
             self.workspace.actual_size(bounds.width, bounds.height)
             self.refresh())
         kit.bind(actions.zoom_in, func () -> unit!:
-            self.zoom_by(2.0))
+            self.zoom_by(1))
         kit.bind(actions.zoom_out, func () -> unit!:
-            self.zoom_by(0.5))
+            self.zoom_by(-1))
         kit.bind(actions.bigger, func () -> unit!:
             self.workspace.scale_brush(1.25)
             self.refresh())
@@ -579,9 +583,16 @@ pub class Panels:
         self.settings_dialog.remember_view()
         self.refresh()
 
-    func zoom_by(self, factor: float) -> unit!:
+    ## A zoom typed in the status bar, in percent, about the view's middle.
+    func type_zoom(self, percent: float) -> unit!:
         let bounds = self.view.layout().bounds()
-        self.workspace.zoom_about(factor, bounds.width * 0.5, bounds.height * 0.5)
+        self.workspace.zoom_about(percent / 100.0 / self.workspace.zoom, bounds.width * 0.5, bounds.height * 0.5)
+        self.refresh()
+
+    ## Zoom In or Out: the next step, about the view's middle.
+    func zoom_by(self, direction: int) -> unit!:
+        let bounds = self.view.layout().bounds()
+        self.workspace.zoom_step(direction, bounds.width * 0.5, bounds.height * 0.5)
         self.refresh()
 
     ## The document's pixels changed without a structural change: redraw the
@@ -610,7 +621,8 @@ pub class Panels:
         let name = workspace.path if workspace.path != "" else "Untitled"
         let percent = int(workspace.zoom * 100.0 + 0.5)
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
-        self.status.set_text(f"{percent}%  |  {workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
+        self.zoom_field.set_value(float(percent))
+        self.status.set_text(f"{workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
         self.layers_panel.show()
         var slot = 0
         for command in self.actions.tools:

@@ -45,6 +45,7 @@ pub func main(arguments: list[str]) -> int!:
     stroke_undo()
     eyedropper_sample()
     effect_rows()
+    brush_sizing()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -187,13 +188,13 @@ func tool_gestures() -> unit!:
     assert(math.abs(workspace.zoom - 2.0) < 0.001)
     view.event(Event(kind = EventKind.key_up, key = Key.z))
     assert(workspace.tool == "brush")
-    # A tap of Z keeps the zoom tool; a click zooms in, alt-click out.
+    # A tap of Z keeps the zoom tool; a click zooms in a step (200% to 300%), alt-click out.
     panels.choose_tool("zoom")
     view.event(Event(kind = EventKind.key_up, key = Key.z))
     assert(workspace.tool == "zoom")
     press(view, 50.0, 50.0)
     release(view, 50.0, 50.0)
-    assert(math.abs(workspace.zoom - 4.0) < 0.001)
+    assert(math.abs(workspace.zoom - 3.0) < 0.001)
     press(view, 50.0, 50.0, alt = true)
     release(view, 50.0, 50.0, alt = true)
     assert(math.abs(workspace.zoom - 2.0) < 0.001)
@@ -764,3 +765,18 @@ func effect_rows() -> unit!:
     assert(workspace.canvas.style_value(0, 0) == 1.0 and workspace.canvas.style_value(0, 3) == 9.0)
     rows.remove(workspace, top, shadow)
     assert(rows.listed(workspace.canvas, top).length == 0)
+
+## A right-drag sizes the brush: right is bigger; with Shift, up is harder.
+func brush_sizing() -> unit!:
+    let workspace = Workspace(120, 80)
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    panels.choose_tool("brush")
+    let before = workspace.brush.diameter
+    view.event(Event(kind = EventKind.pointer_down, x = 50.0, y = 40.0, button = 1, inside = true))
+    view.event(Event(kind = EventKind.pointer_moved, x = 80.0, y = 40.0, inside = true))
+    view.event(Event(kind = EventKind.pointer_up, x = 80.0, y = 40.0, button = 1, inside = true))
+    assert(math.abs(workspace.brush.diameter - (before + 30.0)) < 0.001)
+    panels.close()

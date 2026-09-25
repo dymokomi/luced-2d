@@ -80,7 +80,11 @@ Found beyond the old list, and first because they lose work:
     PSD groups rebuilt and layer masks kept, merged-only PSDs as one layer,
     PSB. Left: several files at once, SVG (luce-svg needs colors), HEIC,
     Camera RAW.
-17. [ ] Tool extras: right-drag sets brush size (Shift: hardness); Spot Healing
+17. [ ] Tool extras. Done (0.1.56): right-drag sets brush size (Shift:
+    hardness); eyedropper sample ring; zoom % field; stepped zoom; pixel grid
+    at 800%+; Add Noise Uniform/Gaussian. Left: Spot Healing modes, clone
+    preview in the circle, Tab cycling tool modes, the idle tool (A).
+    Originally: right-drag sets brush size (Shift: hardness); Spot Healing
     modes (Create Texture, Proximity Match); clone preview in the circle;
     eyedropper sample ring; Tab cycles tool modes; idle tool (A); zoom % field;
     stepped zoom; pixel grid at 800%+; Add Noise Uniform/Gaussian.

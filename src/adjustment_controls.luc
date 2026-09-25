@@ -57,7 +57,7 @@ pub class AdjustmentControls:
         self.table = adjustments()
         self.filters = [Adjustment(blur_kind, "Gaussian Blur", [Knob("Radius", 0.5, 250.0, 8.0, 1.0, 1, " px")], layerable = false),
                         # Photoshop's Add Noise amount: at 300% the grain's deviation is full scale.
-                        Adjustment(noise_kind, "Add Noise", [Knob("Amount", 0.0, 300.0, 12.0, 1.0 / 300.0, 1, "%")], toggles = [Toggle("Monochromatic")], layerable = false)]
+                        Adjustment(noise_kind, "Add Noise", [Knob("Amount", 0.0, 300.0, 12.0, 1.0 / 300.0, 1, "%")], toggles = [Toggle("Monochromatic"), Toggle("Uniform")], layerable = false)]
         self.rows = []
         self.controls = []
         self.checkboxes = []

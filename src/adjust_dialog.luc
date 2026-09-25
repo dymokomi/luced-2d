@@ -129,7 +129,7 @@ pub class AdjustDialog:
         if kind == blur_kind:
             self.workspace.preview_blur(values[0])
         elif kind == noise_kind:
-            self.workspace.preview_noise(self.controls.numbers(kind)[0], values[1] != 0.0, self.seed)
+            self.workspace.preview_noise(self.controls.numbers(kind)[0], values[1] != 0.0, self.seed, values[2] != 0.0)
         else:
             self.workspace.preview_adjust(kind, self.controls.numbers(kind))
         if let changed = self.changed:

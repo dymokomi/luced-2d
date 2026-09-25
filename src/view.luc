@@ -77,6 +77,16 @@ pub class CanvasView: Widget:
     var gradient_handle: bool = false
     ## For the size shown beside a Crop box being dragged.
     var font: Font? = none
+    ## A right-button drag sizing the brush: where it began, and the brush then.
+    var sizing: bool = false
+    var sizing_x: float = 0.0
+    var sizing_y: float = 0.0
+    var sizing_diameter: float = 0.0
+    var sizing_hardness: float = 0.0
+    ## The eyedropper held down: its ring shows the color under it over the
+    ## foreground as it was, which it keeps sampling as it moves.
+    var ringing: bool = false
+    var ring_before: Color = Color(0.0, 0.0, 0.0)
     ## The Text tool pressed: a click sets point text, a drag a box.
     var text_dragging: bool = false
     var gradient_x: float = 0.0
@@ -190,6 +200,9 @@ pub class CanvasView: Widget:
             self.polygon.cancel()
         self.polygon.draw(painter, workspace.zoom, left, top, theme.text(), theme.backdrop())
         self.guides.draw(painter, workspace, size.width, size.height)
+        self.draw_pixel_grid(painter, size.width, size.height)
+        if self.ringing:
+            self.draw_sample_ring(painter)
         self.draw_box(painter, size.width, size.height)
         if self.pointer_inside and not self.panning and brushed(workspace.tool):
             self.draw_brush_outline(painter)
@@ -224,15 +237,54 @@ pub class CanvasView: Widget:
             y += block
 
     ## The brush's outline around the pointer, at screen resolution, one dark and one light ring.
+    ## At 800% and closer, a faint line between the document's pixels.
+    func draw_pixel_grid(self, painter: Painter, width: float, height: float) -> unit!:
+        let workspace = self.workspace
+        let zoom = workspace.zoom
+        if zoom < 8.0:
+            return
+        let ink = Color(0.5, 0.5, 0.5, 0.25)
+        let left = math.max(0.0, workspace.offset_x)
+        let top = math.max(0.0, workspace.offset_y)
+        let right = math.min(width, workspace.offset_x + float(workspace.width()) * zoom)
+        let bottom = math.min(height, workspace.offset_y + float(workspace.height()) * zoom)
+        var x = workspace.offset_x + math.ceil((left - workspace.offset_x) / zoom) * zoom
+        while x < right:
+            painter.rectangle(Rect(math.floor(x), top, 1.0, bottom - top), ink)
+            x += zoom
+        var y = workspace.offset_y + math.ceil((top - workspace.offset_y) / zoom) * zoom
+        while y < bottom:
+            painter.rectangle(Rect(left, math.floor(y), right - left, 1.0), ink)
+            y += zoom
+
+    ## The eyedropper's ring round the pointer, as Photoshop's: the color under
+    ## it in the top half, the foreground as it was in the bottom half.
+    func draw_sample_ring(self, painter: Painter) -> unit!:
+        let workspace = self.workspace
+        let now = Color(workspace.red, workspace.green, workspace.blue)
+        let segments = 64
+        var index = 0
+        while index < segments:
+            let angle = float(index) * 6.283185307 / float(segments)
+            let next = float(index + 1) * 6.283185307 / float(segments)
+            # Screen y grows downward: angles past half a turn are the top half.
+            let color = now if index >= segments // 2 else self.ring_before
+            let a = Point(self.pointer_x + math.cos(angle) * 44.0, self.pointer_y + math.sin(angle) * 44.0)
+            let b = Point(self.pointer_x + math.cos(next) * 44.0, self.pointer_y + math.sin(next) * 44.0)
+            painter.line(a, b, 16.0, color)
+            index += 1
+
     func draw_brush_outline(self, painter: Painter) -> unit!:
         let radius = self.workspace.brush.diameter * self.workspace.zoom * 0.5
+        let center_x = self.sizing_x if self.sizing else self.pointer_x
+        let center_y = self.sizing_y if self.sizing else self.pointer_y
         let segments = 48
         var index = 0
         while index < segments:
             let angle = float(index) * 6.283185307 / float(segments)
             let next = float(index + 1) * 6.283185307 / float(segments)
-            let a = Point(self.pointer_x + math.cos(angle) * radius, self.pointer_y + math.sin(angle) * radius)
-            let b = Point(self.pointer_x + math.cos(next) * radius, self.pointer_y + math.sin(next) * radius)
+            let a = Point(center_x + math.cos(angle) * radius, center_y + math.sin(angle) * radius)
+            let b = Point(center_x + math.cos(next) * radius, center_y + math.sin(next) * radius)
             painter.line(a, b, 3.0, theme.backdrop())
             painter.line(a, b, 1.0, theme.text())
             index += 1
@@ -417,6 +469,15 @@ pub class CanvasView: Widget:
             self.last_x = event.x
             self.last_y = event.y
             return
+        if event.button == 1 and brushed(tool):
+            # Right-drag sizes the brush (Shift: its hardness), as Photoshop's
+            # Alt-right-drag does; the outline stays where the drag began.
+            self.sizing = true
+            self.sizing_x = event.x
+            self.sizing_y = event.y
+            self.sizing_diameter = workspace.brush.diameter
+            self.sizing_hardness = workspace.brush.hardness
+            return
         if event.button != 0:
             return
         let x = self.document_x(event.x)
@@ -499,6 +560,8 @@ pub class CanvasView: Widget:
             self.gradient_x = x
             self.gradient_y = y
         elif tool == "eyedropper" or workspace.sampling:
+            self.ringing = true
+            self.ring_before = Color(workspace.red, workspace.green, workspace.blue)
             workspace.pick(x, y)
         elif tool == "text":
             # Where the press was: let go there, a point; dragged, a box.
@@ -685,6 +748,17 @@ pub class CanvasView: Widget:
 
     ## The pointer moved: carry on the gesture in progress.
     func drag(self, event: Event) -> unit!:
+        if self.ringing:
+            self.workspace.pick(self.document_x(event.x), self.document_y(event.y))
+            return
+        if self.sizing:
+            # Right is bigger, a point a pixel at 100%; with Shift, up is harder.
+            let brush = self.workspace.brush
+            brush.diameter = math.clamp(self.sizing_diameter + (event.x - self.sizing_x) / self.workspace.zoom, 1.0, 5000.0)
+            if event.shift:
+                brush.hardness = math.clamp(self.sizing_hardness - (event.y - self.sizing_y) / 200.0, 0.0, 1.0)
+            self.workspace.touch()
+            return
         if self.guides.active:
             # Over a ruler (past the view's top or left edge) a guide goes when let go.
             self.guides.drag(self.document_x(event.x), self.document_y(event.y), event.x < 0.0 or event.y < 0.0)
@@ -777,6 +851,16 @@ pub class CanvasView: Widget:
     ## The button let go: finish the gesture in progress.
     func release(self, event: Event) -> unit!:
         let workspace = self.workspace
+        if self.ringing:
+            self.ringing = false
+            if let changed = self.on_changed:
+                changed()
+            return
+        if self.sizing and event.button == 1:
+            self.sizing = false
+            if let changed = self.on_changed:
+                changed()
+            return
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
         self.panning = false
@@ -792,7 +876,7 @@ pub class CanvasView: Widget:
         elif self.zooming:
             self.zooming = false
             if not self.zoom_moved:
-                workspace.zoom_about(0.5 if self.zoom_out else 2.0, self.zoom_x, self.zoom_y)
+                workspace.zoom_step(-1 if self.zoom_out else 1, self.zoom_x, self.zoom_y)
         elif self.moving:
             self.moving = false
             self.moved_to(event)
