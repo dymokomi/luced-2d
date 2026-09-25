@@ -16,6 +16,7 @@ from adjustments import adjustments
 from settings import Settings
 from ui import Event, Application
 from layer_effects import EffectRows
+from layer_transfer import copy_layers, paste_layers, send_layers
 from input import EventKind, Key
 import math
 import window
@@ -46,6 +47,7 @@ pub func main(arguments: list[str]) -> int!:
     eyedropper_sample()
     effect_rows()
     brush_sizing()
+    whole_layers()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -780,3 +782,26 @@ func brush_sizing() -> unit!:
     view.event(Event(kind = EventKind.pointer_up, x = 80.0, y = 40.0, button = 1, inside = true))
     assert(math.abs(workspace.brush.diameter - (before + 30.0)) < 0.001)
     panels.close()
+
+## Whole layers: copied with nothing selected they paste above the selected
+## layer; cut, they go; dragged onto another tab, they land there centred.
+func whole_layers() -> unit!:
+    let workspace = Workspace(40, 30)
+    workspace.canvas.bind_headless()
+    workspace.add_layer()
+    workspace.set_style_value(0, 1.0)
+    copy_layers(workspace, false)
+    assert(Canvas.copied_layers() == 1)
+    paste_layers(workspace, false)
+    assert(workspace.layer_count() == 3 and workspace.selected == 2 and workspace.canvas.style_value(2, 0) == 1.0)
+    copy_layers(workspace, true)
+    assert(workspace.layer_count() == 2)
+    paste_layers(workspace, true)
+    assert(workspace.layer_count() == 3)
+    let source = workspace.canvas
+    workspace.create(80, 60)
+    assert(workspace.current == 1)
+    workspace.switch_document(0)
+    send_layers(workspace, 1)
+    assert(workspace.current == 1 and workspace.layer_count() == 2 and workspace.canvas.style_value(1, 0) == 1.0)
+    assert(source.layer_count() == 3)

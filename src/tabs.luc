@@ -71,6 +71,21 @@ pub class DocumentTabs: Widget:
         painter.line(Point(px, py - 5.0), Point(px, py + 5.0), 1.4, theme.text_muted())
         painter.close()
 
+    ## The tab under window point (`x`, `y`), or -1.
+    pub func tab_at(self, x: float, y: float) -> int!:
+        let bounds = self.box.bounds()
+        if y < bounds.y or y >= bounds.y + bounds.height:
+            return -1
+        var left = bounds.x
+        var index = 0
+        while index < self.workspace.document_count():
+            let width = self.tab_width(index)
+            if x >= left and x < left + width:
+                return index
+            left += width + 2.0
+            index += 1
+        return -1
+
     pub func event(self, event: Event) -> unit!:
         if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
             return

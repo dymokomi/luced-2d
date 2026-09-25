@@ -471,6 +471,15 @@ pub class Workspace:
             self.canvas.move_into(id, parent, position + 1)
             self.select_id(id))
 
+    ## The clipboard's image where it was copied from, above the selected layer.
+    pub func paste_in_place(self) -> unit!:
+        let parent = self.canvas.layer_parent(self.selected)
+        let position = self.canvas.layer_position(self.selected)
+        self.as_one("Paste in Place", func () -> unit!:
+            let id = self.canvas.paste_in_place()
+            self.canvas.move_into(id, parent, position + 1)
+            self.select_id(id))
+
     ## Layer via Copy (via Cut with `cut`): a new layer of the selected pixels, selected.
     pub func layer_via_copy(self, cut: bool) -> unit!:
         let id = self.canvas.layer_via_copy(self.selected_id(), cut)

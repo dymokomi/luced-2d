@@ -88,7 +88,7 @@ Found beyond the old list, and first because they lose work:
     modes (Create Texture, Proximity Match); clone preview in the circle;
     eyedropper sample ring; Tab cycles tool modes; idle tool (A); zoom % field;
     stepped zoom; pixel grid at 800%+; Add Noise Uniform/Gaussian.
-18. [ ] Whole-layer clipboard (masks, styles, groups, adjustments), across
+18. [x] Whole-layer clipboard (masks, styles, groups, adjustments), across
     documents; drag a layer onto a tab; paste in place.
 19. [ ] Filters: Motion Blur, Grain (and as a layer), Vignette, Bloom, Tonal
     Contrast, Lens Correction; blur and noise as adjustment layers.

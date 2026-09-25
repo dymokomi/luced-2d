@@ -32,6 +32,8 @@ from tools import tools
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
 from text_editing import TextEditing
+from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
+from canvas import Canvas
 import math
 from units import unit_ids
 
@@ -102,6 +104,7 @@ pub class Panels:
         self.tabs.on_close = self.files.close_document_at
         self.layers_panel = LayersPanel(workspace, actions, kit)
         self.layers = self.layers_panel.layer_list
+        self.layers.on_drop_outside = self.layers_dropped
         self.layers_panel.refreshed = self.refresh
         self.layers_panel.failed = self.prompts.tell
         self.status = Text("", font = font)
@@ -283,15 +286,26 @@ pub class Panels:
                 self.new_adjustment_layer(kind)))
         kit.bind(actions.cut, func () -> unit!:
             self.attempt("Cut", func () -> unit!:
-                self.workspace.copy_selection(false, true)))
+                self.copy_or_cut(true)))
         kit.bind(actions.copy, func () -> unit!:
             self.attempt("Copy", func () -> unit!:
-                self.workspace.copy_selection(false, false)))
+                self.copy_or_cut(false)))
         kit.bind(actions.copy_merged, func () -> unit!:
             self.attempt("Copy Merged", func () -> unit!:
                 self.workspace.copy_selection(true, false)))
+        kit.bind(actions.paste_in_place, func () -> unit!:
+            self.attempt("Paste in Place", func () -> unit!:
+                if layers_to_paste():
+                    paste_layers(self.workspace, true)
+                else:
+                    self.workspace.paste_in_place()
+                self.refresh()))
         kit.bind(actions.paste, func () -> unit!:
             self.attempt("Paste", func () -> unit!:
+                if layers_to_paste():
+                    paste_layers(self.workspace, false)
+                    self.refresh()
+                    return
                 # Paste lands in the middle of the view, as Photoshop's does.
                 let bounds = self.view.layout().bounds()
                 let x = (bounds.width * 0.5 - self.workspace.offset_x) / self.workspace.zoom
@@ -571,6 +585,24 @@ pub class Panels:
     pub func switch_document(self, index: int) -> unit!:
         self.workspace.switch_document(index)
         self.refresh()
+
+    ## Copy (Cut with `cut`): the selected pixels, or with none selected the
+    ## selected layers whole.
+    func copy_or_cut(self, cut: bool) -> unit!:
+        if self.workspace.canvas.has_selection():
+            Canvas.forget_copied_layers()
+            self.workspace.copy_selection(false, cut)
+        else:
+            copy_layers(self.workspace, cut)
+        self.refresh()
+
+    ## Layers dragged from the Layers panel and let go at window point
+    ## (`x`, `y`): onto another document's tab, they go there.
+    func layers_dropped(self, x: float, y: float) -> unit!:
+        let index = self.tabs.tab_at(x, y)
+        if index >= 0 and index != self.workspace.current:
+            send_layers(self.workspace, index)
+            self.refresh()
 
     ## Show a crash report the last run left.
     pub func show_crash(self, report: str) -> unit!:

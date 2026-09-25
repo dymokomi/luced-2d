@@ -1,0 +1,71 @@
+## Whole layers between documents, after Photoshop's: with no pixels selected,
+## Copy and Cut take the selected layers — masks, styles, text, adjustments,
+## groups with all they hold — and Paste puts them back above the selected
+## layer, in this document or another; Paste in Place keeps them where they
+## were. A layer dragged from Layers onto another document's tab goes there
+## the same way, leaving the clipboard alone. luce-image keeps the copied
+## layers; the system clipboard gets their pixels too, for other programs.
+from canvas import Canvas
+from workspace import Workspace
+
+## The selected layers to copy, bottom to top, leaving out any a selected
+## group already holds.
+func outermost_selected(workspace: Workspace) -> list[int]!:
+    let chosen = workspace.selected_ids()
+    var kept: list[int] = []
+    for id in chosen:
+        var inside = false
+        var parent = workspace.canvas.layer_parent(workspace.index_of(id))
+        while parent != 0 and not inside:
+            inside = parent in chosen
+            parent = workspace.canvas.layer_parent(workspace.index_of(parent))
+        if not inside:
+            kept.append(id)
+    return kept
+
+## Copy the selected layers whole; `quietly` leaves the system clipboard be.
+func copy_selected(workspace: Workspace, quietly: bool) -> unit!:
+    Canvas.forget_copied_layers()
+    for id in outermost_selected(workspace):
+        workspace.canvas.copy_layer(id, quietly)
+
+## Edit › Copy (Cut with `cut`) with nothing selected: the selected layers
+## whole, and the selected layer's pixels for other programs when it has any.
+## Cutting deletes the layers after, as one step.
+pub func copy_layers(workspace: Workspace, cut: bool) -> unit!:
+    copy_selected(workspace, false)
+    let index = workspace.selected
+    let canvas = workspace.canvas
+    if not canvas.layer_is_group(index) and canvas.layer_adjustment(index) < 0:
+        canvas.copy_selection(workspace.selected_id(), false, false)
+    if cut:
+        workspace.as_one("Cut Layers", func () -> unit!:
+            workspace.delete_layer())
+
+## Whether Paste takes copied layers rather than an image.
+pub func layers_to_paste() -> bool!:
+    return Canvas.layers_on_clipboard()
+
+## The copied layers above the selected layer, in its group, the topmost
+## selected: where they were when the documents are the same size or
+## `in_place`, else centred.
+pub func paste_layers(workspace: Workspace, in_place: bool) -> unit!:
+    let canvas = workspace.canvas
+    let parent = canvas.layer_parent(workspace.selected)
+    let position = canvas.layer_position(workspace.selected)
+    let top = canvas.paste_layers(parent, position + 1, in_place)
+    workspace.picked = []
+    workspace.select_id(top)
+
+## The selected layers dragged onto document `index`'s tab: copied there
+## above its selected layer, which becomes the one shown.
+pub func send_layers(workspace: Workspace, index: int) -> unit!:
+    if index == workspace.current:
+        return
+    copy_selected(workspace, true)
+    let source = workspace.canvas
+    workspace.switch_document(index)
+    if not workspace.canvas.is_bound():
+        workspace.canvas.bind_beside(source)
+    paste_layers(workspace, false)
+    Canvas.forget_copied_layers()

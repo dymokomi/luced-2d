@@ -64,6 +64,8 @@ pub class LayerList: Widget:
     pub var on_place_files: func(list[str]) -> unit!? = none
     ## The layers changed from here (a row dropped): the window refreshes.
     pub var on_changed: func() -> unit!? = none
+    ## Layers dragged out of the panel and let go at a window point.
+    pub var on_drop_outside: func(float, float) -> unit!? = none
     ## A double-click on a name: rename the layer at that index, its name at (x, y).
     pub var on_rename: func(int, float, float) -> unit!? = none
 
@@ -376,7 +378,13 @@ pub class LayerList: Widget:
                 self.drag_y = event.y
                 self.box.invalidate()
         elif event.kind == EventKind.pointer_up and event.button == 0 and self.drag_index >= 0:
-            if self.drag_started:
+            let dropped_outside = not event.inside
+            if self.drag_started and dropped_outside:
+                # Onto another document's tab, say.
+                if let outside = self.on_drop_outside:
+                    let bounds = self.box.bounds()
+                    outside(bounds.x + event.x, bounds.y + event.y)
+            elif self.drag_started:
                 self.drop(event.y, event.alt)
                 if let changed = self.on_changed:
                     changed()
