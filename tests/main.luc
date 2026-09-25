@@ -566,6 +566,13 @@ func live_text() -> unit!:
     editing.replace_text("Changed")
     editing.cancel()
     assert(workspace.canvas.layer_text(1) == "Hello there")
+    # Its box, not only its ink, is where a click edits it; the header restyles it once committed.
+    assert(workspace.text_layer_at(12.0, 15.0, 2.0) == 1 and workspace.text_layer_at(190.0, 110.0, 2.0) == -1)
+    workspace.select(1)
+    workspace.typing.style = "Bold"
+    workspace.typing.size = 30.0
+    editing.restyle()
+    assert(workspace.canvas.layer_font_style(1) == "Bold" and workspace.canvas.layer_type_value(1, 0) == 30.0 and workspace.canvas.layer_text(1) == "Hello there")
     # Left empty, a new one goes.
     editing.begin_new(50.0, 50.0, 100.0)
     editing.commit()

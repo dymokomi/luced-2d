@@ -129,7 +129,7 @@ pub class Panels:
                                    kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
         self.document_settings = DocumentSettings(workspace, font)
         self.document_settings.applied = self.refresh
-        self.text_editing = TextEditing(workspace, kit)
+        self.text_editing = TextEditing(workspace, kit, actions.commit_text)
         self.text_editing.changed = self.refresh
         self.text_editing.failed = self.prompts.tell
         self.header.type_controls.changed = self.text_editing.restyle

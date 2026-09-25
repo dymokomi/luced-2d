@@ -696,8 +696,8 @@ pub class CanvasView: Widget:
         let y0 = self.gradient_y
         let dragged = math.abs(x - x0) * workspace.zoom > 4.0
         if not dragged:
-            let index = workspace.canvas.layer_at(int(math.floor(x0)), int(math.floor(y0)))
-            if index >= 0 and workspace.canvas.layer_typed(index):
+            let index = workspace.text_layer_at(x0, y0, 6.0 / workspace.zoom)
+            if index >= 0:
                 if let edit = self.on_edit_text:
                     edit(index)
                 return

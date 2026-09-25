@@ -960,6 +960,27 @@ pub class Workspace:
         self.canvas.adjust_selection(pixels, feather)
         self.touch()
 
+    ## The top visible text layer whose box holds document point (`x`, `y`),
+    ## `reach` pixels about it counting too; -1 when none. Its box, not its
+    ## ink: a click between letters edits the text as well.
+    pub func text_layer_at(self, x: float, y: float, reach: float) -> int!:
+        var index = self.layer_count() - 1
+        while index >= 0:
+            let canvas = self.canvas
+            if canvas.layer_visible(index) and canvas.layer_typed(index) and canvas.measure_content(canvas.layer_id(index)):
+                let left = float(canvas.content_left()) - reach
+                let top = float(canvas.content_top()) - reach
+                var right = float(canvas.content_left() + canvas.content_width()) + reach
+                let bottom = float(canvas.content_top() + canvas.content_height()) + reach
+                # Box text reaches its box's width, however short its lines.
+                let box = canvas.layer_type_value(index, 6)
+                if box > 0.0:
+                    right = math.max(right, canvas.layer_type_value(index, 4) + box + reach)
+                if x >= left and x <= right and y >= top and y <= bottom:
+                    return index
+            index -= 1
+        return -1
+
     ## Select the top visible layer with pixels at a document point, if any.
     pub func pick_layer(self, x: float, y: float, add: bool = false) -> unit!:
         let index = self.canvas.layer_at(int(math.floor(x)), int(math.floor(y)))

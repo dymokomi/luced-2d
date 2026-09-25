@@ -11,7 +11,7 @@ import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.40"
+pub let version: str = "0.1.41"
 
 pub class Luce2D:
     pub let app: Application
@@ -33,6 +33,8 @@ pub class Luce2D:
         let panels = Panels(workspace, actions, font, store)
         let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme(workspace.look))
         panels.files.app = app
+        # Keys go to the canvas from the start, so a tool's letter picks the tool.
+        app.focus(panels.view.layout())
         app.set_close_handler(panels.files.can_quit)
         panels.settings_dialog.app = app
         let connections: list[Connection] = []

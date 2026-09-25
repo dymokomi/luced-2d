@@ -3,7 +3,7 @@
 ## it, and the words are typed in a floating editor while the layer is set
 ## again at every keystroke. Commit (Cmd-Return) keeps it — a new layer named
 ## by its first words, or gone if left empty; Cancel puts it back as it was.
-from ui import Text, HStack, Spacer, Size, Dialog, TextEditor
+from ui import Text, HStack, Spacer, Size, Dialog, TextEditor, Command
 from interop import Connection
 from workspace import Workspace
 from kit import Kit
@@ -28,14 +28,15 @@ pub class TextEditing:
     pub var failed: func(str) -> unit!? = none
     let workspace: Workspace
 
-    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+    ## `commit` is the command that commits (its shortcut is shown).
+    pub func init(self, workspace: Workspace, kit: Kit, commit: Command) -> unit!:
         self.workspace = workspace
         self.connections = []
         self.editor = TextEditor("", line_numbers = false, font = kit.font, wrap = true)
         self.editor.layout().set_limits(Size(360.0, 120.0), Size(360.0, 240.0))
         self.connections.append(self.editor.on_change(self.typed))
         self.dialog = Dialog([Text("Text", font = kit.font), self.editor,
-                              HStack([Text("Cmd-Return commits", font = kit.font, muted = true), Spacer(), kit.button("Cancel", self.cancel),
+                              HStack([Text(commit.shortcut().text() + " commits", font = kit.font, muted = true), Spacer(), kit.button("Cancel", self.cancel),
                                       kit.button("Commit", self.commit)], spacing = 8.0)], width = 400.0)
         self.dialog.layout().set_modal(false)
 
@@ -49,6 +50,8 @@ pub class TextEditing:
         let workspace = self.workspace
         workspace.add_layer()
         self.id = workspace.selected_id()
+        # Named by its words when committed; until then, plainly a text layer.
+        workspace.canvas.rename_layer(self.id, "Text")
         self.created = true
         self.x = x
         self.y = y
@@ -90,10 +93,24 @@ pub class TextEditing:
     pub func replace_text(self, text: str) -> unit!:
         self.editor.set_text(text)
 
-    ## The header changed the family, size or the like: set it again.
+    ## The header changed the family, size or the like: the text being
+    ## edited is set again, or else the selected text layer takes it.
     pub func restyle(self) -> unit!:
         if self.id != 0:
             self.set_words(self.editor.text())
+            return
+        let workspace = self.workspace
+        let index = workspace.selected
+        if index < 0 or index >= workspace.layer_count() or not workspace.canvas.layer_typed(index):
+            return
+        let canvas = workspace.canvas
+        let options = workspace.typing
+        workspace.canvas.set_type(canvas.layer_id(index), canvas.layer_text(index), options.family, options.style, options.size,
+                                  canvas.layer_type_value(index, 1), canvas.layer_type_value(index, 2), canvas.layer_type_value(index, 3),
+                                  canvas.layer_type_value(index, 4), canvas.layer_type_value(index, 5), canvas.layer_type_value(index, 6),
+                                  options.alignment, options.tracking, options.leading)
+        workspace.touch()
+        self.refresh()
 
     func set_words(self, text: str) -> unit!:
         let workspace = self.workspace

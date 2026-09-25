@@ -19,6 +19,8 @@ pub class TypeControls:
     ## family the style menu lists styles.
     var listed: bool = false
     var styled_family: str = ""
+    ## The layer whose settings the header last took (a text layer brings its own).
+    var shown_layer: int = 0
     ## A change made: the text being edited is set again.
     pub var changed: func() -> unit!? = none
     let workspace: Workspace
@@ -57,10 +59,17 @@ pub class TypeControls:
                            HStack([self.alignments[0], self.alignments[1], self.alignments[2], self.alignments[3]], spacing = 2.0),
                            kit.labelled("Tracking", self.tracking_field), kit.labelled("Leading", self.leading_field)], spacing = 12.0)
 
-    ## The settings as they are; the family menu filled the first time the canvas can list fonts.
+    ## The settings as they are; the family menu filled the first time the
+    ## canvas can list fonts. A text layer newly selected brings its own.
     pub func show(self) -> unit!:
         let options = self.workspace.typing
         let canvas = self.workspace.canvas
+        let selected = self.workspace.selected
+        let id = canvas.layer_id(selected) if selected >= 0 and selected < canvas.layer_count() else 0
+        if id != self.shown_layer:
+            self.shown_layer = id
+            if id != 0 and canvas.layer_typed(selected):
+                options.take(canvas, selected)
         if not self.listed and canvas.is_bound():
             self.list_families(canvas)
         if self.styled_family != options.family:
@@ -78,15 +87,27 @@ pub class TypeControls:
     func list_families(self, canvas: Canvas) -> unit!:
         self.listed = true
         var commands: list[Command] = []
+        var names: list[str] = []
         var index = 0
         while index < canvas.font_family_count():
             let family = canvas.font_family(index)
+            names.append(family)
             let command = Command(family, id = f"font_family_{index}")
             self.kit.bind(command, func () -> unit!:
                 self.choose_family(family))
             commands.append(command)
             index += 1
         self.family_menu.set_actions(commands)
+        # A family this system lacks (Helvetica off macOS) gives way to one it has.
+        let options = self.workspace.typing
+        if not names.contains(options.family):
+            for preferred in ["Helvetica", "Arial", "Segoe UI", "Sans"]:
+                if names.contains(preferred):
+                    options.family = preferred
+                    options.style = "Regular"
+                    return
+            if names.length > 0:
+                options.family = names[0]
 
     func list_styles(self, family: str) -> unit!:
         self.styled_family = family
