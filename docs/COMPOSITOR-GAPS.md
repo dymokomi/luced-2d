@@ -46,7 +46,7 @@ Found beyond the old list, and first because they lose work:
    back to delete; snapping to guides, grid, layers and the canvas for moves,
    marquees, boxes and guides; Show Guides (Cmd-;), Snap (Shift-Cmd-;), Lock
    Guides (Opt-Cmd-;), Clear Guides.
-9. [x] Live text layers (0.1.39): installed families and styles, size, color,
+9. [x] Live text layers (0.1.40): installed families and styles, size, color,
    alignment, tracking, leading, point text or a box that wraps; click (or drag
    a box) to type in a floating editor with the layer set live; click a text
    layer to edit it; Cmd-Return commits. Still to come: typing on the canvas
