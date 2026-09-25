@@ -491,6 +491,26 @@ pub class Workspace:
     ## back out, within `fuzziness`; 1..6 reds to magentas; 7 highlights, 8
     ## midtones, 9 shadows), turned around by `invert`: one step.
     pub func select_color_range(self, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
+        self.range_samples(colors, subtract)
+        self.canvas.select_color_range(self.selected_id(), range, fuzziness, invert)
+        self.touch()
+
+    ## The Color Range dialog: opened, showing a choice live (out of history),
+    ## and closed — OK selecting it as one step, Cancel putting back the selection.
+    pub func begin_color_range(self) -> unit!:
+        self.canvas.begin_color_range()
+
+    pub func preview_color_range(self, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
+        self.range_samples(colors, subtract)
+        self.canvas.preview_color_range(range, fuzziness, invert)
+        self.touch()
+
+    pub func finish_color_range(self, keep: bool, range: int, fuzziness: float, invert: bool) -> unit!:
+        self.canvas.finish_color_range(keep, range, fuzziness, invert)
+        self.touch()
+
+    ## Color Range's samples: sRGB triples in `colors`, `subtract` marking those taken out.
+    func range_samples(self, colors: list[float], subtract: list[bool]) -> unit!:
         let canvas = self.canvas
         canvas.clear_range_samples()
         var at = 0
@@ -498,8 +518,6 @@ pub class Workspace:
             canvas.add_range_sample(transfer.srgb_decode(colors[at]), transfer.srgb_decode(colors[at + 1]), transfer.srgb_decode(colors[at + 2]),
                                     subtract[at // 3] if at // 3 < subtract.length else false)
             at += 3
-        canvas.select_color_range(self.selected_id(), range, fuzziness, invert)
-        self.touch()
 
     ## The clipboard's image where it was copied from, above the selected layer.
     pub func paste_in_place(self) -> unit!:
