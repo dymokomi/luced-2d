@@ -81,6 +81,12 @@ pub class Workspace:
     ## The Line tool's weight in pixels and the Polygon tool's sides.
     pub var shape_weight: float = 4.0
     pub var shape_sides: int = 5
+    ## Shapes are filled (foreground) and stroked (background, this wide);
+    ## a rectangle's corners rounded by the radius.
+    pub var shape_fill: bool = true
+    pub var shape_stroke: bool = false
+    pub var shape_stroke_width: float = 2.0
+    pub var shape_radius: float = 0.0
     pub var contiguous: bool = true
     ## The foreground and background colors (linear), black over white by
     ## default, as Compositor's palette: the brush, text and fills use the

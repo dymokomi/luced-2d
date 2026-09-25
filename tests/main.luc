@@ -19,6 +19,7 @@ from layer_effects import EffectRows
 from update_check import newer
 from script_host import ScriptHost
 from tool_cursor import cursor_for
+from shape_tool import restyle_selected
 from adjustment_controls import range_of
 from tools import group_of
 from input import Cursor
@@ -982,8 +983,13 @@ func groups_and_shapes() -> unit!:
         drag_to(view, 60.0, 50.0)
         release(view, 60.0, 50.0)
     assert(workspace.layer_count() == before + 4 and workspace.canvas.layer_name(workspace.selected) == "Polygon" and not workspace.canvas.has_selection())
+    # They are shape layers: vector, restyled from the header.
+    assert(workspace.canvas.layer_shaped(workspace.selected) and workspace.canvas.layer_shape_value(workspace.selected, 0) == 3.0)
     workspace.undo()
     assert(workspace.layer_count() == before + 3)
+    workspace.shape_stroke = true
+    restyle_selected(workspace)
+    assert(workspace.canvas.layer_shape_value(workspace.selected, 11) == 1.0)
     # The rail's brush group shows the pencil once it is chosen.
     panels.choose_tool("pencil")
     press(view, 90.0, 10.0)

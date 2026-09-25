@@ -65,6 +65,10 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     workspace.crop_ratio = number(table, "crop.ratio", workspace.crop_ratio, 0.0, 100.0)
     workspace.shape_weight = number(table, "shape.weight", workspace.shape_weight, 1.0, 1000.0)
     workspace.shape_sides = int(number(table, "shape.sides", float(workspace.shape_sides), 3.0, 64.0))
+    workspace.shape_fill = boolean(table, "shape.fill", workspace.shape_fill)
+    workspace.shape_stroke = boolean(table, "shape.stroke", workspace.shape_stroke)
+    workspace.shape_stroke_width = number(table, "shape.stroke_width", workspace.shape_stroke_width, 0.5, 500.0)
+    workspace.shape_radius = number(table, "shape.radius", workspace.shape_radius, 0.0, 1000.0)
 
 ## Keep the workspace's options at `path`.
 pub func remember_tools(workspace: Workspace, path: str) -> unit!:
@@ -89,7 +93,7 @@ pub func serialize_tools(workspace: Workspace) -> str:
     text = text + f"[move]\nauto_select = {flag(workspace.auto_select)}\n\n"
     text = text + f"[transform]\nsampling = {workspace.transform_sampling}\nlock_ratio = {flag(workspace.lock_transform_ratio)}\n\n"
     text = text + f"[crop]\nratio = {workspace.crop_ratio}\n\n"
-    text = text + f"[shape]\nweight = {workspace.shape_weight}\nsides = {workspace.shape_sides}\n"
+    text = text + f"[shape]\nweight = {workspace.shape_weight}\nsides = {workspace.shape_sides}\nfill = {flag(workspace.shape_fill)}\nstroke = {flag(workspace.shape_stroke)}\nstroke_width = {workspace.shape_stroke_width}\nradius = {workspace.shape_radius}\n"
     return text
 
 ## A number the table holds within `minimum`..`maximum`, else `fallback`.

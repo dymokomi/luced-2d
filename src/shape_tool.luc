@@ -1,10 +1,11 @@
 ## The shape tools, as Photoshop's shape group: Rectangle, Ellipse, Line and
 ## Polygon, each dragged out on the canvas and drawn in the foreground color
-## on a new layer of its own. Shift keeps a rectangle square, an ellipse round
+## on a new shape layer of its own. Shift keeps a rectangle square, an ellipse round
 ## and a line at a multiple of 45°; Alt draws a rectangle, ellipse or polygon
 ## out from its centre. The line's weight and the polygon's sides are the
-## header's. A shape is drawn by selecting it and filling the selection (the
-## line is a hard brush stroke), so the selection is left clear after.
+## header's, as are the fill, the stroke and a rectangle's corner radius.
+## Shape layers are vector layers (luce-image's shape layers): they stay
+## crisp through moves and free transforms until painted on.
 from ui import Painter, Point
 from gpu import Color
 from workspace import Workspace
@@ -122,41 +123,45 @@ func ring(box: list[float], sides: int) -> list[Point]:
         index += 1
     return points
 
-## A rectangle, ellipse or polygon filling (`x`, `y`, `width`, `height`) on a
-## new layer named after it, as one undo step.
+## A rectangle, ellipse or polygon in (`x`, `y`, `width`, `height`) on a
+## new shape layer named after it, as one undo step: a vector layer that
+## stays crisp however it is moved or scaled, filled with the foreground
+## color and stroked, when the header says so, with the background color.
 pub func draw_shape(workspace: Workspace, tool: str, x: float, y: float, width: float, height: float) -> unit!:
     let name = "Rectangle" if tool == "rectangle" else ("Ellipse" if tool == "shape_ellipse" else "Polygon")
+    let kind = 0 if tool == "rectangle" else (1 if tool == "shape_ellipse" else 3)
     let canvas = workspace.canvas
     workspace.as_one(name, func () -> unit!:
         workspace.add_layer()
         workspace.rename(name)
-        if tool == "rectangle":
-            canvas.select_rectangle(int(math.round(x)), int(math.round(y)), int(math.round(width)), int(math.round(height)), 0)
-        elif tool == "shape_ellipse":
-            canvas.select_ellipse(int(math.round(x)), int(math.round(y)), int(math.round(width)), int(math.round(height)), 0)
-        else:
-            canvas.clear_points()
-            for point in ring([x, y, width, height], workspace.shape_sides):
-                canvas.add_point(point.x, point.y)
-            canvas.select_polygon(0)
-        workspace.fill_selection(false)
-        canvas.deselect())
+        canvas.set_shape(workspace.selected_id(), kind, x, y, width, height, workspace.shape_sides, workspace.shape_radius,
+                         workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
+                         workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width))
     workspace.touch()
 
-## A straight line of the header's weight in the foreground color on a new layer.
+## A straight line of the header's weight in the foreground color, on a new
+## shape layer.
 pub func draw_line(workspace: Workspace, x0: float, y0: float, x1: float, y1: float) -> unit!:
     let canvas = workspace.canvas
     workspace.as_one("Line", func () -> unit!:
         workspace.add_layer()
         workspace.rename("Line")
-        # A plain round hard tip, whatever the brush is set to.
-        canvas.set_brush(workspace.shape_weight, 1.0, 1.0, 1.0, workspace.red, workspace.green, workspace.blue, false)
-        canvas.set_brush_shape(0.1, 0.0, 1.0, 0.0)
-        canvas.set_brush_dynamics(0.0, 0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0, 0.0, false, false)
-        canvas.set_brush_texture(0, 1.0, 0.5)
-        canvas.set_brush_aliased(false)
-        canvas.set_retouch(0)
-        canvas.begin_stroke(workspace.selected_id(), x0, y0, 1.0)
-        canvas.extend_stroke(x1, y1, 1.0)
-        canvas.end_stroke())
+        canvas.set_shape(workspace.selected_id(), 2, x0, y0, x1 - x0, y1 - y0, workspace.shape_sides, 0.0,
+                         false, 0.0, 0.0, 0.0, true, workspace.red, workspace.green, workspace.blue, workspace.shape_weight))
+    workspace.touch()
+
+## The header's shape options changed: the selected shape layer takes them.
+pub func restyle_selected(workspace: Workspace) -> unit!:
+    let canvas = workspace.canvas
+    let index = workspace.selected
+    if index < 0 or index >= workspace.layer_count() or not canvas.layer_shaped(index):
+        return
+    let line = canvas.layer_shape_value(index, 0) == 2.0
+    if line:
+        canvas.restyle_shape(workspace.selected_id(), false, 0.0, 0.0, 0.0, true, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
+                             canvas.layer_shape_value(index, 14), workspace.shape_weight, 0.0, workspace.shape_sides)
+    else:
+        canvas.restyle_shape(workspace.selected_id(), workspace.shape_fill, canvas.layer_shape_value(index, 8), canvas.layer_shape_value(index, 9),
+                             canvas.layer_shape_value(index, 10), workspace.shape_stroke, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
+                             canvas.layer_shape_value(index, 14), workspace.shape_stroke_width, workspace.shape_radius, workspace.shape_sides)
     workspace.touch()
