@@ -439,7 +439,7 @@ func curve_names() -> list[str]:
 ## Hue/Saturation's page for an sRGB color: 1 Reds, 2 Yellows, 3 Greens,
 ## 4 Cyans, 5 Blues, 6 Magentas by the nearest of their hues (every 60°),
 ## 0 (Master) for a grey.
-func range_of(color: list[float]) -> int:
+pub func range_of(color: list[float]) -> int:
     let high = math.max(color[0], math.max(color[1], color[2]))
     let low = math.min(color[0], math.min(color[1], color[2]))
     let chroma = high - low
@@ -447,9 +447,10 @@ func range_of(color: list[float]) -> int:
         return 0
     var hue = 0.0
     if high == color[0]:
-        hue = math.mod((color[1] - color[2]) / chroma, 6.0)
+        # Red at the top: -1..1, a magenta's below zero, so a turn is added first.
+        hue = math.mod((color[1] - color[2]) / chroma + 6.0, 6.0)
     elif high == color[1]:
         hue = (color[2] - color[0]) / chroma + 2.0
     else:
         hue = (color[0] - color[1]) / chroma + 4.0
-    return int(math.mod(math.round(hue), 6.0)) + 1
+    return int(math.mod(math.round(hue) + 6.0, 6.0)) + 1
