@@ -66,6 +66,9 @@ pub class CanvasView: Widget:
     pub let polygon: PolygonLasso
     ## A shape tool's shape while it is dragged out.
     pub let shape: ShapeDrag
+    ## The Clone Stamp preview's picture and its side in pixels.
+    var clone_image: Image? = none
+    var clone_side: int = 0
     ## Alt held, for the Zoom tool's minus.
     var alt_held: bool = false
     ## A drag for Hue/Saturation's on-image adjustment, and where it began.
@@ -222,6 +225,7 @@ pub class CanvasView: Widget:
         if self.pointer_inside and not self.panning and brushed(workspace.tool) and workspace.drag_for == none and workspace.sample_for == none:
             self.draw_brush_outline(painter)
             if workspace.tool == "clone" and workspace.canvas.has_clone_source():
+                self.draw_clone_preview(painter)
                 self.draw_clone_source(painter)
         painter.close()
 
@@ -303,6 +307,23 @@ pub class CanvasView: Widget:
             painter.line(a, b, 3.0, theme.backdrop())
             painter.line(a, b, 1.0, theme.text())
             index += 1
+
+    ## What the Clone Stamp would lay down, shown inside its tip, as
+    ## Photoshop's clone overlay: the source under the brush, faded.
+    func draw_clone_preview(self, painter: Painter) -> unit!:
+        let workspace = self.workspace
+        let diameter = workspace.brush.diameter
+        let source = workspace.canvas.clone_preview(workspace.selected_id(), self.document_x(self.pointer_x), self.document_y(self.pointer_y), diameter) catch failure:
+            discard(failure)
+            return
+        let side = int(math.max(1.0, math.min(1024.0, math.ceil(diameter))))
+        if self.clone_side != side:
+            self.clone_image = Image(side, side)
+            self.clone_side = side
+        let image = self.clone_image else return
+        image.write(source)
+        let shown = float(side) * workspace.zoom
+        painter.image(image, Rect(self.pointer_x - shown * 0.5, self.pointer_y - shown * 0.5, shown, shown), opacity = 0.6)
 
     ## The Clone Stamp's source: a crosshair where a stroke from the pointer
     ## would copy from, white under black as Compositor's.

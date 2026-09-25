@@ -1,8 +1,9 @@
 ## The tool rail, as Photoshop's: a button for each tool on its own and one
 ## for each group of alike tools (tools.luc's `tool_groups`), which shows the
 ## group's current tool with a small corner mark. A click takes that tool; a
-## long press — or a right-click — opens the group beside it to pick another,
-## which then shows on the button. A key or a menu choosing a grouped tool
+## press held a moment opens the group beside it — slide onto another tool
+## and let go to take it — and a right-click opens it for a click; the tool
+## chosen then shows on the button. A key or a menu choosing a grouped tool
 ## brings it to the front too.
 from ui import Widget, Button, ButtonStyle, ContextMenu, Command
 from actions import Actions
@@ -62,9 +63,16 @@ pub class ToolRail:
         kit.keep(button.on_click(func () -> unit!:
             self.command(slot.tool).trigger()))
         kit.keep(button.on_hold(func () -> unit!:
-            # Beside the button, as Photoshop's flyout.
-            flyout.open_at(34.0, 0.0)))
+            # Beside the button, while it is still held, as Photoshop's flyout:
+            # slide onto a tool and let go to take it.
+            flyout.open_at(34.0, 0.0, held = true)))
         self.add(slot)
+
+    ## Each frame: a group button held a moment opens its flyout, still held.
+    pub func poll(self) -> unit!:
+        for slot in self.slots:
+            if slot.group >= 0:
+                slot.button.poll_hold()
 
     func command(self, id: str) -> Command:
         for command in self.actions.tools:
