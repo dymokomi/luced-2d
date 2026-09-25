@@ -73,6 +73,8 @@ pub class CanvasView: Widget:
     let selection: SelectionDrag
     ## A gradient drag in progress, from a document point.
     var gradient_dragging: bool = false
+    ## A live gradient's end being dragged (the new one's end, or a handle).
+    var gradient_handle: bool = false
     ## The Text tool pressed: a click sets point text, a drag a box.
     var text_dragging: bool = false
     var gradient_x: float = 0.0
@@ -140,6 +142,11 @@ pub class CanvasView: Widget:
         let painter = Painter(target)
         let size = target.size()
         let workspace = self.workspace
+        # A live gradient is kept when another tool is chosen, and follows the
+        # colors and the header's options while it stays.
+        if workspace.gradient != none and workspace.tool != "gradient":
+            workspace.finish_gradient(true)
+        workspace.follow_gradient()
         if not workspace.fitted:
             workspace.fit(size.width, size.height)
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.backdrop())
@@ -355,9 +362,11 @@ pub class CanvasView: Widget:
                     self.polygon.take_back()
                 if let changed = self.on_changed:
                     changed()
-            elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and (self.workspace.transform != none or self.workspace.crop_box != none):
-                # Enter applies a free transform or crops; Esc drops it.
-                if self.workspace.transform != none:
+            elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and not self.gradient_handle and (self.workspace.transform != none or self.workspace.crop_box != none or self.workspace.gradient != none):
+                # Enter applies a free transform, a live gradient or the crop; Esc drops it.
+                if self.workspace.gradient != none:
+                    self.workspace.finish_gradient(event.key == Key.enter)
+                elif self.workspace.transform != none:
                     self.workspace.finish_transform(event.key == Key.enter)
                 else:
                     self.workspace.finish_crop(event.key == Key.enter)
@@ -469,6 +478,12 @@ pub class CanvasView: Widget:
         elif self.refuses_group(tool):
             return
         elif tool == "gradient":
+            # A live gradient's handle moves that end; elsewhere a new one starts.
+            if let edit = workspace.gradient:
+                edit.grabbed = edit.hit(x, y, reach)
+                if edit.grabbed >= 0:
+                    self.gradient_handle = true
+                    return
             self.gradient_dragging = true
             self.gradient_x = x
             self.gradient_y = y
@@ -633,6 +648,8 @@ pub class CanvasView: Widget:
     ## A free transform's box, else the Crop tool's, else the Move tool's transform controls, over the view.
     func draw_box(self, painter: Painter, width: float, height: float) -> unit!:
         let workspace = self.workspace
+        if let edit = workspace.gradient:
+            edit.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
         if let session = workspace.transform:
             session.box.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
             return
@@ -649,6 +666,20 @@ pub class CanvasView: Widget:
         if self.guides.active:
             # Over a ruler (past the view's top or left edge) a guide goes when let go.
             self.guides.drag(self.document_x(event.x), self.document_y(event.y), event.x < 0.0 or event.y < 0.0)
+        elif self.gradient_handle:
+            if let edit = self.workspace.gradient:
+                edit.drag(self.document_x(event.x), self.document_y(event.y), event.shift)
+        elif self.gradient_dragging:
+            # Once the pointer has left the press, the gradient shows live, its end following.
+            let x = self.document_x(event.x)
+            let y = self.document_y(event.y)
+            if (math.abs(x - self.gradient_x) + math.abs(y - self.gradient_y)) * self.workspace.zoom >= 3.0:
+                self.gradient_dragging = false
+                self.workspace.begin_gradient(self.gradient_x, self.gradient_y, x, y)
+                if let edit = self.workspace.gradient:
+                    edit.grabbed = 1
+                    edit.drag(x, y, event.shift)
+                    self.gradient_handle = true
         elif self.boxing:
             # Cmd (Ctrl) on a corner distorts, as in Compositor.
             self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt, event.meta or event.control)
@@ -762,12 +793,14 @@ pub class CanvasView: Widget:
         elif self.text_dragging:
             self.text_dragging = false
             self.place_text(x, y)
+        elif self.gradient_handle:
+            self.gradient_handle = false
+            if let edit = workspace.gradient:
+                edit.grabbed = -1
         elif self.gradient_dragging:
+            # A click without a drag keeps the live gradient, if one is up.
             self.gradient_dragging = false
-            # Shift keeps the gradient to 45° steps, as Photoshop's.
-            let end = snapped(self.gradient_x, self.gradient_y, x, y) if event.shift else Point(x, y)
-            if math.abs(end.x - self.gradient_x) + math.abs(end.y - self.gradient_y) >= 1.0:
-                workspace.fill_gradient(self.gradient_x, self.gradient_y, end.x, end.y)
+            workspace.finish_gradient(true)
         elif self.selection.active:
             self.selection.finish(workspace, x, y, event.shift, event.alt)
         elif self.painting:
@@ -778,15 +811,6 @@ pub class CanvasView: Widget:
             self.stroke_end_x = point.x
             self.stroke_end_y = point.y
             self.has_stroke_end = true
-
-## (`x`, `y`) turned about (`x0`, `y0`) to the nearest 45° step, as far away.
-func snapped(x0: float, y0: float, x: float, y: float) -> Point:
-    let dx = x - x0
-    let dy = y - y0
-    let length = math.hypot(dx, dy)
-    let step = math.pi / 4.0
-    let angle = math.round(math.atan2(dy, dx) / step) * step
-    return Point(x0 + math.cos(angle) * length, y0 + math.sin(angle) * length)
 
 ## Whether `tool` paints with the brush's tip, and so shows its outline.
 func brushed(tool: str) -> bool:

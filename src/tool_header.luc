@@ -194,7 +194,7 @@ pub class ToolHeader:
         self.controls_box.set_checked(workspace.show_transform_controls)
         self.transform_controls.row.layout().set_visible(transforming)
         self.transform_controls.show()
-        self.box_controls.layout().set_visible(transforming or workspace.crop_box != none)
+        self.box_controls.layout().set_visible(transforming or workspace.crop_box != none or workspace.gradient != none)
         self.auto_select_box.set_checked(workspace.auto_select)
         self.size_field.set_value(workspace.brush.diameter)
         self.hardness_field.set_value(workspace.brush.hardness * 100.0)

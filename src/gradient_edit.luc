@@ -1,0 +1,76 @@
+## A gradient being placed, after Compositor's: once dragged it stays live on
+## the canvas with a handle at each end. Dragging a handle moves that end and
+## the gradient is drawn again from the pixels as they were; the header's
+## options and the colors apply at once. Enter or Apply keeps it as one undo
+## step, Esc or Cancel drops it, and a new drag keeps it and starts another.
+from ui import Painter, Point
+from gpu import Rect, Color
+import math
+
+pub class GradientEdit:
+    ## The ends, in document pixels: from the first color to the second.
+    pub var x0: float
+    pub var y0: float
+    pub var x1: float
+    pub var y1: float
+    ## The handle being dragged: 0 the start, 1 the end, -1 none.
+    pub var grabbed: int = -1
+    ## What the gradient was last drawn with, so a change draws it again.
+    var shown: str = ""
+
+    pub func init(self, x0: float, y0: float, x1: float, y1: float):
+        self.x0 = x0
+        self.y0 = y0
+        self.x1 = x1
+        self.y1 = y1
+
+    ## The handle within `reach` document pixels of (`x`, `y`), or -1; the
+    ## end wins where they overlap, as the one drawn on top.
+    pub func hit(self, x: float, y: float, reach: float) -> int:
+        if math.abs(x - self.x1) <= reach and math.abs(y - self.y1) <= reach:
+            return 1
+        if math.abs(x - self.x0) <= reach and math.abs(y - self.y0) <= reach:
+            return 0
+        return -1
+
+    ## Move the grabbed end to (`x`, `y`); Shift keeps the line to 45° steps
+    ## from the other end.
+    pub func drag(self, x: float, y: float, shift: bool):
+        if self.grabbed == 0:
+            let end = snapped(self.x1, self.y1, x, y) if shift else Point(x, y)
+            self.x0 = end.x
+            self.y0 = end.y
+        elif self.grabbed == 1:
+            let end = snapped(self.x0, self.y0, x, y) if shift else Point(x, y)
+            self.x1 = end.x
+            self.y1 = end.y
+
+    ## Whether the ends or `settings` (the colors and options) changed since
+    ## the gradient was last drawn; they are taken as drawn now.
+    pub func changed(self, settings: str) -> bool:
+        let now = f"{self.x0},{self.y0},{self.x1},{self.y1},{settings}"
+        if now == self.shown:
+            return false
+        self.shown = now
+        return true
+
+    ## The line between the ends and a handle at each, over the view.
+    pub func draw(self, painter: Painter, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        let a = Point(self.x0 * zoom + left, self.y0 * zoom + top)
+        let b = Point(self.x1 * zoom + left, self.y1 * zoom + top)
+        painter.line(a, b, 3.0, backing)
+        painter.line(a, b, 1.0, ink)
+        for point in [a, b]:
+            painter.rectangle(Rect(math.floor(point.x) - 4.0, math.floor(point.y) - 4.0, 9.0, 9.0), ink)
+            painter.rectangle(Rect(math.floor(point.x) - 3.0, math.floor(point.y) - 3.0, 7.0, 7.0), backing)
+        # The start is marked filled, so the direction reads at a glance.
+        painter.rectangle(Rect(math.floor(a.x) - 1.0, math.floor(a.y) - 1.0, 3.0, 3.0), ink)
+
+## (`x`, `y`) turned to the nearest 45° step around (`x0`, `y0`), as far away.
+pub func snapped(x0: float, y0: float, x: float, y: float) -> Point:
+    let dx = x - x0
+    let dy = y - y0
+    let length = math.hypot(dx, dy)
+    let step = math.pi / 4.0
+    let angle = math.round(math.atan2(dy, dx) / step) * step
+    return Point(x0 + math.cos(angle) * length, y0 + math.sin(angle) * length)

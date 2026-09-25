@@ -51,8 +51,10 @@ Found beyond the old list, and first because they lose work:
    a box) to type in a floating editor with the layer set live; click a text
    layer to edit it; Cmd-Return commits. Still to come: typing on the canvas
    itself with a caret, and several styles in one layer.
-10. [ ] Gradient: editable end points before Apply; on a mask. (Radial, reverse,
-    to transparent and Shift 45° shipped in 0.1.29.)
+10. [x] Gradient (0.1.45): stays live after the drag with a handle at each
+    end (Shift: 45°), follows the colors and options, Enter/Apply keeps it,
+    Esc/Cancel drops it; on a mask when editing one. (Radial, reverse, to
+    transparent and Shift 45° shipped in 0.1.29.)
 11. [ ] Crop: ratios, symmetric (Option), start at the selection, size readout,
     snapping.
 12. [ ] Masks: link/unlink and move on their own; masks on groups; invert, blur

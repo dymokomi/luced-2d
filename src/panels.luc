@@ -211,9 +211,11 @@ pub class Panels:
             if kit.may_open(self.settings_dialog.dialog):
                 self.settings_dialog.open())
         kit.bind(actions.undo, func () -> unit!:
-            # During a free transform, undo drops it, as there is nothing kept yet to undo.
+            # During a free transform or a live gradient, undo drops it, as nothing is kept yet.
             if self.workspace.transform != none:
                 self.workspace.finish_transform(false)
+            elif self.workspace.gradient != none:
+                self.workspace.finish_gradient(false)
             else:
                 self.workspace.undo()
             self.refresh())
@@ -489,7 +491,9 @@ pub class Panels:
 
     ## The header's Apply or Cancel: the free transform, or the Crop tool's box.
     pub func finish_box(self, keep: bool) -> unit!:
-        if self.workspace.transform != none:
+        if self.workspace.gradient != none:
+            self.workspace.finish_gradient(keep)
+        elif self.workspace.transform != none:
             self.workspace.finish_transform(keep)
         else:
             self.workspace.finish_crop(keep)

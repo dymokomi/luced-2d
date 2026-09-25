@@ -38,6 +38,7 @@ pub func main(arguments: list[str]) -> int!:
     selection_tools()
     guides_and_snapping()
     live_text()
+    live_gradient()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -605,4 +606,45 @@ func live_text() -> unit!:
     editing.begin_new(50.0, 50.0, 100.0)
     editing.commit()
     assert(workspace.layer_count() == 2)
+    panels.close()
+
+## A gradient stays live after its drag: a handle moves its end, Enter keeps
+## it as one step, a new drag keeps the last and starts another, Esc drops it.
+func live_gradient() -> unit!:
+    let workspace = Workspace(200, 100)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    panels.choose_tool("gradient")
+    let steps = workspace.canvas.step_serial()
+    press(view, 10.0, 50.0)
+    drag_to(view, 100.0, 50.0)
+    release(view, 100.0, 50.0)
+    if let edit = workspace.gradient:
+        assert(edit.x0 == 10.0 and edit.x1 == 100.0)
+    else:
+        assert(false)
+    assert(workspace.canvas.previewing() and workspace.canvas.step_serial() == steps)
+    # The end handle, dragged with Shift, stays level with the start.
+    press(view, 100.0, 50.0)
+    drag_to(view, 180.0, 58.0, shift = true)
+    release(view, 180.0, 58.0, shift = true)
+    if let edit = workspace.gradient:
+        assert(math.abs(edit.y1 - 50.0) < 0.001 and edit.x1 > 170.0)
+    view.event(Event(kind = EventKind.key_down, key = Key.enter))
+    assert(workspace.gradient == none and not workspace.canvas.previewing() and workspace.canvas.step_serial() == steps + 1)
+    # A new drag keeps the one before; Esc drops the new one.
+    press(view, 20.0, 20.0)
+    drag_to(view, 20.0, 90.0)
+    release(view, 20.0, 90.0)
+    press(view, 150.0, 20.0)
+    drag_to(view, 150.0, 90.0)
+    release(view, 150.0, 90.0)
+    assert(workspace.canvas.step_serial() == steps + 2)
+    view.event(Event(kind = EventKind.key_down, key = Key.escape))
+    assert(workspace.gradient == none and workspace.canvas.step_serial() == steps + 2)
     panels.close()
