@@ -1,0 +1,83 @@
+## The tool rail, as Photoshop's: a button for each tool on its own and one
+## for each group of alike tools (tools.luc's `tool_groups`), which shows the
+## group's current tool with a small corner mark. A click takes that tool; a
+## long press — or a right-click — opens the group beside it to pick another,
+## which then shows on the button. A key or a menu choosing a grouped tool
+## brings it to the front too.
+from ui import Widget, Button, ButtonStyle, ContextMenu, Command
+from actions import Actions
+from kit import Kit
+from tools import tools, tool_groups, group_of, tool_by_id
+from workspace import Workspace
+
+## One button on the rail: the tool it shows, and its group, or -1.
+class RailSlot:
+    pub let button: Button
+    pub let widget: Widget
+    pub let group: int
+    pub var tool: str
+
+    pub func init(self, button: Button, widget: Widget, group: int, tool: str):
+        self.button = button
+        self.widget = widget
+        self.group = group
+        self.tool = tool
+
+pub class ToolRail:
+    ## The rail's widgets, top to bottom.
+    pub let items: list[Widget]
+    let slots: list[RailSlot]
+    let actions: Actions
+
+    pub func init(self, actions: Actions, kit: Kit) -> unit!:
+        self.actions = actions
+        self.items = []
+        self.slots = []
+        var placed: list[int] = []
+        var index = 0
+        for tool in tools():
+            let group = group_of(tool.id)
+            if group < 0:
+                let button = kit.tool_button(tool.icon, actions.tools[index])
+                self.add(RailSlot(button, button, -1, tool.id))
+            elif not (group in placed):
+                placed.append(group)
+                self.add_group(tool.id, group, kit)
+            index += 1
+
+    func add(self, slot: RailSlot):
+        self.slots.append(slot)
+        self.items.append(slot.widget)
+
+    ## A group's button, showing its first tool, and the flyout of all of them.
+    func add_group(self, first: str, group: int, kit: Kit) -> unit!:
+        var commands: list[Command] = []
+        for id in tool_groups()[group]:
+            commands.append(self.command(id))
+        let button = Button(icon = tool_by_id(first).icon, font = kit.font)
+        button.layout().set_size(32.0, 32.0)
+        button.set_grouped(true)
+        let flyout = ContextMenu(button, commands, font = kit.font)
+        let slot = RailSlot(button, flyout, group, first)
+        kit.keep(button.on_click(func () -> unit!:
+            self.command(slot.tool).trigger()))
+        kit.keep(button.on_hold(func () -> unit!:
+            # Beside the button, as Photoshop's flyout.
+            flyout.open_at(34.0, 0.0)))
+        self.add(slot)
+
+    func command(self, id: str) -> Command:
+        for command in self.actions.tools:
+            if command.id() == id:
+                return command
+        return self.actions.tools[0]
+
+    ## The active tool marked, and each group showing its last-chosen tool.
+    pub func show(self, workspace: Workspace) -> unit!:
+        let active = workspace.tool
+        let active_group = group_of(active)
+        for slot in self.slots:
+            if slot.group >= 0 and slot.group == active_group and slot.tool != active:
+                slot.tool = active
+                slot.button.set_icon(tool_by_id(active).icon)
+            slot.button.set_style(ButtonStyle.selected if slot.tool == active else ButtonStyle.sunken)

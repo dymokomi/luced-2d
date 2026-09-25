@@ -65,9 +65,9 @@ Found beyond the old list, and first because they lose work:
     mask being edited; Copy Mask / Paste Mask; a new mask is the paint target.
 13. [ ] Adjustments. Done: Curves adjustment layers (0.1.50); Levels eyedroppers
     and three Auto modes, Reset, Preview toggle (Alt-P), Gradient Map colors,
-    the Hue/Saturation range eyedropper (0.1.51). Left: Hue/Saturation band
-    sliders, drag on canvas and "outside this range" (they need more engine
-    parameters). Originally: Curves adjustment layers; Levels eyedroppers, three Auto
+    the Hue/Saturation range eyedropper (0.1.51); On Image drag for
+    Hue/Saturation (0.1.63). Left: Hue/Saturation band sliders and "outside
+    this range" (they need more engine parameters). Originally: Curves adjustment layers; Levels eyedroppers, three Auto
     modes, Reset, Preview toggle (Opt-P); Hue/Sat band sliders, eyedroppers,
     drag on canvas, "outside this range"; Gradient Map colors.
 14. [x] Styles (0.1.52): Drop Shadow by angle and distance (the light's

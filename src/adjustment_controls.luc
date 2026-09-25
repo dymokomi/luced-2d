@@ -37,6 +37,9 @@ pub class AdjustmentControls:
     pub let map_colors: MapColors
     let curve_label: Text
     var curve_channel: int = 0
+    ## Hue/Saturation's On Image checkbox, and the slider's value when a drag began.
+    var on_image: Checkbox? = none
+    var drag_base: float = 0.0
     ## The kind showing, or -1.
     pub var kind: int = -1
     ## Where Levels' histogram comes from: what shows below adjustment layer
@@ -114,7 +117,9 @@ pub class AdjustmentControls:
             slot += 1
         if kind == hue_kind:
             # The eyedropper: a click on the image shows the range its color is in.
-            items.append(HStack([self.kit.button("Pick Range", self.arm_range), Spacer()], spacing = 8.0))
+            let on_image = self.kit.checkbox("On Image", self.toggle_on_image)
+            self.on_image = on_image
+            items.append(HStack([self.kit.button("Pick Range", self.arm_range), on_image, Spacer()], spacing = 8.0))
         if kind == levels_kind:
             # Photoshop's three Auto modes.
             var modes: list[Command] = []
@@ -310,6 +315,28 @@ pub class AdjustmentControls:
     func arm_range(self) -> unit!:
         self.workspace.sample_for = func (color: list[float]) -> unit!:
             self.show_page(hue_kind, range_of(color))
+
+    ## On Image, as Photoshop's targeted adjustment: a press on the canvas
+    ## shows the range of the color there, and dragging right or left raises
+    ## or lowers that range's saturation — its hue with Cmd (Ctrl) held.
+    pub func toggle_on_image(self) -> unit!:
+        if self.workspace.drag_for != none:
+            self.workspace.drag_for = none
+            return
+        self.workspace.drag_for = func (color: list[float], moved: float, hue: bool, first: bool) -> unit!:
+            let slot = 0 if hue else 1
+            if first:
+                self.show_page(hue_kind, range_of(color))
+                self.drag_base = self.controls[hue_kind][slot].value()
+                return
+            let knob = self.spec(hue_kind).knobs[slot]
+            self.set_control(hue_kind, slot, math.clamp(self.drag_base + moved * 0.5, knob.minimum, knob.maximum))
+
+    ## Off: the canvas's drags are its tools' again.
+    pub func end_on_image(self) -> unit!:
+        self.workspace.drag_for = none
+        if let box = self.on_image:
+            box.set_checked(false)
 
     ## Wait for a click on the image: 0 sets the black point, 1 the gray, 2 the white.
     func arm_dropper(self, point: int) -> unit!:

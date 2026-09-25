@@ -13,6 +13,8 @@ from polygon_lasso import PolygonLasso
 from guides import GuideDrag
 from snapping import Snapper
 from free_transform import box_around
+from shape_tool import ShapeDrag, is_shape
+from tool_cursor import cursor_for, draw_magnifier
 import theme
 import math
 import time
@@ -62,6 +64,13 @@ pub class CanvasView: Widget:
     let opacity_keys: OpacityKeys
     ## The Polygonal Lasso's shape while its corners are clicked.
     pub let polygon: PolygonLasso
+    ## A shape tool's shape while it is dragged out.
+    pub let shape: ShapeDrag
+    ## Alt held, for the Zoom tool's minus.
+    var alt_held: bool = false
+    ## A drag for Hue/Saturation's on-image adjustment, and where it began.
+    var adjust_dragging: bool = false
+    var adjust_x: float = 0.0
     ## A guide being dragged, and what pulls while a gesture snaps.
     pub let guides: GuideDrag
     let snapper: Snapper
@@ -128,6 +137,7 @@ pub class CanvasView: Widget:
         self.selection = SelectionDrag()
         self.opacity_keys = OpacityKeys()
         self.polygon = PolygonLasso()
+        self.shape = ShapeDrag()
         self.guides = GuideDrag()
         self.snapper = Snapper()
         self.checker = Image(256, 256)
@@ -204,6 +214,9 @@ pub class CanvasView: Widget:
         if self.ringing:
             self.draw_sample_ring(painter)
         self.draw_box(painter, size.width, size.height)
+        self.shape.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
+        if self.pointer_inside and not self.panning and not self.space_held and workspace.tool == "zoom":
+            draw_magnifier(painter, self.pointer_x, self.pointer_y, self.alt_held, theme.text(), theme.backdrop())
         if self.pointer_inside and not self.panning and brushed(workspace.tool):
             self.draw_brush_outline(painter)
             if workspace.tool == "clone" and workspace.canvas.has_clone_source():
@@ -387,6 +400,8 @@ pub class CanvasView: Widget:
             self.release(event)
         elif kind == EventKind.pointer_left:
             self.pointer_inside = false
+        self.alt_held = event.alt
+        self.box.set_cursor(cursor_for(self.workspace.tool, self.panning, self.space_held, self.workspace.brush.diameter * self.workspace.zoom < 5.0))
         self.box.invalidate()
         for linked in self.linked:
             linked.invalidate()
@@ -394,6 +409,7 @@ pub class CanvasView: Widget:
     ## The view lost the pointer mid-gesture: end what is in progress.
     func cancel(self) -> unit!:
         self.panning = false
+        self.shape.cancel()
         if self.painting:
             self.painting = false
             self.workspace.end_stroke()
@@ -511,6 +527,12 @@ pub class CanvasView: Widget:
             crop.begin(crop.hit(x, y, reach), x, y)
             self.boxing = true
             return
+        # Hue/Saturation's on-image adjustment takes the drag while it is armed.
+        if workspace.drag_for != none:
+            self.adjust_dragging = true
+            self.adjust_x = event.x
+            workspace.adjust_drag(x, y, 0.0, event.meta or event.control, true)
+            return
         # Cmd (Ctrl) held makes most tools the Move tool for the drag, as in Photoshop.
         let temporary_move = (event.meta or event.control) and tool != "hand" and tool != "zoom"
         let selecting_tool = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"
@@ -545,6 +567,8 @@ pub class CanvasView: Widget:
         elif tool == "idle":
             # The idle tool rests on the canvas and does nothing there.
             return
+        elif is_shape(tool):
+            self.shape.begin(tool, x, y)
         elif tool == "clone" and event.alt:
             # Alt-click: where the Clone Stamp copies from, as Photoshop's.
             workspace.set_clone_source(x, y)
@@ -552,7 +576,7 @@ pub class CanvasView: Widget:
             # A dialog's eyedropper took the click (Levels' black, gray or white point).
             if let changed = self.on_changed:
                 changed()
-        elif (tool == "brush" or tool == "gradient") and event.alt:
+        elif (tool == "brush" or tool == "pencil" or tool == "gradient") and event.alt:
             # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
             workspace.pick(x, y)
         elif self.refuses_group(tool):
@@ -591,7 +615,7 @@ pub class CanvasView: Widget:
     ## Whether `tool` needs pixels and the selected layer is a group, which has
     ## none: then say so, as Photoshop does, and do nothing.
     func refuses_group(self, tool: str) -> bool!:
-        let paints = tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear"
+        let paints = tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear"
         # A group's mask is painted like any other.
         if not paints or not self.workspace.canvas.layer_is_group(self.workspace.selected):
             return false
@@ -767,6 +791,12 @@ pub class CanvasView: Widget:
                 brush.hardness = math.clamp(self.sizing_hardness - (event.y - self.sizing_y) / 200.0, 0.0, 1.0)
             self.workspace.touch()
             return
+        if self.adjust_dragging:
+            self.workspace.adjust_drag(0.0, 0.0, event.x - self.adjust_x, event.meta or event.control, false)
+            return
+        if self.shape.active:
+            self.shape.drag(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
+            return
         if self.guides.active:
             # Over a ruler (past the view's top or left edge) a guide goes when let go.
             self.guides.drag(self.document_x(event.x), self.document_y(event.y), event.x < 0.0 or event.y < 0.0)
@@ -872,6 +902,17 @@ pub class CanvasView: Widget:
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
         self.panning = false
+        if self.adjust_dragging:
+            self.adjust_dragging = false
+            if let changed = self.on_changed:
+                changed()
+            return
+        if self.shape.active:
+            self.shape.drag(x, y, event.shift, event.alt)
+            self.shape.finish(workspace)
+            if let changed = self.on_changed:
+                changed()
+            return
         if self.guides.active:
             self.guides.finish(workspace)
         elif self.boxing:
@@ -932,7 +973,7 @@ pub class CanvasView: Widget:
 
 ## Whether `tool` paints with the brush's tip, and so shows its outline.
 func brushed(tool: str) -> bool:
-    return tool == "brush" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear"
+    return tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear"
 
 ## The digit a number key types, or -1.
 pub func digit_value(key: Key) -> int:

@@ -1,0 +1,45 @@
+## The pointer over the canvas says what the tool will do, as Photoshop's:
+## the brush tools hide it for their tip's outline (drawn by the view), the
+## Zoom tool — or Z held — shows a magnifier with + (− with Alt), the Hand an
+## open hand that closes while it pans, the picking and drawing tools thin
+## cross hairs, the Text tool its I-beam. The magnifier is drawn by the view,
+## so the system cursor hides under it.
+from ui import Painter, Point
+from gpu import Color
+from input import Cursor
+import math
+
+## The system cursor for `tool`; `hidden` where the view draws its own.
+pub func cursor_for(tool: str, panning: bool, space: bool, small_tip: bool) -> Cursor:
+    if panning:
+        return Cursor.grabbing
+    if space or tool == "hand":
+        return Cursor.grab
+    if tool == "zoom":
+        return Cursor.hidden
+    if tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear":
+        # A tip too small to see as a circle shows cross hairs instead.
+        return Cursor.crosshair if small_tip else Cursor.hidden
+    if tool == "text":
+        return Cursor.text
+    if tool == "move" or tool == "idle":
+        return Cursor.arrow
+    return Cursor.crosshair
+
+## The Zoom tool's magnifier at (`x`, `y`), the lens's centre: + to zoom in,
+## − (`out`) to zoom out; dark under light so it shows on any picture.
+pub func draw_magnifier(painter: Painter, x: float, y: float, out: bool, ink: Color, under: Color) -> unit!:
+    for width in [3.5, 1.5]:
+        let color = under if width > 2.0 else ink
+        let segments = 24
+        var index = 0
+        while index < segments:
+            let a = float(index) * 2.0 * math.pi / float(segments)
+            let b = float(index + 1) * 2.0 * math.pi / float(segments)
+            painter.line(Point(x + math.cos(a) * 7.0, y + math.sin(a) * 7.0), Point(x + math.cos(b) * 7.0, y + math.sin(b) * 7.0), width, color)
+            index += 1
+        # The handle, down and to the right.
+        painter.line(Point(x + 5.0, y + 5.0), Point(x + 11.0, y + 11.0), width + 1.0, color)
+        painter.line(Point(x - 3.5, y), Point(x + 3.5, y), width, color)
+        if not out:
+            painter.line(Point(x, y - 3.5), Point(x, y + 3.5), width, color)

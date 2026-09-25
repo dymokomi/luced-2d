@@ -95,6 +95,7 @@ pub class AdjustDialog:
             self.preview()
 
     func close_preview(self, keep: bool) -> unit!:
+        self.controls.end_on_image()
         if self.kind >= 0 and self.workspace.previewing():
             self.workspace.end_preview(keep)
         self.kind = -1

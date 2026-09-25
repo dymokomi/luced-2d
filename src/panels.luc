@@ -4,7 +4,7 @@
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
-from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, DockPosition, ButtonStyle, Rule, Dialog, ContextMenu, Button, NumberField
+from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, DockPosition, Rule, Dialog, ContextMenu, NumberField
 from input import Key
 from workspace import Workspace
 from actions import Actions
@@ -28,11 +28,11 @@ from prompts import Prompts
 from document_files import DocumentFiles
 from crash_dialog import CrashDialog
 from menus import menu_bar
-from tools import tools
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
 from text_editing import TextEditing
 from script_editor import ScriptEditor
+from tool_rail import ToolRail
 from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
 from canvas import Canvas
 import math
@@ -67,7 +67,8 @@ pub class Panels:
     pub let dock: DStack
     pub let viewport_panel: Panel
     pub let layers_panel: LayersPanel
-    pub let tool_buttons: list[Button]
+    ## The tool rail: its buttons, groups and flyouts (tool_rail.luc).
+    pub let rail: ToolRail
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
     pub let palette: Palette
     pub let picker: ColorPicker
@@ -161,14 +162,8 @@ pub class Panels:
         self.connect()
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
         # tool selected, and the palette below them.
-        var rail_items: list[Widget] = []
-        self.tool_buttons = []
-        var index = 0
-        for tool in tools():
-            let button = kit.tool_button(tool.icon, actions.tools[index])
-            self.tool_buttons.append(button)
-            rail_items.append(button)
-            index += 1
+        self.rail = ToolRail(actions, kit)
+        var rail_items: list[Widget] = self.rail.items
         rail_items.append(Rule())
         rail_items.append(self.palette)
         let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
@@ -677,10 +672,7 @@ pub class Panels:
         self.zoom_field.set_value(float(percent))
         self.status.set_text(f"{workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
         self.layers_panel.show()
-        var slot = 0
-        for command in self.actions.tools:
-            self.tool_buttons[slot].set_style(ButtonStyle.selected if command.id() == workspace.tool else ButtonStyle.sunken)
-            slot += 1
+        self.rail.show(workspace)
         self.actions.update(workspace)
         # The view aids, with their state in the View menu.
         self.ruler_row.layout().set_visible(workspace.show_rulers)

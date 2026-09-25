@@ -80,6 +80,9 @@ pub class Workspace:
     pub var mask_source: int = 0
     ## Magic wand settings: color tolerance 0..255 and whether the pixels must connect.
     pub var tolerance: float = 32.0
+    ## The Line tool's weight in pixels and the Polygon tool's sides.
+    pub var shape_weight: float = 4.0
+    pub var shape_sides: int = 5
     pub var contiguous: bool = true
     ## The foreground and background colors (linear), black over white by
     ## default, as Compositor's palette: the brush, text and fills use the
@@ -122,6 +125,7 @@ pub class Workspace:
         self.brush = Brush()
         self.recent = []
         self.picked = []
+        self.drag_color = [0.0, 0.0, 0.0]
         self.collapsed = []
         self.selecting = SelectionOptions()
         self.typing = TypeOptions()
@@ -730,6 +734,7 @@ pub class Workspace:
         self.canvas.set_retouch(self.retouch_kind())
         self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
         self.canvas.set_heal_mode(self.heal_content_aware)
+        self.canvas.set_brush_aliased(self.tool == "pencil")
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
 
@@ -1083,6 +1088,12 @@ pub class Workspace:
     ## A dialog's eyedropper waiting for a click on the canvas (Levels' black,
     ## gray or white point): given the color there, sRGB-encoded 0..1.
     pub var sample_for: func(list[float]) -> unit!? = none
+    ## Hue/Saturation's on-image adjustment, while armed: a drag on the canvas
+    ## hands it the color under the press (sRGB), how far the pointer has moved
+    ## across (points), whether it changes hue (Cmd or Ctrl held) rather than
+    ## saturation, and whether the drag has just begun.
+    pub var drag_for: func(list[float], float, bool, bool) -> unit!? = none
+    var drag_color: list[float]
 
     ## Hand the color at a document point to the waiting eyedropper, once; the
     ## image as it was, not the edit being previewed. False when none waits.
@@ -1093,12 +1104,28 @@ pub class Workspace:
         let py = int(math.floor(y))
         if px < 0 or py < 0 or px >= self.width() or py >= self.height():
             return true
+        waiting(self.color_at(px, py))
+        self.touch()
+        return true
+
+    ## The color (sRGB) at a document pixel of the image as it was, not the
+    ## edit being previewed.
+    func color_at(self, px: int, py: int) -> list[float]!:
         if self.canvas.previewing():
             self.canvas.show_preview_original()
         self.canvas.pick(px, py)
-        waiting([transfer.srgb_encode(self.canvas.picked_red()), transfer.srgb_encode(self.canvas.picked_green()), transfer.srgb_encode(self.canvas.picked_blue())])
+        return [transfer.srgb_encode(self.canvas.picked_red()), transfer.srgb_encode(self.canvas.picked_green()), transfer.srgb_encode(self.canvas.picked_blue())]
+
+    ## A drag on the canvas for the on-image adjustment: begun at document
+    ## point (`x`, `y`), moved `moved` points across since.
+    pub func adjust_drag(self, x: float, y: float, moved: float, hue: bool, first: bool) -> unit!:
+        let adjusting = self.drag_for else return
+        if first:
+            let px = int(math.clamp(math.floor(x), 0.0, float(self.width() - 1)))
+            let py = int(math.clamp(math.floor(y), 0.0, float(self.height() - 1)))
+            self.drag_color = self.color_at(px, py)
+        adjusting(self.drag_color, moved, hue, first)
         self.touch()
-        return true
 
     ## The eyedropper: the flattened color under a document point becomes the
     ## foreground color (the background one while the picker samples for it).

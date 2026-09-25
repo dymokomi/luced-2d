@@ -237,7 +237,8 @@ pub class Actions:
         self.zoom_out = Command("Zoom Out", Shortcut(Key.minus, primary = true), id = "zoom_out")
         self.tools = []
         for tool in tools():
-            self.tools.append(Command(tool.name, Shortcut(tool.key, shift = tool.shift), id = tool.id))
+            let shortcut = Shortcut() if tool.key == Key.unknown else Shortcut(tool.key, shift = tool.shift)
+            self.tools.append(Command(tool.name, shortcut, id = tool.id))
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")

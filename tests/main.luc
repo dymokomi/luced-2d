@@ -18,6 +18,9 @@ from ui import Event, Application
 from layer_effects import EffectRows
 from update_check import newer
 from script_host import ScriptHost
+from tool_cursor import cursor_for
+from tools import group_of
+from input import Cursor
 from script_commands import parse_line
 from tool_memory import tools_path, restore_tools, remember_tools
 import paths
@@ -61,6 +64,8 @@ pub func main(arguments: list[str]) -> int!:
     tool_modes()
     scripts()
     script_editor()
+    groups_and_shapes()
+    on_image_adjustment()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -951,4 +956,61 @@ func script_editor() -> unit!:
     if panels.scripts.host.succeeded:
         assert(workspace.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.selected) == "Dots")
     panels.scripts.close()
+    panels.close()
+
+## Tools come in groups on the rail; shapes land on layers of their own; the
+## pencil paints whole pixels; each tool has its cursor.
+func groups_and_shapes() -> unit!:
+    assert(group_of("lasso") == group_of("marquee") and group_of("pencil") == group_of("brush") and group_of("line") >= 0 and group_of("wand") == -1)
+    assert(cursor_for("zoom", false, false, false) == Cursor.hidden and cursor_for("brush", false, false, false) == Cursor.hidden)
+    assert(cursor_for("brush", false, false, true) == Cursor.crosshair and cursor_for("wand", false, false, false) == Cursor.crosshair)
+    assert(cursor_for("text", false, false, false) == Cursor.text and cursor_for("hand", false, false, false) == Cursor.grab and cursor_for("move", true, false, false) == Cursor.grabbing)
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    let before = workspace.layer_count()
+    for tool in ["rectangle", "shape_ellipse", "line", "shape_polygon"]:
+        panels.choose_tool(tool)
+        press(view, 20.0, 20.0)
+        drag_to(view, 60.0, 50.0)
+        release(view, 60.0, 50.0)
+    assert(workspace.layer_count() == before + 4 and workspace.canvas.layer_name(workspace.selected) == "Polygon" and not workspace.canvas.has_selection())
+    workspace.undo()
+    assert(workspace.layer_count() == before + 3)
+    # The rail's brush group shows the pencil once it is chosen.
+    panels.choose_tool("pencil")
+    press(view, 90.0, 10.0)
+    drag_to(view, 110.0, 30.0)
+    release(view, 110.0, 30.0)
+    assert(workspace.canvas.undo_name() != "")
+    panels.close()
+
+## Hue/Saturation On Image: a press picks the range of the color there; a
+## drag right raises its saturation.
+func on_image_adjustment() -> unit!:
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    workspace.set_color(1.0, 0.0, 0.0)
+    workspace.fill_selection(false)
+    panels.adjust.open(1)
+    panels.adjust.controls.toggle_on_image()
+    press(view, 30.0, 30.0)
+    drag_to(view, 70.0, 30.0)
+    release(view, 70.0, 30.0)
+    # Reds (page 1) saturation went up by half the 40 points moved.
+    let shown = panels.adjust.controls.values(1)
+    assert(shown[3 + 1] > 15.0)
+    panels.adjust.cancel()
+    assert(workspace.drag_for == none)
     panels.close()

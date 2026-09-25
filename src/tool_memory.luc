@@ -64,6 +64,8 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     workspace.transform_sampling = int(number(table, "transform.sampling", float(workspace.transform_sampling), 0.0, 2.0))
     workspace.lock_transform_ratio = boolean(table, "transform.lock_ratio", workspace.lock_transform_ratio)
     workspace.crop_ratio = number(table, "crop.ratio", workspace.crop_ratio, 0.0, 100.0)
+    workspace.shape_weight = number(table, "shape.weight", workspace.shape_weight, 1.0, 1000.0)
+    workspace.shape_sides = int(number(table, "shape.sides", float(workspace.shape_sides), 3.0, 64.0))
 
 ## Keep the workspace's options at `path`.
 pub func remember_tools(workspace: Workspace, path: str) -> unit!:
@@ -87,7 +89,8 @@ pub func serialize_tools(workspace: Workspace) -> str:
     text = text + f"[heal]\ncontent_aware = {flag(workspace.heal_content_aware)}\n\n[smear]\nmode = {workspace.smear_mode}\n\n"
     text = text + f"[move]\nauto_select = {flag(workspace.auto_select)}\n\n"
     text = text + f"[transform]\nsampling = {workspace.transform_sampling}\nlock_ratio = {flag(workspace.lock_transform_ratio)}\n\n"
-    text = text + f"[crop]\nratio = {workspace.crop_ratio}\n"
+    text = text + f"[crop]\nratio = {workspace.crop_ratio}\n\n"
+    text = text + f"[shape]\nweight = {workspace.shape_weight}\nsides = {workspace.shape_sides}\n"
     return text
 
 ## A number the table holds within `minimum`..`maximum`, else `fallback`.

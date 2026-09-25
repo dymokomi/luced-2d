@@ -1,0 +1,162 @@
+## The shape tools, as Photoshop's shape group: Rectangle, Ellipse, Line and
+## Polygon, each dragged out on the canvas and drawn in the foreground color
+## on a new layer of its own. Shift keeps a rectangle square, an ellipse round
+## and a line at a multiple of 45°; Alt draws a rectangle, ellipse or polygon
+## out from its centre. The line's weight and the polygon's sides are the
+## header's. A shape is drawn by selecting it and filling the selection (the
+## line is a hard brush stroke), so the selection is left clear after.
+from ui import Painter, Point
+from gpu import Color
+from workspace import Workspace
+import math
+
+## The shape tools' ids, in the group's order.
+pub func shape_tools() -> list[str]:
+    return ["rectangle", "shape_ellipse", "line", "shape_polygon"]
+
+pub func is_shape(tool: str) -> bool:
+    return tool in shape_tools()
+
+## A shape being dragged out, in document pixels.
+pub class ShapeDrag:
+    pub var active: bool = false
+    var tool: str = ""
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+    var end_x: float = 0.0
+    var end_y: float = 0.0
+    var square: bool = false
+    var centered: bool = false
+
+    pub func init(self):
+        self.active = false
+
+    pub func begin(self, tool: str, x: float, y: float):
+        self.active = true
+        self.tool = tool
+        self.start_x = x
+        self.start_y = y
+        self.end_x = x
+        self.end_y = y
+        self.square = false
+        self.centered = false
+
+    pub func drag(self, x: float, y: float, shift: bool, alt: bool):
+        self.end_x = x
+        self.end_y = y
+        self.square = shift
+        self.centered = alt
+
+    pub func cancel(self):
+        self.active = false
+
+    ## Let go: the shape drawn, unless it is too small to be one.
+    pub func finish(self, workspace: Workspace) -> unit!:
+        if not self.active:
+            return
+        self.active = false
+        let box = self.box()
+        if self.tool == "line":
+            let end = self.line_end()
+            if math.hypot(end.x - self.start_x, end.y - self.start_y) < 1.0:
+                return
+            draw_line(workspace, self.start_x, self.start_y, end.x, end.y)
+            return
+        if box[2] < 1.0 or box[3] < 1.0:
+            return
+        draw_shape(workspace, self.tool, box[0], box[1], box[2], box[3])
+
+    ## The shape's box, left, top, width and height, with Shift and Alt applied.
+    func box(self) -> list[float]:
+        var dx = self.end_x - self.start_x
+        var dy = self.end_y - self.start_y
+        if self.square:
+            let side = math.max(math.abs(dx), math.abs(dy))
+            dx = side if dx >= 0.0 else -side
+            dy = side if dy >= 0.0 else -side
+        if self.centered:
+            return [self.start_x - math.abs(dx), self.start_y - math.abs(dy), math.abs(dx) * 2.0, math.abs(dy) * 2.0]
+        return [math.min(self.start_x, self.start_x + dx), math.min(self.start_y, self.start_y + dy), math.abs(dx), math.abs(dy)]
+
+    ## The line's end, turned to the nearest 45° with Shift.
+    func line_end(self) -> Point:
+        if not self.square:
+            return Point(self.end_x, self.end_y)
+        let dx = self.end_x - self.start_x
+        let dy = self.end_y - self.start_y
+        let length = math.hypot(dx, dy)
+        let step = math.pi / 4.0
+        let angle = math.round(math.atan2(dy, dx) / step) * step
+        return Point(self.start_x + math.cos(angle) * length, self.start_y + math.sin(angle) * length)
+
+    ## The outline while it is dragged, in view points: dark under light.
+    pub func draw(self, painter: Painter, workspace: Workspace, zoom: float, left: float, top: float, ink: Color, under: Color) -> unit!:
+        if not self.active:
+            return
+        let points = self.outline(workspace)
+        var index = 0
+        while index + 1 < points.length:
+            let a = Point(left + points[index].x * zoom, top + points[index].y * zoom)
+            let b = Point(left + points[index + 1].x * zoom, top + points[index + 1].y * zoom)
+            painter.line(a, b, 3.0, under)
+            painter.line(a, b, 1.0, ink)
+            index += 1
+
+    ## The outline in document pixels, closed for the closed shapes.
+    func outline(self, workspace: Workspace) -> list[Point]:
+        if self.tool == "line":
+            return [Point(self.start_x, self.start_y), self.line_end()]
+        let box = self.box()
+        if self.tool == "rectangle":
+            return [Point(box[0], box[1]), Point(box[0] + box[2], box[1]), Point(box[0] + box[2], box[1] + box[3]), Point(box[0], box[1] + box[3]), Point(box[0], box[1])]
+        let sides = 48 if self.tool == "shape_ellipse" else workspace.shape_sides
+        return ring(box, sides)
+
+## `sides` corners around the ellipse in `box`, the first at the top, closed.
+func ring(box: list[float], sides: int) -> list[Point]:
+    var points: list[Point] = []
+    var index = 0
+    while index <= sides:
+        let angle = -math.pi / 2.0 + float(index) * 2.0 * math.pi / float(sides)
+        points.append(Point(box[0] + box[2] * 0.5 + math.cos(angle) * box[2] * 0.5, box[1] + box[3] * 0.5 + math.sin(angle) * box[3] * 0.5))
+        index += 1
+    return points
+
+## A rectangle, ellipse or polygon filling (`x`, `y`, `width`, `height`) on a
+## new layer named after it, as one undo step.
+pub func draw_shape(workspace: Workspace, tool: str, x: float, y: float, width: float, height: float) -> unit!:
+    let name = "Rectangle" if tool == "rectangle" else ("Ellipse" if tool == "shape_ellipse" else "Polygon")
+    let canvas = workspace.canvas
+    workspace.as_one(name, func () -> unit!:
+        workspace.add_layer()
+        workspace.rename(name)
+        if tool == "rectangle":
+            canvas.select_rectangle(int(math.round(x)), int(math.round(y)), int(math.round(width)), int(math.round(height)), 0)
+        elif tool == "shape_ellipse":
+            canvas.select_ellipse(int(math.round(x)), int(math.round(y)), int(math.round(width)), int(math.round(height)), 0)
+        else:
+            canvas.clear_points()
+            for point in ring([x, y, width, height], workspace.shape_sides):
+                canvas.add_point(point.x, point.y)
+            canvas.select_polygon(0)
+        workspace.fill_selection(false)
+        canvas.deselect())
+    workspace.touch()
+
+## A straight line of the header's weight in the foreground color on a new layer.
+pub func draw_line(workspace: Workspace, x0: float, y0: float, x1: float, y1: float) -> unit!:
+    let canvas = workspace.canvas
+    workspace.as_one("Line", func () -> unit!:
+        workspace.add_layer()
+        workspace.rename("Line")
+        # A plain round hard tip, whatever the brush is set to.
+        canvas.set_brush(workspace.shape_weight, 1.0, 1.0, 1.0, workspace.red, workspace.green, workspace.blue, false)
+        canvas.set_brush_shape(0.1, 0.0, 1.0, 0.0)
+        canvas.set_brush_dynamics(0.0, 0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0, 0.0, false, false)
+        canvas.set_brush_texture(0, 1.0, 0.5)
+        canvas.set_brush_aliased(false)
+        canvas.set_retouch(0)
+        canvas.begin_stroke(workspace.selected_id(), x0, y0, 1.0)
+        canvas.extend_stroke(x1, y1, 1.0)
+        canvas.end_stroke())
+    workspace.touch()
