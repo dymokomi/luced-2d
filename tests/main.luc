@@ -73,6 +73,7 @@ pub func main(arguments: list[str]) -> int!:
     tool_options_kept()
     update_versions()
     color_range()
+    replace_color()
     tool_modes()
     scripts()
     script_editor()
@@ -955,6 +956,52 @@ func color_range() -> unit!:
     assert(workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 0)
     workspace.select_color_range(9, 40.0, false, [], [])
     assert(workspace.canvas.selected_at(48, 32) == 0)
+    panels.close()
+
+## Replace Color: a click on the disc samples it, the hue turns it from
+## yellow to red live, the ground stays; Cancel puts it back, Apply keeps one
+## step; it is never an adjustment layer.
+func replace_color() -> unit!:
+    let workspace = Workspace(96, 64)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    workspace.set_color(0.0, 0.0, 1.0)
+    workspace.fill_selection(false)
+    workspace.canvas.select_ellipse(33, 17, 30, 30, 0)
+    workspace.set_color(1.0, 1.0, 0.0)
+    workspace.fill_selection(false)
+    workspace.canvas.deselect()
+    let before = workspace.canvas.undo_name()
+    panels.replace_color.open()
+    assert(workspace.range_sample_for != none)
+    press(view, 48.0, 32.0)
+    release(view, 48.0, 32.0)
+    panels.replace_color.set_replacement(-60.0, 0.0, 0.0)
+    panels.replace_color.poll()
+    workspace.canvas.pick(48, 32)
+    assert(workspace.canvas.picked_red() > 0.9 and workspace.canvas.picked_green() < 0.05)
+    workspace.canvas.pick(4, 4)
+    assert(workspace.canvas.picked_blue() > 0.9 and workspace.canvas.picked_red() < 0.05)
+    panels.replace_color.cancel()
+    workspace.canvas.pick(48, 32)
+    assert(workspace.range_sample_for == none and workspace.canvas.picked_green() > 0.9 and workspace.canvas.undo_name() == before)
+    panels.replace_color.open()
+    press(view, 48.0, 32.0)
+    release(view, 48.0, 32.0)
+    panels.replace_color.set_replacement(-60.0, 0.0, 0.0)
+    panels.replace_color.apply()
+    workspace.canvas.pick(48, 32)
+    assert(workspace.canvas.undo_name() == "Replace Color" and workspace.canvas.picked_green() < 0.05)
+    var refused = false
+    discard(workspace.canvas.add_adjustment_layer("Replace", 17) catch failure:
+        refused = true
+        recover 0)
+    assert(refused)
     panels.close()
 
 ## Tab steps a tool through its modes; the idle tool leaves the canvas alone.

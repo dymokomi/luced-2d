@@ -32,6 +32,7 @@ from menus import menu_bar
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
 from color_range_dialog import ColorRangeDialog
+from replace_color_dialog import ReplaceColorDialog
 from select_mask_dialog import SelectMaskDialog
 from text_editing import TextEditing
 from script_editor import ScriptEditor
@@ -95,6 +96,7 @@ pub class Panels:
     pub let document_settings: DocumentSettings
     pub let size_dialogs: SizeDialogs
     pub let color_range: ColorRangeDialog
+    pub let replace_color: ReplaceColorDialog
     pub let select_mask: SelectMaskDialog
     pub let text_editing: TextEditing
     pub let settings_dialog: SettingsDialog
@@ -180,6 +182,10 @@ pub class Panels:
         self.color_range.applied = self.refresh
         self.color_range.failed = self.prompts.tell
         kit.bind(actions.color_range, self.color_range.open)
+        self.replace_color = ReplaceColorDialog(workspace, kit)
+        self.replace_color.applied = self.refresh
+        self.replace_color.failed = self.prompts.tell
+        kit.bind(actions.replace_color, self.replace_color.open)
         self.select_mask = SelectMaskDialog(workspace, kit)
         self.select_mask.applied = self.refresh
         self.select_mask.failed = self.prompts.tell
@@ -247,7 +253,7 @@ pub class Panels:
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
-                            self.picker.dialog, self.color_range.dialog, self.select_mask.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
+                            self.picker.dialog, self.color_range.dialog, self.replace_color.dialog, self.select_mask.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 

@@ -1,0 +1,170 @@
+## Image › Adjustments › Replace Color…, as Photoshop's: while it is up, a
+## click on the canvas samples the color to replace (Shift-click adds one,
+## Alt-click takes one back out), Fuzziness sets how near a color must be,
+## and Hue, Saturation and Lightness say what it becomes. It is destructive
+## only, never an adjustment layer: the layer's pixels show the change live
+## and Apply keeps it as one undo step. The work is luce-image's adjust pass
+## (adjustment 17), a pixel at a time on the GPU, so it costs no read of the
+## document on any size.
+from ui import Text, HStack, Spacer, Dialog, Checkbox
+from workspace import Workspace
+from kit import Kit, SliderField
+import transfer
+
+## luce-image's Replace Color adjustment, and how many samples it takes.
+let replace_kind: int = 17
+let most_samples: int = 6
+
+pub class ReplaceColorDialog:
+    pub let dialog: Dialog
+    let fuzziness: SliderField
+    let hue: SliderField
+    let saturation: SliderField
+    let lightness: SliderField
+    let preview_box: Checkbox
+    let hint: Text
+    ## The samples, linear-light triples, and which of them are taken back out.
+    var colors: list[float]
+    var subtract: list[bool]
+    ## Whether the layer's preview is open.
+    var open_preview: bool = false
+    ## A change waiting to be shown: changes arriving faster than frames (a
+    ## slider drag) are shown once, the latest, on the next frame.
+    var pending: bool = false
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.colors = []
+        self.subtract = []
+        let font = kit.font
+        self.fuzziness = kit.slider_field(0.0, 200.0, 40.0, 0, "", self.moved)
+        self.hue = kit.slider_field(-180.0, 180.0, 0.0, 0, "°", self.moved)
+        self.saturation = kit.slider_field(-100.0, 100.0, 0.0, 0, "", self.moved)
+        self.lightness = kit.slider_field(-100.0, 100.0, 0.0, 0, "", self.moved)
+        self.preview_box = kit.checkbox("Preview", self.show)
+        self.preview_box.set_checked(true)
+        self.hint = Text("", font = font, muted = true)
+        self.dialog = Dialog([Text("Replace Color", font = font), kit.dialog_row("Fuzziness", self.fuzziness.row, 110.0), self.hint,
+                              Text("Replacement", font = font), kit.dialog_row("Hue", self.hue.row, 110.0),
+                              kit.dialog_row("Saturation", self.saturation.row, 110.0), kit.dialog_row("Lightness", self.lightness.row, 110.0),
+                              HStack([self.preview_box, Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0)],
+                             width = 460.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
+
+    pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
+        self.workspace.begin_preview() catch failure:
+            self.fail(f"Replace Color: {failure.message}")
+            return
+        self.open_preview = true
+        self.colors = []
+        self.subtract = []
+        self.preview_box.set_checked(true)
+        self.workspace.range_sample_for = self.sampled
+        self.dialog.open()
+        self.show()
+
+    ## Set the replacement from code, as if the sliders moved: hue in degrees,
+    ## saturation and lightness -100..100.
+    pub func set_replacement(self, hue: float, saturation: float, lightness: float) -> unit!:
+        self.hue.set_value(hue)
+        self.saturation.set_value(saturation)
+        self.lightness.set_value(lightness)
+        self.show()
+
+    func moved(self, value: float) -> unit!:
+        discard(value)
+        self.show()
+
+    ## A color from the canvas (sRGB): 0 samples anew, 1 adds, 2 takes back out.
+    pub func sampled(self, color: list[float], how: int) -> unit!:
+        if how == 0:
+            self.colors = []
+            self.subtract = []
+        if self.subtract.length >= most_samples:
+            return
+        for value in color:
+            self.colors.append(transfer.srgb_decode(value))
+        self.subtract.append(how == 2)
+        self.show()
+
+    ## Show the change at the next frame.
+    func show(self) -> unit!:
+        var added = 0
+        for taken in self.subtract:
+            if not taken:
+                added += 1
+        let removed = self.subtract.length - added
+        self.hint.set_text("Click the picture for the color to replace; Shift-click adds, Alt-click takes back out." if self.subtract.length == 0 else
+                           (f"{added} added, {removed} taken out (at most {most_samples})." if removed > 0 else f"{added} sampled (at most {most_samples})."))
+        self.pending = self.open_preview
+        # Wake the loop for the frame that shows it.
+        self.hint.layout().invalidate()
+
+    ## Called every frame: show the latest change, if one waits.
+    pub func poll(self) -> unit!:
+        if not self.pending:
+            return
+        self.pending = false
+        self.preview() catch failure:
+            self.fail(f"Replace Color: {failure.message}")
+            return
+        self.refresh()
+
+    ## The engine's numbers: hue in turns, saturation and lightness -1..1,
+    ## fuzziness, the sample count, then each sample, a subtracted one's red
+    ## as -1 - red (adjust.frag).
+    pub func numbers(self) -> list[float]:
+        var numbers = [self.hue.value() / 360.0, self.saturation.value() / 100.0, self.lightness.value() / 100.0,
+                       self.fuzziness.value(), float(self.subtract.length)]
+        var index = 0
+        while index < self.subtract.length:
+            let red = self.colors[index * 3]
+            numbers = numbers + [(-1.0 - red) if self.subtract[index] else red, self.colors[index * 3 + 1], self.colors[index * 3 + 2]]
+            index += 1
+        return numbers
+
+    func preview(self) -> unit!:
+        if not self.open_preview:
+            return
+        if not self.preview_box.is_checked():
+            self.workspace.canvas.show_preview_original()
+            self.workspace.touch()
+            return
+        self.workspace.preview_adjust(replace_kind, self.numbers())
+
+    pub func cancel(self) -> unit!:
+        self.close(false)
+
+    pub func apply(self) -> unit!:
+        self.close(true)
+
+    ## Close the dialog: Apply (`keep`) keeps the change as one step.
+    func close(self, keep: bool) -> unit!:
+        self.workspace.range_sample_for = none
+        self.dialog.hide()
+        self.pending = false
+        if self.open_preview:
+            self.open_preview = false
+            let kept = keep and self.subtract.length > 0
+            if kept:
+                # What the controls say is kept, the preview shown or not.
+                self.workspace.preview_adjust(replace_kind, self.numbers()) catch failure:
+                    self.fail(f"Replace Color: {failure.message}")
+            self.workspace.end_preview(kept) catch failure:
+                self.fail(f"Replace Color: {failure.message}")
+        self.refresh()
+
+    func refresh(self) -> unit!:
+        if let done = self.applied:
+            done()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
