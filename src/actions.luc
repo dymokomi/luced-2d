@@ -51,6 +51,8 @@ pub class Actions:
     ## The fills on Delete as well as Backspace, as Photoshop has them on
     ## Windows keyboards: a command has one shortcut, so each is its own.
     pub let fill_delete: Command
+    ## Redo on Ctrl+Y too, which Windows users expect beside Ctrl+Shift+Z.
+    pub let redo_y: Command
     pub let fill_background_delete: Command
     pub let clear: Command
     pub let swap_colors: Command
@@ -172,6 +174,7 @@ pub class Actions:
         self.previous_document = Command("Previous Document", Shortcut(Key.left_bracket, primary = true, alt = true), id = "previous_document")
         self.undo = Command("Undo", Shortcut(Key.z, primary = true), id = "undo")
         self.redo = Command("Redo", Shortcut(Key.z, primary = true, shift = true), id = "redo")
+        self.redo_y = Command("Redo (Y)", Shortcut(Key.y, primary = true), id = "redo_y")
         self.cut = Command("Cut", Shortcut(Key.x, primary = true), id = "cut")
         self.copy = Command("Copy", Shortcut(Key.c, primary = true), id = "copy")
         self.copy_merged = Command("Copy Merged", Shortcut(Key.c, primary = true, shift = true), id = "copy_merged")
@@ -294,7 +297,7 @@ pub class Actions:
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
-        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.replace_color, self.fill_background, self.fill_delete, self.fill_background_delete, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.transform_skew, self.transform_distort, self.transform_perspective, self.transform_warp, self.puppet_warp, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
+        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.redo_y, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.replace_color, self.fill_background, self.fill_delete, self.fill_background_delete, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.transform_skew, self.transform_distort, self.transform_perspective, self.transform_warp, self.puppet_warp, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather, self.border, self.smooth, self.grow, self.similar, self.transform_selection, self.quick_mask, self.select_mask, self.load_selection, self.save_selection,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,

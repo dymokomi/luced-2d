@@ -311,6 +311,8 @@ pub class Panels:
         kit.bind(actions.fill_background, func () -> unit!:
             self.workspace.fill_selection(false, true)
             self.refresh())
+        kit.bind(actions.redo_y, func () -> unit!:
+            actions.redo.trigger())
         kit.bind(actions.fill_delete, func () -> unit!:
             actions.fill.trigger())
         kit.bind(actions.fill_background_delete, func () -> unit!:
