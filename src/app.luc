@@ -4,6 +4,7 @@
 from ui import Application, Font
 from interop import Connection
 from workspace import Workspace
+from canvas import Canvas
 from panels import Panels
 from actions import Actions
 from settings import Store
@@ -98,3 +99,5 @@ pub class Luce2D:
         self.connections.clear()
         self.panels.close()
         self.app.close()
+        # Nothing reads tiles now: the scratch file and its folder can go.
+        Canvas.release_scratch_file()
