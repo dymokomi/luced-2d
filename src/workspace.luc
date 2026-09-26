@@ -158,6 +158,11 @@ pub class Workspace:
     pub func set_memory_usage(self, fraction: float) -> unit!:
         self.canvas.set_memory_usage(fraction)
 
+    ## Where tiles past the RAM budget spill ("" for the default cache folder);
+    ## it applies before the first spill.
+    pub func set_scratch_folder(self, folder: str) -> unit!:
+        Canvas.set_scratch_folder(folder)
+
     # -- Documents: the live fields are the current document's; switching stashes and restores them.
 
     ## Copy the live fields into the current document's record; a free

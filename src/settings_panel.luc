@@ -32,6 +32,7 @@ pub class SettingsDialog:
     let height_field: NumberField
     let undo_field: NumberField
     let usage_field: NumberField
+    let scratch_field: TextField
     let accent_field: TextField
     let accent_swatch: Swatch
     let radius_field: NumberField
@@ -75,8 +76,11 @@ pub class SettingsDialog:
         self.usage_field = NumberField(60.0, 25.0, 90.0, 5.0, suffix = " %", font = font, cells = 8.0)
         self.connections.append(self.usage_field.on_change(func (value: float) -> unit!:
             self.draft.memory_usage = value))
+        self.scratch_field = TextField("", font = font, cells = 24.0)
+        self.connections.append(self.scratch_field.on_commit(func (value: str) -> unit!:
+            self.draft.scratch = value))
         let general = VStack([self.row("New canvas", HStack([self.width_field, Text("×", font = font, muted = true), self.height_field], spacing = 6.0)),
-                              self.row("Undo memory", self.undo_field), self.row("Memory usage", self.usage_field), Spacer()], spacing = 8.0)
+                              self.row("Undo memory", self.undo_field), self.row("Memory usage", self.usage_field), self.row("Scratch folder", self.scratch_field), Spacer()], spacing = 8.0)
         # Shortcuts: every command in a table; the field beneath records for the picked row.
         self.table = TableView([TableColumn(title = "Action", weight = 1.0), TableColumn(title = "Shortcut", width = 150.0)], self.cells(), font = font)
         self.table.layout().set_limits(Size(200.0, 190.0), Size(16384.0, 190.0))
@@ -144,6 +148,7 @@ pub class SettingsDialog:
         self.height_field.set_value(float(self.draft.canvas_height))
         self.undo_field.set_value(self.draft.undo_memory)
         self.usage_field.set_value(self.draft.memory_usage)
+        self.scratch_field.set_text(self.draft.scratch)
         self.accent_field.set_text(self.draft.accent)
         self.show_accent()
         self.radius_field.set_value(self.draft.control_radius)
@@ -281,6 +286,9 @@ pub class SettingsDialog:
         self.workspace.units = self.settings.units
         self.workspace.set_history_limit(int(self.settings.undo_memory * 1073741824.0))
         self.workspace.set_memory_usage(self.settings.memory_usage / 100.0)
+        # A folder that is not there keeps the default rather than failing the rest.
+        self.workspace.set_scratch_folder(self.settings.scratch) catch failure:
+            discard(failure)
         let look = Look(self.settings.accent, self.settings.control_radius)
         self.workspace.look = look
         var recent: list[str] = []
