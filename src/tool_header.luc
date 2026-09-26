@@ -271,7 +271,7 @@ pub class ToolHeader:
         self.range_menu.set_text(["Shadows ▾", "Midtones ▾", "Highlights ▾"][workspace.tone_range])
         self.weight_row.layout().set_visible(not transforming and tool == "line")
         self.sides_row.layout().set_visible(not transforming and tool == "shape_polygon")
-        let filled_shape = tool == "rectangle" or tool == "shape_ellipse" or tool == "shape_polygon"
+        let filled_shape = tool == "rectangle" or tool == "shape_ellipse" or tool == "shape_polygon" or tool == "pen"
         self.paint_row.layout().set_visible(not transforming and filled_shape)
         self.radius_row.layout().set_visible(not transforming and tool == "rectangle")
         if filled_shape or tool == "line":

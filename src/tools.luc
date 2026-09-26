@@ -51,6 +51,8 @@ pub func tools() -> list[Tool]!:
             Tool("shape_ellipse", "Ellipse", "Ellipse", "ellipse-tool", Key.u, "Drag an ellipse onto a layer of its own · shift makes a circle · alt draws from the centre", shift = true),
             Tool("line", "Line", "Line", "line-tool", Key.unknown, "Drag a line of the header's weight onto a layer of its own · shift keeps it to 45°"),
             Tool("shape_polygon", "Polygon", "Polygon", "path-tool", Key.unknown, "Drag a polygon of the header's sides onto a layer of its own · shift keeps it even · alt from the centre"),
+            Tool("pen", "Pen", "Pen", "pen-tool", Key.p,
+                 "Click corners, drag curves · click the first anchor to close · Enter ends · on a path: drag anchors or handles (alt: one handle), click the curve to add, an anchor to remove"),
             Tool("hand", "Hand", "Hand", "pan-tool", Key.h, "Drag to pan"),
             Tool("idle", "Idle", "Idle", "node-tool", Key.a, "A tool that does nothing on the canvas: a safe place to rest · Space pans · Z zooms"),
             Tool("zoom", "Zoom", "Zoom", "zoom-in", Key.z, "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool")]

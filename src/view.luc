@@ -14,6 +14,7 @@ from guides import GuideDrag
 from snapping import Snapper
 from free_transform import box_around
 from shape_tool import ShapeDrag, is_shape
+from pen_tool import PenTool
 from tool_cursor import cursor_for, draw_magnifier
 import theme
 import math
@@ -67,6 +68,7 @@ pub class CanvasView: Widget:
     pub let polygon: PolygonLasso
     ## A shape tool's shape while it is dragged out.
     pub let shape: ShapeDrag
+    pub let pen: PenTool
     ## The Clone Stamp preview's picture and its side in pixels.
     var clone_image: Image? = none
     var clone_side: int = 0
@@ -142,6 +144,7 @@ pub class CanvasView: Widget:
         self.opacity_keys = OpacityKeys()
         self.polygon = PolygonLasso()
         self.shape = ShapeDrag()
+        self.pen = PenTool()
         self.guides = GuideDrag()
         self.snapper = Snapper()
         self.checker = Image(256, 256)
@@ -221,6 +224,9 @@ pub class CanvasView: Widget:
             self.draw_sample_ring(painter)
         self.draw_box(painter, size.width, size.height)
         self.shape.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
+        if self.pen.drawing and workspace.tool != "pen":
+            self.pen.cancel()
+        self.pen.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
         # The pointer may have gone to another panel without the view hearing of
         # it; the layout's hover says where it is now.
         let pointer_here = self.pointer_inside and (self.box.contains_pointer() or self.painting)
@@ -425,6 +431,8 @@ pub class CanvasView: Widget:
             self.pointer_inside = event.inside
             if self.polygon.active:
                 self.polygon.hover(self.document_x(event.x), self.document_y(event.y))
+            if self.pen.drawing and not self.pen.holding():
+                self.pen.hover(self.document_x(event.x), self.document_y(event.y))
             self.drag(event)
         elif kind == EventKind.pointer_up:
             self.release(event)
@@ -455,6 +463,11 @@ pub class CanvasView: Widget:
                 # Esc drops the stroke in progress.
                 self.painting = false
                 self.workspace.cancel_stroke()
+            elif self.pen.drawing and (event.key == Key.enter or event.key == Key.escape):
+                # The Pen's keys: Enter or Esc ends the path drawn so far.
+                self.pen.finish(self.workspace)
+                if let changed = self.on_changed:
+                    changed()
             elif self.polygon.active and (event.key == Key.enter or event.key == Key.escape or event.key == Key.backspace or event.key == Key.delete):
                 # The Polygonal Lasso's keys: Enter closes, Esc lets go, Delete takes a corner back.
                 if event.key == Key.enter:
@@ -607,6 +620,8 @@ pub class CanvasView: Widget:
             return
         elif is_shape(tool):
             self.shape.begin(tool, x, y)
+        elif tool == "pen":
+            self.pen.press(workspace, x, y, 6.0 / workspace.zoom)
         elif tool == "clone" and event.alt:
             # Alt-click: where the Clone Stamp copies from, as Photoshop's.
             workspace.set_clone_source(x, y)
@@ -835,6 +850,9 @@ pub class CanvasView: Widget:
         if self.shape.active:
             self.shape.drag(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
             return
+        if self.pen.holding():
+            self.pen.drag(self.document_x(event.x), self.document_y(event.y), event.alt, 6.0 / self.workspace.zoom)
+            return
         if self.guides.active:
             # Over a ruler (past the view's top or left edge) a guide goes when let go.
             self.guides.drag(self.document_x(event.x), self.document_y(event.y), event.x < 0.0 or event.y < 0.0)
@@ -948,6 +966,12 @@ pub class CanvasView: Widget:
         if self.shape.active:
             self.shape.drag(x, y, event.shift, event.alt)
             self.shape.finish(workspace)
+            if let changed = self.on_changed:
+                changed()
+            return
+        if self.pen.holding():
+            self.pen.drag(x, y, event.alt, 6.0 / workspace.zoom)
+            self.pen.release(workspace)
             if let changed = self.on_changed:
                 changed()
             return

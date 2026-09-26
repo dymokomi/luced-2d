@@ -1,0 +1,415 @@
+## The Pen, as Photoshop's: each click sets a corner anchor and a click-drag a
+## smooth one, its handles pulled out evenly; a curve follows the pointer from
+## the last anchor. Clicking the first anchor again closes the path; Enter or
+## Esc ends an open one. The path lands on a shape layer of its own (luce-image's
+## path layers), filled and stroked as the header's shapes are, and stays a
+## crisp vector however it is moved or scaled.
+##
+## With a path layer selected and no path being drawn, the pen edits it, as
+## Photoshop's Direct Selection does alongside the pen: drag an anchor or a
+## handle (Alt drags one handle alone, breaking the pair), click the curve to
+## add an anchor there, click an anchor to take it away. Each edit is one step.
+from ui import Painter, Point
+from gpu import Rect, Color
+from workspace import Workspace
+from canvas import Canvas
+import math
+
+## One anchor, in document pixels: the point and the handles coming in and
+## going out. A corner's handles sit on its point.
+pub class Anchor:
+    pub var x: float
+    pub var y: float
+    pub var in_x: float
+    pub var in_y: float
+    pub var out_x: float
+    pub var out_y: float
+
+    pub func init(self, x: float, y: float):
+        self.x = x
+        self.y = y
+        self.in_x = x
+        self.in_y = y
+        self.out_x = x
+        self.out_y = y
+
+    pub func copy(self) -> Anchor:
+        let copy = Anchor(self.x, self.y)
+        copy.in_x = self.in_x
+        copy.in_y = self.in_y
+        copy.out_x = self.out_x
+        copy.out_y = self.out_y
+        return copy
+
+    ## Move the point, its handles with it.
+    func shift(self, dx: float, dy: float):
+        self.x += dx
+        self.y += dy
+        self.in_x += dx
+        self.in_y += dy
+        self.out_x += dx
+        self.out_y += dy
+
+    ## Pull the handle going out to (`x`, `y`); the one coming in mirrors it.
+    func pull(self, x: float, y: float):
+        self.out_x = x
+        self.out_y = y
+        self.in_x = 2.0 * self.x - x
+        self.in_y = 2.0 * self.y - y
+
+## What a press took hold of.
+let grab_nothing: int = 0
+let grab_point: int = 1
+let grab_in: int = 2
+let grab_out: int = 3
+
+pub class PenTool:
+    ## A new path being drawn.
+    pub var drawing: bool = false
+    ## The anchors being drawn, or the selected path layer's being edited.
+    var anchors: list[Anchor]
+    var closed: bool = false
+    ## The layer id whose path `anchors` holds while editing; -1 while drawing.
+    var edited: int = -1
+    var pointer_x: float = 0.0
+    var pointer_y: float = 0.0
+    ## The press in progress: what it holds, which anchor, and whether it moved.
+    var pressing: bool = false
+    var grab: int = 0
+    var grabbed: int = -1
+    var press_x: float = 0.0
+    var press_y: float = 0.0
+    var moved: bool = false
+    ## An edit waiting for the release to become a step.
+    var changed: bool = false
+    var closing: bool = false
+
+    pub func init(self):
+        self.anchors = []
+
+    ## A press at document point (`x`, `y`); `reach` document pixels catch an
+    ## anchor, a handle or the curve.
+    pub func press(self, workspace: Workspace, x: float, y: float, reach: float) -> unit!:
+        self.pressing = true
+        self.moved = false
+        self.changed = false
+        self.closing = false
+        self.press_x = x
+        self.press_y = y
+        self.pointer_x = x
+        self.pointer_y = y
+        if self.drawing:
+            let first = self.anchors[0]
+            if self.anchors.length >= 2 and math.hypot(x - first.x, y - first.y) <= reach:
+                self.closing = true
+                self.grab = grab_out
+                self.grabbed = 0
+                return
+            self.anchors.append(Anchor(x, y))
+            self.grab = grab_out
+            self.grabbed = self.anchors.length - 1
+            return
+        self.load(workspace)
+        if self.edited >= 0 and self.take(x, y, reach):
+            return
+        # Nothing of a path under the press: a new one starts here.
+        self.edited = -1
+        self.drawing = true
+        self.closed = false
+        self.anchors = [Anchor(x, y)]
+        self.grab = grab_out
+        self.grabbed = 0
+
+    ## The pointer held and moved to (`x`, `y`); `alt` moves one handle alone.
+    pub func drag(self, x: float, y: float, alt: bool, reach: float):
+        self.pointer_x = x
+        self.pointer_y = y
+        if not self.pressing or self.grabbed < 0:
+            return
+        if not self.moved and math.hypot(x - self.press_x, y - self.press_y) < reach * 0.5:
+            return
+        self.moved = true
+        let anchor = self.anchors[self.grabbed]
+        if self.grab == grab_point:
+            anchor.shift(x - self.press_x, y - self.press_y)
+            self.press_x = x
+            self.press_y = y
+        elif self.drawing:
+            anchor.pull(x, y)
+        else:
+            drag_handle(anchor, self.grab == grab_out, x, y, alt)
+        self.changed = true
+
+    ## Let go at (`x`, `y`): a click on an anchor while editing takes it away;
+    ## a click on the first anchor while drawing closes the path.
+    pub func release(self, workspace: Workspace) -> unit!:
+        if not self.pressing:
+            return
+        self.pressing = false
+        if self.drawing:
+            if self.closing:
+                self.closed = true
+                self.finish(workspace)
+            return
+        if self.edited < 0:
+            return
+        if self.grab == grab_point and not self.moved and self.anchors.length > 2:
+            discard(self.anchors.remove_at(self.grabbed))
+            self.changed = true
+        if self.changed:
+            self.commit_edit(workspace)
+        self.grabbed = -1
+
+    ## Whether a press of the pen is held.
+    pub func holding(self) -> bool:
+        return self.pressing
+
+    pub func hover(self, x: float, y: float):
+        self.pointer_x = x
+        self.pointer_y = y
+
+    ## Enter or Esc: the path drawn so far kept, if it has two anchors.
+    pub func finish(self, workspace: Workspace) -> unit!:
+        let anchors = self.anchors
+        let closed = self.closed
+        self.cancel()
+        if anchors.length < 2:
+            return
+        let canvas = workspace.canvas
+        workspace.as_one("Path", func () -> unit!:
+            workspace.add_layer()
+            workspace.rename("Path")
+            stage(canvas, anchors)
+            canvas.set_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
+                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width))
+        workspace.touch()
+
+    ## Drop what is being drawn.
+    pub func cancel(self):
+        self.drawing = false
+        self.pressing = false
+        self.closing = false
+        self.closed = false
+        self.grabbed = -1
+        self.anchors = []
+        self.edited = -1
+
+    # -- Editing a path layer.
+
+    ## The selected layer's path into `anchors` for editing; none when it is
+    ## not a path layer.
+    func load(self, workspace: Workspace) -> unit!:
+        self.anchors = []
+        self.edited = -1
+        let canvas = workspace.canvas
+        let index = workspace.selected
+        if index < 0 or index >= workspace.layer_count():
+            return
+        let count = canvas.layer_path_count(index)
+        if count == 0:
+            return
+        var at = 0
+        while at < count:
+            let anchor = Anchor(canvas.layer_path_value(index, at, 0), canvas.layer_path_value(index, at, 1))
+            anchor.in_x = canvas.layer_path_value(index, at, 2)
+            anchor.in_y = canvas.layer_path_value(index, at, 3)
+            anchor.out_x = canvas.layer_path_value(index, at, 4)
+            anchor.out_y = canvas.layer_path_value(index, at, 5)
+            self.anchors.append(anchor)
+            at += 1
+        self.closed = canvas.layer_path_closed(index)
+        self.edited = workspace.selected_id()
+
+    ## Take hold of what is under (`x`, `y`): a handle, an anchor, or the
+    ## curve, where a new anchor goes in. False when nothing is there.
+    func take(self, x: float, y: float, reach: float) -> bool:
+        var index = 0
+        while index < self.anchors.length:
+            let anchor = self.anchors[index]
+            for part in [grab_out, grab_in]:
+                let hx = anchor.out_x if part == grab_out else anchor.in_x
+                let hy = anchor.out_y if part == grab_out else anchor.in_y
+                let apart = math.hypot(hx - anchor.x, hy - anchor.y) > 0.01
+                if apart and math.hypot(x - hx, y - hy) <= reach:
+                    self.grab = part
+                    self.grabbed = index
+                    return true
+            index += 1
+        index = 0
+        while index < self.anchors.length:
+            if math.hypot(x - self.anchors[index].x, y - self.anchors[index].y) <= reach:
+                self.grab = grab_point
+                self.grabbed = index
+                return true
+            index += 1
+        let hit = nearest_on_curve(self.anchors, self.closed, x, y, reach)
+        if hit.segment < 0:
+            return false
+        self.grabbed = split(self.anchors, hit.segment, hit.t)
+        self.grab = grab_point
+        # The anchor is in: a step even if the press does not move it.
+        self.moved = true
+        self.changed = true
+        return true
+
+    ## The edited anchors back on their layer, styled as it was: one step.
+    func commit_edit(self, workspace: Workspace) -> unit!:
+        let canvas = workspace.canvas
+        let index = workspace.index_of(self.edited)
+        stage(canvas, self.anchors)
+        canvas.set_path(self.edited, self.closed, canvas.layer_shape_value(index, 7) != 0.0, canvas.layer_shape_value(index, 8),
+                        canvas.layer_shape_value(index, 9), canvas.layer_shape_value(index, 10), canvas.layer_shape_value(index, 11) != 0.0,
+                        canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13), canvas.layer_shape_value(index, 14),
+                        canvas.layer_shape_value(index, 15))
+        self.changed = false
+        workspace.touch()
+
+    # -- Drawing.
+
+    ## The path being drawn or edited, at screen resolution: its curves, its
+    ## anchors and their handles, and while drawing the curve on to the pointer.
+    pub func draw(self, painter: Painter, workspace: Workspace, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        if not self.drawing and not self.pressing:
+            # The selected path as it is now, for editing.
+            if workspace.tool != "pen":
+                return
+            self.load(workspace)
+        if self.anchors.length == 0:
+            return
+        let view = func (x: float, y: float) -> Point:
+            return Point(x * zoom + left, y * zoom + top)
+        var index = 0
+        let segments = self.anchors.length if self.closed and not self.drawing else self.anchors.length - 1
+        while index < segments:
+            let a = self.anchors[index]
+            let b = self.anchors[(index + 1) % self.anchors.length]
+            curve(painter, view, a.x, a.y, a.out_x, a.out_y, b.in_x, b.in_y, b.x, b.y, ink, backing)
+            index += 1
+        if self.drawing and not self.pressing:
+            let last = self.anchors[self.anchors.length - 1]
+            curve(painter, view, last.x, last.y, last.out_x, last.out_y, self.pointer_x, self.pointer_y, self.pointer_x, self.pointer_y, ink, backing)
+        for anchor in self.anchors:
+            for part in [grab_in, grab_out]:
+                let hx = anchor.in_x if part == grab_in else anchor.out_x
+                let hy = anchor.in_y if part == grab_in else anchor.out_y
+                if math.hypot(hx - anchor.x, hy - anchor.y) > 0.01:
+                    painter.line(view(anchor.x, anchor.y), view(hx, hy), 1.0, ink)
+                    let h = view(hx, hy)
+                    painter.rectangle(Rect(math.floor(h.x) - 2.0, math.floor(h.y) - 2.0, 5.0, 5.0), backing)
+                    painter.rectangle(Rect(math.floor(h.x) - 1.0, math.floor(h.y) - 1.0, 3.0, 3.0), ink)
+            let p = view(anchor.x, anchor.y)
+            painter.rectangle(Rect(math.floor(p.x) - 3.0, math.floor(p.y) - 3.0, 7.0, 7.0), ink)
+            painter.rectangle(Rect(math.floor(p.x) - 2.0, math.floor(p.y) - 2.0, 5.0, 5.0), backing)
+
+## Drag a handle of `anchor` (the one going out when `outgoing`) to (`x`,
+## `y`): the other turns to stay opposite it, keeping its own length, unless
+## `alone` (Alt) or it sits on the point (a corner).
+func drag_handle(anchor: Anchor, outgoing: bool, x: float, y: float, alone: bool):
+    let other_x = anchor.in_x if outgoing else anchor.out_x
+    let other_y = anchor.in_y if outgoing else anchor.out_y
+    let other = math.hypot(other_x - anchor.x, other_y - anchor.y)
+    if outgoing:
+        anchor.out_x = x
+        anchor.out_y = y
+    else:
+        anchor.in_x = x
+        anchor.in_y = y
+    let length = math.hypot(x - anchor.x, y - anchor.y)
+    if alone or other < 0.01 or length < 0.01:
+        return
+    let mx = anchor.x - (x - anchor.x) / length * other
+    let my = anchor.y - (y - anchor.y) / length * other
+    if outgoing:
+        anchor.in_x = mx
+        anchor.in_y = my
+    else:
+        anchor.out_x = mx
+        anchor.out_y = my
+
+## The anchors as the canvas's collected points, three an anchor.
+pub func stage(canvas: Canvas, anchors: list[Anchor]) -> unit!:
+    canvas.clear_points()
+    for anchor in anchors:
+        canvas.add_point(anchor.x, anchor.y)
+        canvas.add_point(anchor.in_x, anchor.in_y)
+        canvas.add_point(anchor.out_x, anchor.out_y)
+
+## A cubic curve drawn as a fine run of lines, dark under light.
+func curve(painter: Painter, view: func(float, float) -> Point, x0: float, y0: float, x1: float, y1: float, x2: float, y2: float, x3: float, y3: float,
+           ink: Color, backing: Color) -> unit!:
+    let steps = 32
+    var previous = view(x0, y0)
+    var step = 1
+    while step <= steps:
+        let t = float(step) / float(steps)
+        let next = view(cubic(x0, x1, x2, x3, t), cubic(y0, y1, y2, y3, t))
+        painter.line(previous, next, 3.0, backing)
+        painter.line(previous, next, 1.0, ink)
+        previous = next
+        step += 1
+
+## One coordinate of a cubic Bézier at `t`.
+pub func cubic(a: float, b: float, c: float, d: float, t: float) -> float:
+    let u = 1.0 - t
+    return u * u * u * a + 3.0 * u * u * t * b + 3.0 * u * t * t * c + t * t * t * d
+
+## Where a press lands on a path's curve: the segment (the anchor it leaves
+## from) and how far along; segment -1 for a miss.
+pub class CurveHit:
+    pub let segment: int
+    pub let t: float
+
+    pub func init(self, segment: int, t: float):
+        self.segment = segment
+        self.t = t
+
+## The nearest point of the path's curves to (`x`, `y`) within `reach`.
+pub func nearest_on_curve(anchors: list[Anchor], closed: bool, x: float, y: float, reach: float) -> CurveHit:
+    var best = reach
+    var found = CurveHit(-1, 0.0)
+    let segments = anchors.length if closed else anchors.length - 1
+    var index = 0
+    while index < segments:
+        let a = anchors[index]
+        let b = anchors[(index + 1) % anchors.length]
+        var step = 1
+        # Samples along the curve, the ends left out: a press there is the anchor's.
+        while step < 64:
+            let t = float(step) / 64.0
+            let d = math.hypot(cubic(a.x, a.out_x, b.in_x, b.x, t) - x, cubic(a.y, a.out_y, b.in_y, b.y, t) - y)
+            if d <= best:
+                best = d
+                found = CurveHit(index, t)
+            step += 1
+        index += 1
+    return found
+
+## Split segment `segment` at `t` (de Casteljau): a new anchor there, the
+## curve's shape unchanged. Its index.
+pub func split(anchors: list[Anchor], segment: int, t: float) -> int:
+    let a = anchors[segment]
+    let b = anchors[(segment + 1) % anchors.length]
+    let q0x = lerp(a.x, a.out_x, t)
+    let q0y = lerp(a.y, a.out_y, t)
+    let q1x = lerp(a.out_x, b.in_x, t)
+    let q1y = lerp(a.out_y, b.in_y, t)
+    let q2x = lerp(b.in_x, b.x, t)
+    let q2y = lerp(b.in_y, b.y, t)
+    let r0x = lerp(q0x, q1x, t)
+    let r0y = lerp(q0y, q1y, t)
+    let r1x = lerp(q1x, q2x, t)
+    let r1y = lerp(q1y, q2y, t)
+    let added = Anchor(lerp(r0x, r1x, t), lerp(r0y, r1y, t))
+    added.in_x = r0x
+    added.in_y = r0y
+    added.out_x = r1x
+    added.out_y = r1y
+    a.out_x = q0x
+    a.out_y = q0y
+    b.in_x = q2x
+    b.in_y = q2y
+    anchors.insert(segment + 1, added)
+    return segment + 1
+
+func lerp(a: float, b: float, t: float) -> float:
+    return a + (b - a) * t
