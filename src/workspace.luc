@@ -261,6 +261,21 @@ pub class Workspace:
     pub func document_title(self, index: int) -> str:
         return title_of(self.path) if index == self.current else self.documents[index].title()
 
+    ## A tab's label: the title, and while its picture opens, how far it has come.
+    pub func tab_label(self, index: int) -> str:
+        let canvas = self.canvas if index == self.current else self.documents[index].canvas
+        let title = self.document_title(index)
+        return f"{title}  {canvas.opening_percent()}%" if canvas.is_opening() else title
+
+    ## Pictures opening in tabs not on screen take in what has decoded (the
+    ## one on screen does as it draws), so every tab keeps loading.
+    pub func continue_opening(self) -> unit!:
+        var index = 0
+        while index < self.documents.length:
+            if index != self.current and self.documents[index].canvas.is_opening():
+                self.documents[index].canvas.continue_opening()
+            index += 1
+
     ## Whether document `index` has unsaved work, the live one read live.
     pub func document_dirty(self, index: int) -> bool:
         return self.canvas.modified() if index == self.current else self.documents[index].dirty()

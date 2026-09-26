@@ -93,6 +93,9 @@ pub class Panels:
     pub let mask_prompt: Dialog
     ## The workspace revision the panels last showed.
     var shown_revision: int = -1
+    ## The load percentage the status bar shows while a picture opens: -1 when
+    ## none is, -2 when the status bar says something else meanwhile.
+    var shown_opening: int = -1
     var mask_background: bool = false
     pub let document_settings: DocumentSettings
     pub let size_dialogs: SizeDialogs
@@ -772,6 +775,27 @@ pub class Panels:
         self.view.layout().invalidate()
         self.layers.layout().invalidate()
 
+    ## Once a frame, while the document's picture opens: how far it has come,
+    ## in the status bar and on its tab, and its thumbnail filling in; once it
+    ## is in, the panels as usual (the edits it held back are offered again).
+    pub func show_opening(self) -> unit!:
+        let workspace = self.workspace
+        workspace.continue_opening()
+        let canvas = workspace.canvas
+        if not canvas.is_opening():
+            if self.shown_opening != -1:
+                self.shown_opening = -1
+                self.refresh()
+            return
+        let percent = canvas.opening_percent()
+        if percent == self.shown_opening:
+            return
+        self.shown_opening = percent
+        let name = workspace.path if workspace.path != "" else "Untitled"
+        self.status.set_text(f"Opening… {percent}%  |  edits wait until the picture is in  |  {workspace.width()} × {workspace.height()} px  |  {name}")
+        self.tabs.layout().invalidate()
+        self.layers.layout().invalidate()
+
     ## Once a frame: when the document changed since the panels last showed it
     ## (a stroke let go, a key's edit), show it — not mid-stroke, when every
     ## frame changes it. Menus and shortcuts then offer what is possible now.
@@ -799,6 +823,9 @@ pub class Panels:
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
         self.zoom_field.set_value(float(percent))
         self.status.set_text(f"{workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
+        if workspace.canvas.is_opening():
+            # The next frame puts the progress back.
+            self.shown_opening = -2
         self.layers_panel.show()
         self.rail.show(workspace)
         self.actions.update(workspace)

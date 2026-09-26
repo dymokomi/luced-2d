@@ -38,7 +38,7 @@ pub class DocumentTabs: Widget:
 
     func tab_width(self, index: int) -> float!:
         let dot = self.font.advance() * 2.0 if self.workspace.document_dirty(index) else 0.0
-        return self.font.measure(self.workspace.document_title(index)) + dot + self.padding * 2.0 + self.cross
+        return self.font.measure(self.workspace.tab_label(index)) + dot + self.padding * 2.0 + self.cross
 
     pub func draw(self, target: RenderTarget) -> unit!:
         let painter = Painter(target)
@@ -53,7 +53,7 @@ pub class DocumentTabs: Widget:
             if current:
                 painter.rounded_rectangle(Rect(x, 2.0, width, self.height - 2.0), theme.surface(), 6.0, 1.0, 3)
             let ink = theme.text() if current else theme.text_muted()
-            var title = self.workspace.document_title(index)
+            var title = self.workspace.tab_label(index)
             if self.workspace.document_dirty(index):
                 title = title + " •"
             painter.text(title, x + self.padding, text_y, ink, self.font)
