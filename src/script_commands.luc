@@ -8,6 +8,7 @@ from actions import Actions
 from canvas import Canvas
 from adjustments import Adjustment, adjustments, filter_table, gradient_map, blur_kind, noise_kind, first_filter_kind
 from script_transforms import is_transform_action, apply_transform
+from alpha_channels import save_selection, load_selection, delete_channel, channel_named
 import transfer
 import ui
 
@@ -107,6 +108,13 @@ pub class ScriptCommands:
             self.run(field(fields, 0))
         else:
             self.apply_layers(action, fields)
+
+    ## The alpha channel called `name`, or why there is none.
+    func channel(self, name: str) -> int!:
+        let index = channel_named(self.workspace, name)
+        if index < 0:
+            error(ui.invalid, f"there is no channel {name}")
+        return index
 
     ## Layers, painting and selections.
     func apply_layers(self, action: str, fields: list[str]) -> unit!:
@@ -220,6 +228,12 @@ pub class ScriptCommands:
         elif action == "quick_mask":
             if flag(fields, 0) != workspace.canvas.quick_mask():
                 workspace.toggle_quick_mask()
+        elif action == "save_selection":
+            discard(save_selection(workspace, field(fields, 0)))
+        elif action == "load_selection":
+            load_selection(workspace, self.channel(field(fields, 0)), number(fields, 1))
+        elif action == "delete_channel":
+            delete_channel(workspace, self.channel(field(fields, 0)))
         elif action == "transform_selection":
             workspace.canvas.begin_selection_transform()
             workspace.canvas.preview_selection_transform(decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4), decimal(fields, 5), decimal(fields, 6)) catch failure:

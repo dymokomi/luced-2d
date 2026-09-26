@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -132,6 +132,20 @@ SCENES = {
                 editor.app.dispatch(Event(kind = EventKind.pointer_down, x = ox + corner[0] * zoom, y = oy + corner[1] * zoom, button = 0))
                 editor.app.dispatch(Event(kind = EventKind.pointer_up, x = ox + corner[0] * zoom, y = oy + corner[1] * zoom, button = 0))
             editor.app.dispatch(Event(kind = EventKind.pointer_moved, x = ox + 400.0 * zoom, y = oy + 700.0 * zoom))
+            editor.panels.refresh()''',
+    # The Channels panel: a saved ellipse shown red over the picture, and the green channel alone.
+    'channels': '''            editor.workspace.canvas.select_ellipse(200, 100, 500, 400)
+            discard(editor.workspace.canvas.save_selection_channel("Alpha 1"))
+            editor.workspace.canvas.deselect()
+            editor.panels.catalog.open("channels")
+            editor.workspace.canvas.set_channel_shown(0, true)
+            editor.workspace.touch()
+            editor.panels.refresh()''',
+    'channelgray': '''            editor.workspace.canvas.select_ellipse(200, 100, 500, 400)
+            discard(editor.workspace.canvas.save_selection_channel("Alpha 1"))
+            editor.panels.catalog.open("channels")
+            editor.workspace.canvas.set_composite_view(false, true, false)
+            editor.workspace.touch()
             editor.panels.refresh()''',
     'guides': '''            discard(editor.workspace.canvas.add_guide(true, 700.0))
             discard(editor.workspace.canvas.add_guide(false, 300.0))

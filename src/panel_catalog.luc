@@ -16,6 +16,7 @@ from color_panel import ColorPanel
 from swatches_panel import SwatchesPanel
 from brushes_panel import BrushesPanel
 from history_panel import HistoryPanel
+from channels_panel import ChannelsPanel
 from navigator_panel import NavigatorPanel
 from info_panel import InfoPanel
 from align_panel import AlignPanel
@@ -37,6 +38,7 @@ pub class PanelCatalog:
     pub var swatches: SwatchesPanel? = none
     pub var brushes: BrushesPanel? = none
     pub var history: HistoryPanel? = none
+    pub var channels: ChannelsPanel? = none
     pub var navigator: NavigatorPanel? = none
     pub var info: InfoPanel? = none
     pub var align: AlignPanel? = none
@@ -48,6 +50,8 @@ pub class PanelCatalog:
     pub var refreshed: func() -> unit!? = none
     pub var open_picker: func(bool) -> unit!? = none
     pub var brush_chosen: func() -> unit!? = none
+    ## What a panel made here could not do, said in a prompt.
+    pub var failed: func(str) -> unit!? = none
 
     pub func init(self, dock: DStack, viewport: Panel, workspace: Workspace, kit: Kit, view: CanvasView, settings: SettingsDialog,
                   layers: LayersPanel, properties: Properties, brush: BrushSettings) -> unit!:
@@ -130,6 +134,8 @@ pub class PanelCatalog:
             return self.brushes_panel().panel
         if id == "history":
             return self.history_panel().panel
+        if id == "channels":
+            return self.channels_panel().panel
         if id == "navigator":
             return self.navigator_panel().panel
         if id == "info":
@@ -177,6 +183,17 @@ pub class PanelCatalog:
         self.history = made
         return made
 
+    func channels_panel(self) -> ChannelsPanel!:
+        if let made = self.channels:
+            return made
+        let made = ChannelsPanel(self.workspace, self.kit)
+        made.refreshed = self.refresh
+        made.failed = func (message: str) -> unit!:
+            if let failed = self.failed:
+                failed(message)
+        self.channels = made
+        return made
+
     func navigator_panel(self) -> NavigatorPanel!:
         if let made = self.navigator:
             return made
@@ -219,6 +236,9 @@ pub class PanelCatalog:
             if self.dock.contains(made.panel):
                 made.show()
         if let made = self.history:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.channels:
             if self.dock.contains(made.panel):
                 made.show()
         if let made = self.navigator:

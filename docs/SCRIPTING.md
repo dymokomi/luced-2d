@@ -58,7 +58,9 @@ The full, commented list is `scripting/luced.luc`.
 - **Painting:** `set_color` and `set_background` (sRGB, 0..1), `set_brush`, `stroke`
   (x, y pairs), `line`, `fill`, `clear`, `gradient`, `text`.
 - **Selections:** `select_rectangle`, `select_ellipse` (mode 0 new, 1 add, 2 subtract,
-  3 intersect), `select_all`, `deselect`, `invert_selection`, `select_color_range`.
+  3 intersect), `select_all`, `deselect`, `invert_selection`, `select_color_range`;
+  alpha channels by name: `save_selection`, `load_selection` (the same modes),
+  `delete_channel`.
 - **Pixels:**
   - `adjust(name, settings)` and `add_adjustment_layer(name, settings)`: settings are in
     the units and order the adjustment's dialog shows, and the ones left out keep

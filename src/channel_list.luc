@@ -1,0 +1,160 @@
+## The Channels panel's list: a row per channel with its eye, thumbnail and
+## name — the composite (RGB) and its red, green and blue, then the alpha
+## channels — as Photoshop's.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, draw_icon
+from gpu import RenderTarget, Rect
+from input import EventKind, Cursor
+from workspace import Workspace
+import theme
+import math
+import time
+from alpha_channels import composite_rows, row_count, row_name, row_shown, row_picked, show_only, toggle_row, load_selection
+
+## One 44-point row a channel. A click on a row shows it alone (the
+## composite, one color channel as gray, or one alpha channel as gray); the
+## eye shows or hides it, and dragging on down the eyes gives them the same;
+## Cmd-click (Ctrl-click) on an alpha channel's thumbnail loads it as the
+## selection (Shift adds, Alt subtracts, both intersect); a double-click on an
+## alpha channel's name renames it there.
+pub class ChannelList: Widget:
+    let box: Layout
+    pub let workspace: Workspace
+    let font: Font
+    let row_height: float = 44.0
+    let thumb: float = 32.0
+    ## A drag down the eyes: whether it opens or closes them.
+    var eye_swipe: bool = false
+    var eye_shown: bool = false
+    ## The last press, for a double-click: its row and when (ms).
+    var last_row: int = -1
+    var last_time: int = 0
+    ## A row the right-click menu acts on: the last alpha row pressed, or -1.
+    pub var alpha_row: int = -1
+    ## The view or the selection changed from here: the window refreshes.
+    pub var on_changed: func() -> unit!? = none
+    ## A double-click on an alpha channel's name: rename channel `index`, its name at (x, y).
+    pub var on_rename: func(int, float, float) -> unit!? = none
+    ## Something failed, and why.
+    pub var on_failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.font = font
+        self.box = Layout()
+        self.box.set_focusable(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_flex()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(220.0, self.row_height * float(row_count(self.workspace)))
+
+    ## Where the name starts, past the eye and the thumbnail.
+    pub func name_left(self) -> float:
+        return 32.0 + self.thumb + 10.0
+
+    ## Where row `row` starts.
+    pub func row_top(self, row: int) -> float:
+        return self.row_height * float(row)
+
+    ## The row at `y`, or -1.
+    func row_at(self, y: float) -> int!:
+        let row = int(math.floor(y / self.row_height))
+        return row if y >= 0.0 and row < row_count(self.workspace) else -1
+
+    ## The thumbnail's box in row `row`: the document's shape within the square.
+    func thumb_rect(self, row: int) -> Rect!:
+        let aspect = float(self.workspace.width()) / float(self.workspace.height())
+        var width = self.thumb
+        var height = self.thumb
+        if aspect > 1.0:
+            height = math.max(6.0, self.thumb / aspect)
+        else:
+            width = math.max(6.0, self.thumb * aspect)
+        return Rect(32.0 + (self.thumb - width) * 0.5, self.row_top(row) + (self.row_height - height) * 0.5, width, height)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
+        let focused = self.box.contains_focus()
+        var row = 0
+        while row < row_count(workspace):
+            let top = self.row_top(row)
+            let picked = row_picked(workspace, row)
+            let shown = row_shown(workspace, row)
+            if picked:
+                painter.rectangle(Rect(0.0, top, size.width, self.row_height), workspace.look.accent if focused else workspace.look.selection_inactive)
+            let ink = theme.on_accent() if picked and focused else (theme.text() if shown else theme.text_muted())
+            draw_icon(target, "visible" if shown else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), ink)
+            # The thumbnail: a checker-grey slot, then the channel from the pyramid.
+            let slot = self.thumb_rect(row)
+            painter.rectangle(slot, theme.checker_light())
+            canvas.draw_channel(target, row, slot)
+            painter.text(row_name(workspace, row), self.name_left(), top + (self.row_height - 14.0) * 0.5, ink, self.font)
+            painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
+            row += 1
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            self.box.request_focus()
+            let row = self.row_at(event.y)
+            if row >= 0:
+                self.press(row, event)
+                self.changed()
+            self.box.invalidate()
+        elif event.kind == EventKind.pointer_moved and self.eye_swipe:
+            let row = self.row_at(event.y)
+            if row >= 0 and row_shown(self.workspace, row) != self.eye_shown:
+                toggle_row(self.workspace, row)
+                self.changed()
+                self.box.invalidate()
+        elif event.kind == EventKind.pointer_up and event.button == 0:
+            self.eye_swipe = false
+        elif event.cancelled:
+            self.eye_swipe = false
+
+    ## A press on row `row`.
+    func press(self, row: int, event: Event) -> unit!:
+        let workspace = self.workspace
+        let alpha = row >= composite_rows
+        if alpha:
+            self.alpha_row = row
+        if event.x < 28.0:
+            # The eye; a drag on down the eyes gives them the same.
+            toggle_row(workspace, row)
+            self.eye_swipe = true
+            self.eye_shown = row_shown(workspace, row)
+            return
+        let slot = self.thumb_rect(row)
+        let on_thumb = event.x >= slot.x and event.x < slot.x + slot.width
+        if alpha and on_thumb and (event.meta or event.control):
+            # Cmd-click on the thumbnail: the channel as the selection.
+            let mode = 3 if event.shift and event.alt else (1 if event.shift else (2 if event.alt else 0))
+            load_selection(workspace, row - composite_rows, mode) catch failure:
+                self.fail(f"Load Selection: {failure.message}")
+            return
+        # A second press on an alpha channel's name soon after the first renames it.
+        let now = time.now() // 1000000
+        let again = row == self.last_row and now - self.last_time <= 400
+        self.last_row = row
+        self.last_time = now
+        if again and alpha and event.x >= self.name_left():
+            self.last_row = -1
+            if let rename = self.on_rename:
+                rename(row - composite_rows, self.name_left(), self.row_top(row) + 6.0)
+            return
+        show_only(workspace, row)
+
+    func changed(self) -> unit!:
+        if let changed = self.on_changed:
+            changed()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.on_failed:
+            failed(message)

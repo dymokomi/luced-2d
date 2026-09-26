@@ -1,0 +1,133 @@
+## Select › Save Selection… and Load Selection…, as Photoshop 2018's: the
+## selection kept as a named alpha channel, and a channel brought back as
+## the selection — new, added, subtracted or intersected. Each one step.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command, TextField
+from interop import Connection
+from workspace import Workspace
+from kit import Kit
+from alpha_channels import save_selection, load_selection, next_alpha_name
+
+## The operations Load Selection offers, in selection-mode order.
+func operation_names() -> list[str]:
+    return ["New Selection", "Add to Selection", "Subtract from Selection", "Intersect with Selection"]
+
+pub class SaveSelectionDialog:
+    pub let dialog: Dialog
+    let name_field: TextField
+    let workspace: Workspace
+    let kit: Kit
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        let font = kit.font
+        self.name_field = TextField("", font = font, cells = 20.0)
+        self.dialog = Dialog([Text("Save Selection", font = font), kit.dialog_row("Name", self.name_field, 90.0),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 400.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
+
+    ## Open with the next free "Alpha N" name.
+    pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
+        self.name_field.set_text(next_alpha_name(self.workspace))
+        self.dialog.open()
+        self.name_field.layout().request_focus()
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    ## OK: carry it out.
+    pub func apply(self) -> unit!:
+        self.dialog.hide()
+        let typed = self.name_field.text().trim()
+        let name = next_alpha_name(self.workspace) if typed == "" else typed
+        let index = save_selection(self.workspace, name) catch failure:
+            if let failed = self.failed:
+                failed(f"Save Selection: {failure.message}")
+            return
+        discard(index)
+        if let done = self.applied:
+            done()
+
+pub class LoadSelectionDialog:
+    pub let dialog: Dialog
+    let channel_menu: Menu
+    let operation_menu: Menu
+    let workspace: Workspace
+    let kit: Kit
+    ## The choices while it is open: an alpha channel and a selection mode.
+    var channel: int = 0
+    var operation: int = 0
+    ## The channel menu's items as last opened, let go on the next open.
+    var choices: list[Connection]
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.choices = []
+        let font = kit.font
+        # A menu holds one item at least: the channels come when it opens.
+        self.channel_menu = Menu("▾", [Command("No channels", id = "load_selection_none")], font = font)
+        var operations: list[Command] = []
+        var index = 0
+        for name in operation_names():
+            let chosen = index
+            let command = Command(name, id = f"load_selection_operation_{index}")
+            kit.bind(command, func () -> unit!:
+                self.choose_operation(chosen))
+            operations.append(command)
+            index += 1
+        self.operation_menu = Menu("New Selection ▾", operations, font = font)
+        self.dialog = Dialog([Text("Load Selection", font = font), kit.dialog_row("Channel", self.channel_menu, 90.0),
+                              kit.dialog_row("Operation", self.operation_menu, 90.0),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 400.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
+
+    ## Open on the document's channels, the first chosen; a new selection
+    ## unless there is one to add to.
+    pub func open(self) -> unit!:
+        let canvas = self.workspace.canvas
+        if canvas.channel_count() == 0 or not self.kit.may_open(self.dialog):
+            return
+        for connection in self.choices:
+            connection.disconnect()
+        self.choices.clear()
+        var choices: list[Command] = []
+        var index = 0
+        while index < canvas.channel_count():
+            let chosen = index
+            let command = Command(canvas.channel_name(index), id = f"load_selection_channel_{index}")
+            self.choices.append(command.on_trigger(func () -> unit!:
+                self.choose_channel(chosen)))
+            choices.append(command)
+            index += 1
+        self.channel_menu.set_actions(choices)
+        self.choose_channel(0)
+        self.choose_operation(0)
+        self.dialog.open()
+
+    func choose_channel(self, index: int) -> unit!:
+        self.channel = index
+        self.channel_menu.set_text(self.workspace.canvas.channel_name(index) + " ▾")
+
+    func choose_operation(self, index: int) -> unit!:
+        self.operation = index
+        self.operation_menu.set_text(operation_names()[index] + " ▾")
+
+    func cancel(self) -> unit!:
+        self.dialog.hide()
+
+    ## OK: carry it out.
+    pub func apply(self) -> unit!:
+        self.dialog.hide()
+        load_selection(self.workspace, self.channel, self.operation) catch failure:
+            if let failed = self.failed:
+                failed(f"Load Selection: {failure.message}")
+            return
+        if let done = self.applied:
+            done()

@@ -1,0 +1,151 @@
+## The Channels panel, as Photoshop's: the composite and its red, green and
+## blue, then the alpha channels (saved selections) with their thumbnails and
+## eyes (channel_list.luc). The row's menu (right-click) duplicates, renames
+## and deletes an alpha channel; the footer loads the picked one as the
+## selection, saves the selection as a new one, makes an empty one and
+## deletes one. A name is edited in its own row.
+from ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Command
+from workspace import Workspace
+from kit import Kit
+from channel_list import ChannelList
+from menus import divider
+from alpha_channels import composite_rows, next_alpha_name, save_selection, load_selection, new_channel, duplicate_channel, delete_channel, keep_visible
+
+pub class ChannelsPanel:
+    pub let panel: Panel
+    pub let channel_list: ChannelList
+    let rename_field: TextField
+    let row_menu: ContextMenu
+    let duplicate_command: Command
+    let rename_command: Command
+    let delete_command: Command
+    ## The alpha channel whose name is being edited in its row, or -1.
+    var renaming: int = -1
+    let workspace: Workspace
+    ## After a change the window refreshes; what failed is said in a prompt.
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        let font = kit.font
+        self.channel_list = ChannelList(workspace, font)
+        self.channel_list.on_changed = self.refresh
+        self.channel_list.on_rename = self.begin_rename
+        self.channel_list.on_failed = self.fail
+        self.duplicate_command = Command("Duplicate Channel", id = "channel_duplicate")
+        self.rename_command = Command("Rename Channel…", id = "channel_rename")
+        self.delete_command = Command("Delete Channel", id = "channel_delete")
+        kit.bind(self.duplicate_command, self.attempting("Duplicate Channel", func () -> unit!:
+            discard(duplicate_channel(self.workspace, self.picked()))))
+        kit.bind(self.rename_command, func () -> unit!:
+            let index = self.picked()
+            if index >= 0:
+                self.begin_rename(index, self.channel_list.name_left(), self.channel_list.row_top(index + composite_rows) + 6.0))
+        kit.bind(self.delete_command, self.attempting("Delete Channel", self.delete_picked))
+        self.row_menu = ContextMenu(self.channel_list, [self.duplicate_command, self.rename_command, divider(), self.delete_command], font = font)
+        kit.keep(self.row_menu.on_open(self.fit_menu))
+        # A name is typed where it is shown; Enter or a click away keeps it.
+        self.rename_field = TextField("", font = font, cells = 14.0)
+        let field_box = self.rename_field.layout()
+        field_box.set_popup(true)
+        field_box.set_modal(false)
+        field_box.set_visible(false)
+        kit.keep(self.rename_field.on_commit(self.finish_rename))
+        let content = VStack([self.row_menu, self.rename_field], spacing = 0.0)
+        content.layout().set_flex()
+        let shelf = Shelf([kit.shelf_button("selection-tool", self.attempting("Load Selection", self.load_picked)),
+                           kit.shelf_button("layer-mask", self.attempting("Save Selection", self.save_new)),
+                           kit.shelf_button("plus", self.attempting("New Channel", self.new_empty)),
+                           Spacer(), kit.shelf_button("trash", self.attempting("Delete Channel", self.delete_picked))])
+        self.panel = Panel("Channels", content, minimum = Size(220.0, 120.0), footer = shelf, id = "channels")
+        self.show()
+
+    ## The alpha channel the footer and the row's menu act on: the one shown
+    ## alone, else the last alpha row pressed, else the last; -1 without any.
+    pub func picked(self) -> int!:
+        let canvas = self.workspace.canvas
+        let count = canvas.channel_count()
+        if count == 0:
+            return -1
+        if not (canvas.composite_shown(0) or canvas.composite_shown(1) or canvas.composite_shown(2)):
+            var index = 0
+            while index < count:
+                if canvas.channel_shown(index):
+                    return index
+                index += 1
+        let pressed = self.channel_list.alpha_row - composite_rows
+        return pressed if pressed >= 0 and pressed < count else count - 1
+
+    func fit_menu(self) -> unit!:
+        let any = self.picked() >= 0
+        self.duplicate_command.set_enabled(any)
+        self.rename_command.set_enabled(any)
+        self.delete_command.set_enabled(any)
+
+    ## The panel as the document is now.
+    pub func show(self) -> unit!:
+        keep_visible(self.workspace)
+        self.panel.set_text(f"Channels · {self.workspace.canvas.channel_count()}")
+        self.channel_list.layout().invalidate()
+
+    ## The footer's Save Selection as Channel: at once, the next "Alpha N".
+    func save_new(self) -> unit!:
+        discard(save_selection(self.workspace, next_alpha_name(self.workspace)))
+
+    func new_empty(self) -> unit!:
+        discard(new_channel(self.workspace))
+
+    func load_picked(self) -> unit!:
+        let index = self.picked()
+        if index >= 0:
+            load_selection(self.workspace, index, 0)
+
+    func delete_picked(self) -> unit!:
+        let index = self.picked()
+        if index >= 0:
+            delete_channel(self.workspace, index)
+            self.channel_list.alpha_row = -1
+
+    # -- Renaming in the row.
+
+    func begin_rename(self, index: int, x: float, y: float) -> unit!:
+        self.renaming = index
+        self.rename_field.set_text(self.workspace.canvas.channel_name(index))
+        let field_box = self.rename_field.layout()
+        field_box.set_popup_point(x - 4.0, y)
+        field_box.set_visible(true)
+        field_box.request_focus()
+
+    func finish_rename(self, name: str) -> unit!:
+        let index = self.renaming
+        self.renaming = -1
+        self.rename_field.layout().set_visible(false)
+        let trimmed = name.trim()
+        let canvas = self.workspace.canvas
+        if index < 0 or index >= canvas.channel_count() or trimmed == "" or trimmed == canvas.channel_name(index):
+            return
+        self.attempt("Rename Channel", func () -> unit!:
+            canvas.rename_channel(index, trimmed)
+            self.workspace.touch())
+        self.channel_list.layout().request_focus()
+
+    # -- Doing and saying.
+
+    func attempting(self, name: str, step: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            self.attempt(name, step)
+
+    func attempt(self, name: str, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            self.fail(f"{name}: {failure.message}")
+            return
+        self.refresh()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

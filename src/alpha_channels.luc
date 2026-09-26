@@ -1,0 +1,130 @@
+## Alpha channels as the Select menu, the Channels panel and scripts share
+## them: saved selections by name (luce-image keeps them, sharing cells, and
+## undoes every change), and the panel's rows and eyes. The rows are
+## Photoshop's: 0 the composite (RGB), 1..3 red, green and blue, then the
+## alpha channels from 4. What the eyes show is the view's alone: no step.
+from workspace import Workspace
+
+## The rows before the first alpha channel.
+pub let composite_rows: int = 4
+
+## How many rows the panel lists.
+pub func row_count(workspace: Workspace) -> int:
+    return composite_rows + workspace.canvas.channel_count()
+
+## A row's name: the composite's own, or the alpha channel's.
+pub func row_name(workspace: Workspace, row: int) -> str!:
+    if row < composite_rows:
+        return ["RGB", "Red", "Green", "Blue"][row]
+    return workspace.canvas.channel_name(row - composite_rows)
+
+## The first "Alpha N" no channel is called yet, as Photoshop names them.
+pub func next_alpha_name(workspace: Workspace) -> str!:
+    var number = 1
+    while channel_named(workspace, f"Alpha {number}") >= 0:
+        number += 1
+    return f"Alpha {number}"
+
+## The alpha channel called `name`, or -1.
+pub func channel_named(workspace: Workspace, name: str) -> int!:
+    let canvas = workspace.canvas
+    var index = 0
+    while index < canvas.channel_count():
+        if canvas.channel_name(index) == name:
+            return index
+        index += 1
+    return -1
+
+## Select › Save Selection: the selection as alpha channel `name`; its index.
+pub func save_selection(workspace: Workspace, name: str) -> int!:
+    let index = workspace.canvas.save_selection_channel(name)
+    workspace.touch()
+    return index
+
+## Select › Load Selection: alpha channel `index` combined into the selection
+## by `mode` (0 new, 1 add, 2 subtract, 3 intersect).
+pub func load_selection(workspace: Workspace, index: int, mode: int) -> unit!:
+    workspace.canvas.load_channel(index, mode)
+    workspace.touch()
+
+## The panel's New Channel: an alpha channel selecting nothing; its index.
+pub func new_channel(workspace: Workspace) -> int!:
+    let index = workspace.canvas.new_channel(next_alpha_name(workspace))
+    workspace.touch()
+    return index
+
+## A copy of alpha channel `index` just after it, "<name> copy"; its index.
+pub func duplicate_channel(workspace: Workspace, index: int) -> int!:
+    let made = workspace.canvas.duplicate_channel(index, workspace.canvas.channel_name(index) + " copy")
+    workspace.touch()
+    return made
+
+pub func delete_channel(workspace: Workspace, index: int) -> unit!:
+    workspace.canvas.delete_channel(index)
+    keep_visible(workspace)
+    workspace.touch()
+
+## Whether row `row`'s eye is open.
+pub func row_shown(workspace: Workspace, row: int) -> bool!:
+    let canvas = workspace.canvas
+    if row == 0:
+        return canvas.composite_shown(0) and canvas.composite_shown(1) and canvas.composite_shown(2)
+    if row < composite_rows:
+        return canvas.composite_shown(row - 1)
+    return canvas.channel_shown(row - composite_rows)
+
+## Whether row `row` shows as picked: the composite rows while they show, an
+## alpha channel while it shows with no composite channel.
+pub func row_picked(workspace: Workspace, row: int) -> bool!:
+    if row < composite_rows:
+        return row_shown(workspace, row)
+    return composite_count(workspace) == 0 and row_shown(workspace, row)
+
+## How many of red, green and blue show.
+func composite_count(workspace: Workspace) -> int:
+    var shown = 0
+    for channel in [0, 1, 2]:
+        if workspace.canvas.composite_shown(channel):
+            shown += 1
+    return shown
+
+## A click on row `row`: it alone shows, as Photoshop's panel does — the
+## composite with every alpha channel hidden, one color channel as gray, or
+## one alpha channel as gray.
+pub func show_only(workspace: Workspace, row: int) -> unit!:
+    let canvas = workspace.canvas
+    canvas.set_composite_view(row == 0 or row == 1, row == 0 or row == 2, row == 0 or row == 3)
+    var index = 0
+    while index < canvas.channel_count():
+        canvas.set_channel_shown(index, index == row - composite_rows)
+        index += 1
+    workspace.touch()
+
+## A click on row `row`'s eye: it shows or hides (the composite's all three).
+pub func toggle_row(workspace: Workspace, row: int) -> unit!:
+    let canvas = workspace.canvas
+    let shown = row_shown(workspace, row)
+    if row == 0:
+        canvas.set_composite_view(not shown, not shown, not shown)
+    elif row < composite_rows:
+        let red = canvas.composite_shown(0) != (row == 1)
+        let green = canvas.composite_shown(1) != (row == 2)
+        let blue = canvas.composite_shown(2) != (row == 3)
+        canvas.set_composite_view(red, green, blue)
+    else:
+        canvas.set_channel_shown(row - composite_rows, not shown)
+    keep_visible(workspace)
+    workspace.touch()
+
+## With nothing left showing (the last eye closed, or the channel shown
+## alone deleted or undone away), the composite shows again.
+pub func keep_visible(workspace: Workspace) -> unit!:
+    let canvas = workspace.canvas
+    if composite_count(workspace) > 0:
+        return
+    var index = 0
+    while index < canvas.channel_count():
+        if canvas.channel_shown(index):
+            return
+        index += 1
+    canvas.set_composite_view(true, true, true)

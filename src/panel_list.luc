@@ -13,6 +13,6 @@ pub class PanelEntry:
 
 ## Every panel, in the menus' order.
 pub func panel_entries() -> list[PanelEntry]!:
-    return [PanelEntry("layers", "Layers"), PanelEntry("properties", "Properties"), PanelEntry("history", "History"),
+    return [PanelEntry("layers", "Layers"), PanelEntry("channels", "Channels"), PanelEntry("properties", "Properties"), PanelEntry("history", "History"),
             PanelEntry("color", "Color"), PanelEntry("swatches", "Swatches"), PanelEntry("brushes", "Brushes"),
             PanelEntry("brush_settings", "Brush Settings"), PanelEntry("navigator", "Navigator"), PanelEntry("info", "Info"), PanelEntry("align", "Align")]

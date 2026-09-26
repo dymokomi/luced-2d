@@ -34,6 +34,7 @@ from size_dialogs import SizeDialogs
 from color_range_dialog import ColorRangeDialog
 from replace_color_dialog import ReplaceColorDialog
 from select_mask_dialog import SelectMaskDialog
+from channel_dialogs import SaveSelectionDialog, LoadSelectionDialog
 from text_editing import TextEditing
 from script_editor import ScriptEditor
 from tool_rail import ToolRail
@@ -98,6 +99,8 @@ pub class Panels:
     pub let color_range: ColorRangeDialog
     pub let replace_color: ReplaceColorDialog
     pub let select_mask: SelectMaskDialog
+    pub let save_selection: SaveSelectionDialog
+    pub let load_selection: LoadSelectionDialog
     pub let text_editing: TextEditing
     pub let settings_dialog: SettingsDialog
     pub let files: DocumentFiles
@@ -190,6 +193,14 @@ pub class Panels:
         self.select_mask.applied = self.refresh
         self.select_mask.failed = self.prompts.tell
         kit.bind(actions.select_mask, self.select_mask.open)
+        self.save_selection = SaveSelectionDialog(workspace, kit)
+        self.save_selection.applied = self.refresh
+        self.save_selection.failed = self.prompts.tell
+        kit.bind(actions.save_selection, self.save_selection.open)
+        self.load_selection = LoadSelectionDialog(workspace, kit)
+        self.load_selection.applied = self.refresh
+        self.load_selection.failed = self.prompts.tell
+        kit.bind(actions.load_selection, self.load_selection.open)
         self.connect()
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
         # tool selected, and the palette below them.
@@ -223,6 +234,7 @@ pub class Panels:
         self.dock.layout().set_flex()
         self.catalog = PanelCatalog(self.dock, self.viewport_panel, workspace, kit, self.view, self.settings_dialog, self.layers_panel, self.properties, self.brush)
         self.catalog.refreshed = self.refresh
+        self.catalog.failed = self.prompts.tell
         self.catalog.open_picker = self.pick_color
         self.catalog.brush_chosen = func () -> unit!:
             self.choose_tool("brush")
@@ -253,7 +265,7 @@ pub class Panels:
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
-                            self.picker.dialog, self.color_range.dialog, self.replace_color.dialog, self.select_mask.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
+                            self.picker.dialog, self.color_range.dialog, self.replace_color.dialog, self.select_mask.dialog, self.save_selection.dialog, self.load_selection.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
 

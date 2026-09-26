@@ -194,6 +194,19 @@ pub func modify_selection(pixels: int, feather: int = 0):
 pub func quick_mask(on: bool = true):
     send("quick_mask", [str(on)])
 
+## Select › Save Selection: the selection kept as alpha channel `name`.
+pub func save_selection(name: str):
+    send("save_selection", [name])
+
+## Select › Load Selection: alpha channel `name` as the selection; `mode` 0
+## new, 1 add, 2 subtract, 3 intersect.
+pub func load_selection(name: str, mode: int = 0):
+    send("load_selection", [name, str(mode)])
+
+## Delete alpha channel `name`.
+pub func delete_channel(name: str):
+    send("delete_channel", [name])
+
 ## Select › Modify › Border: a band `width` pixels wide along the selection's edge.
 pub func border_selection(width: int):
     send("border_selection", [str(width)])

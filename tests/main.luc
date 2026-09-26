@@ -34,6 +34,7 @@ from layer_transfer import copy_layers, paste_layers, send_layers
 from input import EventKind, Key
 from ui import Command
 from swatches_panel import swatches_of
+from alpha_channels import row_shown, row_picked, next_alpha_name
 from brushes_panel import saved_brushes
 from align import align_layers
 from dock_layout import parse_layout
@@ -91,6 +92,7 @@ pub func main(arguments: list[str]) -> int!:
     lasso_cycle()
     refining_selections()
     warping()
+    alpha_channel_panel(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1739,4 +1741,90 @@ func warping() -> unit!:
     assert(workspace.canvas.undo_name() == "Puppet Warp" and painted_box(workspace)[1] < 30)
     workspace.undo()
     assert(painted_box(workspace) == found)
+    panels.close()
+
+## The Channels panel: Save and Load Selection from the Select menu's
+## dialogs, the panel's rows (a channel alone, the eyes, Cmd-click loading),
+## its footer and rename, undo, a script's calls, and an .l2d keeping them.
+func alpha_channel_panel(arguments: list[str]) -> unit!:
+    let workspace = Workspace(300, 200)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let canvas = workspace.canvas
+    canvas.bind_headless()
+    canvas.select_rectangle(20, 20, 100, 80)
+    panels.refresh()
+    assert(actions.save_selection.is_enabled() and not actions.load_selection.is_enabled())
+    actions.save_selection.trigger()
+    assert(panels.save_selection.dialog.is_open())
+    panels.save_selection.apply()
+    assert(canvas.channel_count() == 1 and canvas.channel_name(0) == "Alpha 1" and canvas.undo_name() == "Save Selection")
+    assert(next_alpha_name(workspace) == "Alpha 2")
+    # Load Selection: a new selection, then subtracted from a wider one.
+    workspace.deselect()
+    panels.refresh()
+    actions.load_selection.trigger()
+    assert(panels.load_selection.dialog.is_open())
+    panels.load_selection.apply()
+    assert(canvas.selected_at(50, 50) == 255 and canvas.selected_at(200, 150) == 0 and canvas.undo_name() == "Load Selection")
+    # Window › Channels: the composite rows, then the alpha channel.
+    window_command(actions, "channels").trigger()
+    let channels = panels.catalog.channels else trap("the Channels panel is made")
+    assert(panels.catalog.is_open("channels"))
+    let rows = channels.channel_list
+    rows.layout().set_size(240.0, 300.0)
+    let frame = Frame(window.Size(240.0, 300.0, 240.0, 300.0, 1.0))
+    rows.draw(frame.target())
+    frame.close()
+    assert(row_shown(workspace, 0) and row_picked(workspace, 0) and not row_shown(workspace, 4))
+    # A click on Green shows it alone; on the alpha channel, it alone as gray.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(2) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = rows.row_top(2) + 10.0, button = 0, inside = true))
+    assert(not canvas.composite_shown(0) and canvas.composite_shown(1) and not canvas.composite_shown(2) and row_picked(workspace, 2) and not row_picked(workspace, 0))
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(4) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = rows.row_top(4) + 10.0, button = 0, inside = true))
+    assert(not canvas.composite_shown(1) and canvas.channel_shown(0) and row_picked(workspace, 4))
+    # The composite's eye brings the picture back under the channel's red.
+    rows.event(Event(kind = EventKind.pointer_down, x = 10.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 10.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    assert(row_shown(workspace, 0) and canvas.channel_shown(0) and not row_picked(workspace, 4))
+    let view = CanvasView(workspace)
+    view.layout().set_size(300.0, 200.0)
+    let drawn = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
+    view.draw(drawn.target())
+    drawn.close()
+    # Cmd-click on its thumbnail loads it, Alt subtracting.
+    canvas.select_all()
+    rows.event(Event(kind = EventKind.pointer_down, x = 40.0, y = rows.row_top(4) + 22.0, button = 0, inside = true, meta = true, alt = true))
+    assert(canvas.selected_at(50, 50) == 0 and canvas.selected_at(200, 150) == 255)
+    # The footer's New Channel, a rename in the row, undo and redo.
+    canvas.select_rectangle(0, 0, 10, 10)
+    channels.show()
+    assert(canvas.channel_count() == 1)
+    discard(canvas.new_channel(next_alpha_name(workspace)))
+    channels.channel_list.alpha_row = 5
+    assert(channels.picked() == 1)
+    canvas.rename_channel(1, "Mask")
+    assert(canvas.channel_name(1) == "Mask" and canvas.undo_name() == "Rename Channel")
+    workspace.undo()
+    assert(canvas.channel_name(1) == "Alpha 2")
+    workspace.undo()
+    assert(canvas.channel_count() == 1)
+    workspace.redo()
+    assert(canvas.channel_count() == 2)
+    # A script's calls, by name.
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d save_selection\tCorner") else trap("line"))
+    assert(canvas.channel_count() == 3 and canvas.channel_name(2) == "Corner")
+    workspace.deselect()
+    commands.apply(parse_line("@l2d load_selection\tCorner\t0") else trap("line"))
+    assert(canvas.selected_at(5, 5) == 255 and canvas.selected_at(50, 50) == 0)
+    commands.apply(parse_line("@l2d delete_channel\tAlpha 2") else trap("line"))
+    assert(canvas.channel_count() == 2 and canvas.channel_name(1) == "Corner")
+    # Saved and opened again, the channels come back.
+    let path = paths.join(arguments[arguments.length - 1], "channels.l2d")
+    workspace.save(path)
+    let reopened = Canvas.open(path)
+    assert(reopened.channel_count() == 2 and reopened.channel_name(0) == "Alpha 1" and reopened.channel_name(1) == "Corner")
+    reopened.close()
     panels.close()
