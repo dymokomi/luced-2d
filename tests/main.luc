@@ -2015,14 +2015,22 @@ func color_panel_modes() -> unit!:
     workspace.set_color(1.0, 0.0, 0.0)
     panel.show()
     assert(panel.state().hue == 0.0 and math.abs(panel.state().saturation - 1.0) < 1e-9 and math.abs(panel.state().brightness - 1.0) < 1e-9)
+    # Hue runs clockwise, as GIMP's and Krita's: the ring's top is 270°, violet.
+    let top_y = bounds.height * 0.5 - 0.94 * (bounds.width * 0.5 - 3.0)
+    wheel_press(wheel, bounds.width * 0.5, top_y)
+    wheel_release(wheel, bounds.width * 0.5, top_y)
+    assert(math.abs(panel.state().hue - 270.0) < 0.5 and foreground_is(workspace, 0.5, 0.0, 1.0))
+    assert(wheel.ring_point_y(90.0) > bounds.height * 0.5)
     # Triangle: the ring at 120° is green, at once.
     wheel_press(wheel, wheel.ring_point_x(120.0), wheel.ring_point_y(120.0))
     assert(foreground_is(workspace, 0.0, 1.0, 0.0))
     # Dragged on inside the ring's hole, the drag still turns only the hue.
     let x = wheel.field_point_x(0.5, 0.5)
     let y = wheel.field_point_y(0.5, 0.5)
-    wheel_drag(wheel, wheel.ring_point_x(240.0) * 0.2 + x * 0.8, wheel.ring_point_y(240.0) * 0.2 + y * 0.8)
-    assert(math.abs(panel.state().hue - 240.0) < 3.0 and panel.state().saturation == 1.0 and foreground_is(workspace, 0.0, 0.0, 1.0) == (panel.state().hue == 240.0))
+    let cx = bounds.width * 0.5
+    let cy = bounds.height * 0.5
+    wheel_drag(wheel, cx + (wheel.ring_point_x(240.0) - cx) * 0.3, cy + (wheel.ring_point_y(240.0) - cy) * 0.3)
+    assert(math.abs(panel.state().hue - 240.0) < 0.01 and panel.state().saturation == 1.0 and foreground_is(workspace, 0.0, 0.0, 1.0))
     wheel_release(wheel, x, y)
     wheel.set_hsb(240.0, 1.0, 1.0)
     panel.state().assign(240.0, 1.0, 1.0)

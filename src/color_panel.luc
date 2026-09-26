@@ -59,7 +59,10 @@ pub class ColorPanel:
         self.palette = Palette(workspace)
         self.palette.on_pick = self.pick_swatch
         self.editing = Text("Foreground", font = kit.font, muted = true)
-        self.hex_field = TextField("#000000", font = kit.font, cells = 9.0)
+        self.hex_field = TextField("000000", font = kit.font, cells = 9.0)
+        # The same width in every mode, six digits and room: the header must not squeeze it.
+        self.hex_field.layout().set_limits(Size(96.0, 0.0), Size(96.0, 16384.0))
+        self.hex_field.layout().set_shrink(0.0, 0.0)
         kit.keep(self.hex_field.on_commit(self.take_hex))
         self.wheel = ColorWheel()
         kit.keep(self.wheel.on_change(self.take_wheel))
@@ -131,7 +134,8 @@ pub class ColorPanel:
         self.strip.set_marker(state.brightness, 0.5)
         self.sliders.show(state)
         let color = state.srgb()
-        self.hex_field.set_text(hex_of_srgb(color.red, color.green, color.blue))
+        # Six digits: the "#" is the label before the field.
+        self.hex_field.set_text(hex_of_srgb(color.red, color.green, color.blue)[1..<7])
         self.palette.layout().invalidate()
 
     ## Show picker `mode` (as `mode_ids`) and keep it for the next launch.
