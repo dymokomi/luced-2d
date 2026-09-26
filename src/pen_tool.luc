@@ -1,18 +1,21 @@
 ## The Pen, as Photoshop's: each click sets a corner anchor and a click-drag a
 ## smooth one, its handles pulled out evenly; a curve follows the pointer from
 ## the last anchor. Clicking the first anchor again closes the path; Enter or
-## Esc ends an open one. The path lands on a shape layer of its own (luce-image's
-## path layers), filled and stroked as the header's shapes are, and stays a
-## crisp vector however it is moved or scaled.
+## Esc ends an open one. The path lands on a vector layer of its own (luce-image's
+## vector elements), filled and stroked as the header's shapes are, and stays a
+## crisp vector however it is moved or scaled — or, when the Vector panel's New
+## Path is active and empty, in that path.
 ##
-## With a path layer selected and no path being drawn, the pen edits it, as
-## Photoshop's Direct Selection does alongside the pen: drag an anchor or a
-## handle (Alt drags one handle alone, breaking the pair), click the curve to
-## add an anchor there, click an anchor to take it away. Each edit is one step.
+## With a path selected (the layer's active element, else its topmost) and no
+## path being drawn, the pen edits it, as Photoshop's Direct Selection does
+## alongside the pen: drag an anchor or a handle (Alt drags one handle alone,
+## breaking the pair), click the curve to add an anchor there, click an anchor
+## to take it away. Each edit is one step.
 from ui import Painter, Point
 from gpu import Rect, Color
 from workspace import Workspace
 from canvas import Canvas
+from vectors import active_element
 import math
 
 ## One anchor, in document pixels: the point and the handles coming in and
@@ -176,6 +179,13 @@ pub class PenTool:
         if anchors.length < 2:
             return
         let canvas = workspace.canvas
+        # The Vector panel's New Path waits, active and empty, for this path.
+        if into_empty_path(workspace):
+            stage(canvas, anchors)
+            canvas.set_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
+                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
+            workspace.touch()
+            return
         workspace.as_one("Path", func () -> unit!:
             workspace.add_layer()
             workspace.rename("Path")
@@ -300,6 +310,14 @@ pub class PenTool:
             let p = view(anchor.x, anchor.y)
             painter.rectangle(Rect(math.floor(p.x) - 3.0, math.floor(p.y) - 3.0, 7.0, 7.0), ink)
             painter.rectangle(Rect(math.floor(p.x) - 2.0, math.floor(p.y) - 2.0, 5.0, 5.0), backing)
+
+## Whether the selected layer's active element is an empty path to draw into.
+func into_empty_path(workspace: Workspace) -> bool!:
+    let element = active_element(workspace)
+    if element < 0:
+        return false
+    let canvas = workspace.canvas
+    return canvas.element_value(workspace.selected, element, 0) == 4.0 and canvas.element_value(workspace.selected, element, 22) == 0.0
 
 ## Drag a handle of `anchor` (the one going out when `outgoing`) to (`x`,
 ## `y`): the other turns to stay opposite it, keeping its own length, unless

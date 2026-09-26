@@ -1,0 +1,61 @@
+## The active vector element's outline over the canvas, as Photoshop shows a
+## selected path: where it is, where a Move drag takes it, or where a free
+## transform's box has it (only the outline moves until Apply).
+from ui import Painter, Point
+from gpu import Color
+from workspace import Workspace
+from vector_outline import Outline, element_outline
+from transform_box import TransformBox
+from vectors import vector_layer, active_element
+
+pub class VectorOverlay:
+    ## The outline drawn last, made again when the document or the element changed.
+    var outline: Outline
+    var revision: int = -1
+    var layer: int = -1
+    var element: int = -1
+
+    pub func init(self):
+        self.outline = Outline()
+
+    ## The outline in view points, moved by (`shift_x`, `shift_y`) document
+    ## pixels: dark under light, at screen resolution.
+    pub func draw(self, painter: Painter, workspace: Workspace, shift_x: float, shift_y: float, ink: Color, backing: Color) -> unit!:
+        if not vector_layer(workspace):
+            return
+        let element = active_element(workspace)
+        if element < 0:
+            return
+        self.refresh(workspace, element)
+        let points = self.outline.points.length // 2
+        if points < 2:
+            return
+        var box: TransformBox? = none
+        if let session = workspace.transform:
+            if session.element == element:
+                box = session.box
+        let zoom = workspace.zoom
+        var previous = Point(0.0, 0.0)
+        var point = 0
+        while point < points:
+            var x = self.outline.points[point * 2] + shift_x
+            var y = self.outline.points[point * 2 + 1] + shift_y
+            if let through = box:
+                let bx = through.map_x(x, y)
+                y = through.map_y(x, y)
+                x = bx
+            let next = Point(x * zoom + workspace.offset_x, y * zoom + workspace.offset_y)
+            if point > 0 and not self.outline.starts_run(point):
+                painter.line(previous, next, 3.0, backing)
+                painter.line(previous, next, 1.0, ink)
+            previous = next
+            point += 1
+
+    func refresh(self, workspace: Workspace, element: int) -> unit!:
+        let layer = workspace.selected_id()
+        if self.revision == workspace.revision and self.layer == layer and self.element == element:
+            return
+        self.outline = element_outline(workspace.canvas, workspace.selected, element)
+        self.revision = workspace.revision
+        self.layer = layer
+        self.element = element

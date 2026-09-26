@@ -327,6 +327,59 @@ pub func puppet_warp(pins: list[float], density: int = 1):
         fields.append(str(value))
     send("puppet_warp", fields)
 
+# mark: Vectors ==============================================================================
+
+## A vector element on the selected layer — `kind` "rectangle", "ellipse",
+## "line" or "polygon" — in the box, filled with the foreground color and
+## stroked as the shape tools' header says (a line is stroked with the
+## foreground). It goes on a new vector layer unless the selected layer is
+## one, or holds nothing.
+pub func add_vector(kind: str, x: float, y: float, width: float, height: float):
+    send("add_vector", [kind, str(x), str(y), str(width), str(height)])
+
+## A pen path through `points` (x, y pairs; corner anchors), closed back to
+## the first unless `closed` is false, placed as `add_vector`.
+pub func add_path(points: list[float], closed: bool = true):
+    var fields = [str(closed)]
+    for value in points:
+        fields.append(str(value))
+    send("add_path", fields)
+
+## The Vector panel's New Path: an empty path called `name`, active, for the Pen.
+pub func new_path(name: str):
+    send("new_path", [name])
+
+## The selected layer's element at `index` (0 the bottom) made active, so a
+## move or transform acts on it alone; -1 for none, the whole layer.
+pub func select_vector(index: int):
+    send("select_vector", [str(index)])
+
+pub func rename_vector(index: int, name: str):
+    send("rename_vector", [str(index), name])
+
+pub func set_vector_visible(index: int, visible: bool):
+    send("show_vector", [str(index), str(visible)])
+
+## Element `index` put at place `to` among the layer's elements (0 the bottom).
+pub func move_vector(index: int, to: int):
+    send("move_vector", [str(index), str(to)])
+
+pub func duplicate_vector(index: int):
+    send("duplicate_vector", [str(index)])
+
+pub func delete_vector(index: int):
+    send("delete_vector", [str(index)])
+
+## Make Selection: element `index`'s outline as the selection; `mode` 0 new,
+## 1 add, 2 subtract, 3 intersect.
+pub func vector_selection(index: int, mode: int = 0):
+    send("vector_selection", [str(index), str(mode)])
+
+## Element `index` alone scaled, turned by `angle` degrees about
+## (`pivot_x`, `pivot_y`) and moved by (`dx`, `dy`), crisp.
+pub func transform_vector(index: int, scale_x: float, scale_y: float, angle: float = 0.0, dx: float = 0.0, dy: float = 0.0, pivot_x: float = 0.0, pivot_y: float = 0.0):
+    send("transform_vector", [str(index), str(scale_x), str(scale_y), str(angle), str(dx), str(dy), str(pivot_x), str(pivot_y)])
+
 # mark: The canvas ===========================================================================
 
 ## Scale the whole document to `width` by `height` pixels.

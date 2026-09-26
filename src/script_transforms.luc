@@ -3,7 +3,7 @@
 ## menu command would be, box or mesh up and applied at once, one undo step.
 from workspace import Workspace
 from free_transform import begin_free_transform, box_around
-from transform_box import convex
+from transform_box import convex, mode_skew, mode_distort, mode_perspective
 from mesh_warp import MeshWarp, warp_styles
 import math
 import ui
@@ -56,8 +56,13 @@ func distort(workspace: Workspace, action: str, fields: list[str]) -> unit!:
     if not convex(corners):
         error(ui.invalid, "the corners must make a shape that does not fold over")
     let session = begin_free_transform(workspace.canvas, ids, workspace.transform_sampling) else error(ui.invalid, "nothing to transform")
+    if not session.distorts():
+        session.finish(false)
+        error(ui.invalid, "a vector element follows only scale, turn and move")
     session.box.corners = corners
     session.box.distorted = true
+    # History names the step as the menu's command.
+    session.box.mode = mode_skew if action == "skew" else (mode_perspective if action == "perspective" else mode_distort)
     session.preview() catch failure:
         session.finish(false)
         error(failure.code, failure.message)

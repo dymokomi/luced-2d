@@ -1,0 +1,155 @@
+## The Vector panel: Photoshop's Paths panel, renamed and widened to every
+## vector element of the selected layer — its shapes, pen paths and SVG
+## outlines — as layers within the layer (vector_list.luc). The row's menu
+## (right-click) brings an element forward or sends it back, duplicates,
+## renames, makes a selection from it and deletes it; the footer makes a new
+## empty path for the Pen, makes a selection from the active element,
+## duplicates it and deletes it. A name is edited in its own row.
+from ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Command
+from workspace import Workspace
+from kit import Kit
+from vector_list import VectorList
+from menus import divider
+from vectors import element_count, active_element, new_path, duplicate_element, delete_element, rename_element, move_element, select_element
+
+pub class VectorPanel:
+    pub let panel: Panel
+    pub let vector_list: VectorList
+    let rename_field: TextField
+    let row_menu: ContextMenu
+    let forward_command: Command
+    let backward_command: Command
+    let duplicate_command: Command
+    let rename_command: Command
+    let select_command: Command
+    let delete_command: Command
+    ## The element whose name is being edited in its row, or -1.
+    var renaming: int = -1
+    let workspace: Workspace
+    ## After a change the window refreshes; what failed is said in a prompt.
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        let font = kit.font
+        self.vector_list = VectorList(workspace, font)
+        self.vector_list.on_changed = self.refresh
+        self.vector_list.on_rename = self.begin_rename
+        self.vector_list.on_failed = self.fail
+        self.forward_command = Command("Bring Forward", id = "vector_forward")
+        self.backward_command = Command("Send Backward", id = "vector_backward")
+        self.duplicate_command = Command("Duplicate Vector", id = "vector_duplicate")
+        self.rename_command = Command("Rename Vector…", id = "vector_rename")
+        self.select_command = Command("Make Selection", id = "vector_selection")
+        self.delete_command = Command("Delete Vector", id = "vector_delete")
+        kit.bind(self.forward_command, self.attempting("Bring Forward", func () -> unit!:
+            self.restack(1)))
+        kit.bind(self.backward_command, self.attempting("Send Backward", func () -> unit!:
+            self.restack(-1)))
+        kit.bind(self.duplicate_command, self.attempting("Duplicate Vector", self.duplicate_active))
+        kit.bind(self.rename_command, func () -> unit!:
+            let element = active_element(self.workspace)
+            if element >= 0:
+                self.begin_rename(element, self.vector_list.name_left(), self.vector_list.row_top(element) + 6.0))
+        kit.bind(self.select_command, self.attempting("Make Selection", self.select_active))
+        kit.bind(self.delete_command, self.attempting("Delete Vector", self.delete_active))
+        self.row_menu = ContextMenu(self.vector_list, [self.forward_command, self.backward_command, divider(), self.duplicate_command, self.rename_command,
+                                                       self.select_command, divider(), self.delete_command], font = font)
+        kit.keep(self.row_menu.on_open(self.fit_menu))
+        # A name is typed where it is shown; Enter or a click away keeps it.
+        self.rename_field = TextField("", font = font, cells = 14.0)
+        let field_box = self.rename_field.layout()
+        field_box.set_popup(true)
+        field_box.set_modal(false)
+        field_box.set_visible(false)
+        kit.keep(self.rename_field.on_commit(self.finish_rename))
+        let content = VStack([self.row_menu, self.rename_field], spacing = 0.0)
+        content.layout().set_flex()
+        let shelf = Shelf([kit.shelf_button("path-tool", self.attempting("New Path", self.new_empty)),
+                           kit.shelf_button("selection-tool", self.attempting("Make Selection", self.select_active)),
+                           kit.shelf_button("duplicate", self.attempting("Duplicate Vector", self.duplicate_active)),
+                           Spacer(), kit.shelf_button("trash", self.attempting("Delete Vector", self.delete_active))])
+        self.panel = Panel("Vector", content, minimum = Size(220.0, 120.0), footer = shelf, id = "vector")
+        self.show()
+
+    func fit_menu(self) -> unit!:
+        let element = active_element(self.workspace)
+        let count = element_count(self.workspace)
+        self.forward_command.set_enabled(element >= 0 and element < count - 1)
+        self.backward_command.set_enabled(element > 0)
+        for command in [self.duplicate_command, self.rename_command, self.select_command, self.delete_command]:
+            command.set_enabled(element >= 0)
+
+    ## The panel as the selected layer is now.
+    pub func show(self) -> unit!:
+        let count = element_count(self.workspace)
+        self.panel.set_text(f"Vector · {count}" if count > 0 else "Vector")
+        self.vector_list.layout().invalidate()
+
+    ## The footer's New Path: an empty path the Pen draws into next.
+    func new_empty(self) -> unit!:
+        new_path(self.workspace)
+
+    func duplicate_active(self) -> unit!:
+        let element = active_element(self.workspace)
+        if element >= 0:
+            duplicate_element(self.workspace, element)
+
+    func delete_active(self) -> unit!:
+        let element = active_element(self.workspace)
+        if element >= 0:
+            delete_element(self.workspace, element)
+
+    func select_active(self) -> unit!:
+        let element = active_element(self.workspace)
+        if element >= 0:
+            select_element(self.workspace, element, 0)
+
+    ## Bring Forward (`step` 1) or Send Backward (-1) the active element.
+    func restack(self, step: int) -> unit!:
+        let element = active_element(self.workspace)
+        if element >= 0:
+            move_element(self.workspace, element, element + step)
+
+    # -- Renaming in the row.
+
+    func begin_rename(self, element: int, x: float, y: float) -> unit!:
+        self.renaming = element
+        self.rename_field.set_text(self.workspace.canvas.element_name(self.workspace.selected, element))
+        let field_box = self.rename_field.layout()
+        field_box.set_popup_point(x - 4.0, y)
+        field_box.set_visible(true)
+        field_box.request_focus()
+
+    func finish_rename(self, name: str) -> unit!:
+        let element = self.renaming
+        self.renaming = -1
+        self.rename_field.layout().set_visible(false)
+        let trimmed = name.trim()
+        let workspace = self.workspace
+        if element < 0 or element >= element_count(workspace) or trimmed == "" or trimmed == workspace.canvas.element_name(workspace.selected, element):
+            return
+        self.attempt("Rename Vector", func () -> unit!:
+            rename_element(workspace, element, trimmed))
+        self.vector_list.layout().request_focus()
+
+    # -- Doing and saying.
+
+    func attempting(self, name: str, step: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            self.attempt(name, step)
+
+    func attempt(self, name: str, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            self.fail(f"{name}: {failure.message}")
+            return
+        self.refresh()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

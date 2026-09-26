@@ -17,6 +17,7 @@ from swatches_panel import SwatchesPanel
 from brushes_panel import BrushesPanel
 from history_panel import HistoryPanel
 from channels_panel import ChannelsPanel
+from vector_panel import VectorPanel
 from navigator_panel import NavigatorPanel
 from info_panel import InfoPanel
 from align_panel import AlignPanel
@@ -39,6 +40,7 @@ pub class PanelCatalog:
     pub var brushes: BrushesPanel? = none
     pub var history: HistoryPanel? = none
     pub var channels: ChannelsPanel? = none
+    pub var vector: VectorPanel? = none
     pub var navigator: NavigatorPanel? = none
     pub var info: InfoPanel? = none
     pub var align: AlignPanel? = none
@@ -136,6 +138,8 @@ pub class PanelCatalog:
             return self.history_panel().panel
         if id == "channels":
             return self.channels_panel().panel
+        if id == "vector":
+            return self.vector_panel().panel
         if id == "navigator":
             return self.navigator_panel().panel
         if id == "info":
@@ -194,6 +198,17 @@ pub class PanelCatalog:
         self.channels = made
         return made
 
+    func vector_panel(self) -> VectorPanel!:
+        if let made = self.vector:
+            return made
+        let made = VectorPanel(self.workspace, self.kit)
+        made.refreshed = self.refresh
+        made.failed = func (message: str) -> unit!:
+            if let failed = self.failed:
+                failed(message)
+        self.vector = made
+        return made
+
     func navigator_panel(self) -> NavigatorPanel!:
         if let made = self.navigator:
             return made
@@ -239,6 +254,9 @@ pub class PanelCatalog:
             if self.dock.contains(made.panel):
                 made.show()
         if let made = self.channels:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.vector:
             if self.dock.contains(made.panel):
                 made.show()
         if let made = self.navigator:

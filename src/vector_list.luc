@@ -1,0 +1,274 @@
+## The Vector panel's list: a row per vector element of the selected layer —
+## its eye, a thumbnail of its outline and its name — the topmost first, as
+## Photoshop lists its paths.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, draw_icon
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor, Key
+from workspace import Workspace
+from vector_outline import Outline, element_outline
+from vectors import element_count, active_element, activate, show_element, move_element, select_element, kind_label, delete_element
+import theme
+import math
+import time
+import transfer
+
+## Outline points a thumbnail draws at most: an SVG outline's thousands are thinned.
+let thumb_points: int = 240
+
+## One 44-point row an element. A click makes the element active, so the
+## transform and path tools act on it (a click below the rows makes none
+## active: the whole layer again); the eye shows or hides it, and dragging on
+## down the eyes gives them the same; Cmd-click (Ctrl-click) makes its outline
+## the selection (Shift adds, Alt subtracts, both intersect); a double-click
+## on the name renames it there; a row dragged lands at the row edge it is let
+## go on, changing the stacking; Delete deletes the active element.
+pub class VectorList: Widget:
+    let box: Layout
+    pub let workspace: Workspace
+    let font: Font
+    let row_height: float = 44.0
+    let thumb: float = 32.0
+    ## A drag down the eyes: whether it shows or hides.
+    var eye_swipe: bool = false
+    var eye_shown: bool = false
+    ## A row being dragged to a new place: its element and the pointer's y, or -1.
+    var drag_element: int = -1
+    var drag_y: float = 0.0
+    var drag_started: bool = false
+    ## The last press, for a double-click: its element and when (ms).
+    var last_element: int = -1
+    var last_time: int = 0
+    ## The outlines the thumbnails draw, made again when the document changes.
+    var outlines: list[Outline]
+    var outlines_revision: int = -1
+    var outlines_layer: int = -1
+    ## Something changed from here: the window refreshes.
+    pub var on_changed: func() -> unit!? = none
+    ## A double-click on a name: rename element `element`, its name at (x, y).
+    pub var on_rename: func(int, float, float) -> unit!? = none
+    ## Something failed, and why.
+    pub var on_failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.font = font
+        self.outlines = []
+        self.box = Layout()
+        self.box.set_focusable(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_flex()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        let count = element_count(self.workspace)
+        return Size(220.0, self.row_height * float(count if count > 1 else 1))
+
+    ## Where the name starts, past the eye and the thumbnail.
+    pub func name_left(self) -> float:
+        return 32.0 + self.thumb + 10.0
+
+    ## Where the row of element `element` starts.
+    pub func row_top(self, element: int) -> float!:
+        return self.row_height * float(element_count(self.workspace) - 1 - element)
+
+    ## The element whose row is at `y`, or -1.
+    func element_at(self, y: float) -> int!:
+        let count = element_count(self.workspace)
+        let row = int(math.floor(y / self.row_height))
+        return count - 1 - row if y >= 0.0 and row < count else -1
+
+    ## The thumbnail's box in the row from `top`: the document's shape within the square.
+    func thumb_rect(self, top: float) -> Rect!:
+        let aspect = float(self.workspace.width()) / float(self.workspace.height())
+        var width = self.thumb
+        var height = self.thumb
+        if aspect > 1.0:
+            height = math.max(6.0, self.thumb / aspect)
+        else:
+            width = math.max(6.0, self.thumb * aspect)
+        return Rect(32.0 + (self.thumb - width) * 0.5, top + (self.row_height - height) * 0.5, width, height)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
+        let count = element_count(workspace)
+        if count == 0:
+            painter.text("No vectors on this layer", 12.0, 14.0, theme.text_muted(), self.font)
+            painter.close()
+            return
+        self.refresh_outlines()
+        let focused = self.box.contains_focus()
+        let active = active_element(workspace)
+        var element = count - 1
+        while element >= 0:
+            let top = self.row_top(element)
+            let picked = element == active
+            let shown = canvas.element_visible(workspace.selected, element)
+            if picked:
+                painter.rectangle(Rect(0.0, top, size.width, self.row_height), workspace.look.accent if focused else workspace.look.selection_inactive)
+            let ink = theme.on_accent() if picked and focused else (theme.text() if shown else theme.text_muted())
+            let soft = theme.on_accent() if picked and focused else theme.text_muted()
+            draw_icon(target, "visible" if shown else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), ink)
+            let slot = self.thumb_rect(top)
+            painter.rectangle(slot, theme.checker_light())
+            self.draw_thumb(painter, element, slot)
+            painter.text(canvas.element_name(workspace.selected, element), self.name_left(), top + 7.0, ink, self.font)
+            painter.text(kind_label(workspace, element), self.name_left(), top + 24.0, soft, self.font)
+            painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
+            element -= 1
+        if self.drag_element >= 0 and self.drag_started:
+            painter.rectangle(Rect(0.0, self.row_height * float(self.edge_near(self.drag_y)) - 1.0, size.width, 2.0), workspace.look.accent)
+        painter.close()
+
+    ## Element `element`'s outline in its thumbnail slot, in the color it paints.
+    func draw_thumb(self, painter: Painter, element: int, slot: Rect) -> unit!:
+        if element >= self.outlines.length:
+            return
+        let outline = self.outlines[element]
+        let points = outline.points.length // 2
+        if points < 2:
+            return
+        let color = self.paint_of(element)
+        let scale_x = slot.width / float(self.workspace.width())
+        let scale_y = slot.height / float(self.workspace.height())
+        let step = points // thumb_points + 1
+        var previous = Point(slot.x + outline.points[0] * scale_x, slot.y + outline.points[1] * scale_y)
+        var point = step
+        while point < points:
+            let next = Point(slot.x + outline.points[point * 2] * scale_x, slot.y + outline.points[point * 2 + 1] * scale_y)
+            if not outline.starts_run(point):
+                painter.line(previous, next, 1.0, color)
+            previous = next
+            point += step
+
+    ## The color element `element` shows: its fill, or its stroke when unfilled.
+    func paint_of(self, element: int) -> Color!:
+        let canvas = self.workspace.canvas
+        let index = self.workspace.selected
+        let base = 8 if canvas.element_value(index, element, 7) != 0.0 else 12
+        return Color(transfer.srgb_encode(canvas.element_value(index, element, base)), transfer.srgb_encode(canvas.element_value(index, element, base + 1)),
+                     transfer.srgb_encode(canvas.element_value(index, element, base + 2)))
+
+    ## The outlines again when the document or the selected layer changed.
+    func refresh_outlines(self) -> unit!:
+        let workspace = self.workspace
+        let layer = workspace.selected_id()
+        if self.outlines_revision == workspace.revision and self.outlines_layer == layer:
+            return
+        self.outlines = []
+        var element = 0
+        while element < element_count(workspace):
+            self.outlines.append(element_outline(workspace.canvas, workspace.selected, element))
+            element += 1
+        self.outlines_revision = workspace.revision
+        self.outlines_layer = layer
+
+    ## The row edge nearest `y`, counted from the top (0 above the top row).
+    func edge_near(self, y: float) -> int!:
+        let edge = int(math.floor(y / self.row_height + 0.5))
+        let count = element_count(self.workspace)
+        return 0 if edge < 0 else (count if edge > count else edge)
+
+    pub func event(self, event: Event) -> unit!:
+        let workspace = self.workspace
+        if event.kind == EventKind.key_down and (event.key == Key.backspace or event.key == Key.delete):
+            let active = active_element(workspace)
+            if active >= 0:
+                self.attempt("Delete Vector", func () -> unit!:
+                    delete_element(workspace, active))
+            return
+        if event.kind == EventKind.pointer_down and (event.button == 0 or event.button == 1) and event.inside:
+            self.box.request_focus()
+            let element = self.element_at(event.y)
+            if event.button == 1:
+                # A right-click picks the row its menu acts on.
+                if element >= 0:
+                    activate(workspace, element)
+            elif element >= 0:
+                self.press(element, event)
+            else:
+                activate(workspace, -1)
+            self.changed()
+            self.box.invalidate()
+        elif event.kind == EventKind.pointer_moved and self.eye_swipe:
+            let element = self.element_at(event.y)
+            if element >= 0 and workspace.canvas.element_visible(workspace.selected, element) != self.eye_shown:
+                self.attempt("Show Vector", func () -> unit!:
+                    show_element(workspace, element, self.eye_shown))
+                self.box.invalidate()
+        elif event.kind == EventKind.pointer_moved and self.drag_element >= 0:
+            if math.abs(event.y - self.drag_y) > 4.0:
+                self.drag_started = true
+            if self.drag_started:
+                self.drag_y = event.y
+                self.box.invalidate()
+        elif event.kind == EventKind.pointer_up and event.button == 0:
+            if self.drag_element >= 0 and self.drag_started:
+                self.drop(event.y)
+            self.eye_swipe = false
+            self.drag_element = -1
+            self.drag_started = false
+            self.box.invalidate()
+        elif event.cancelled:
+            self.eye_swipe = false
+            self.drag_element = -1
+            self.drag_started = false
+            self.box.invalidate()
+
+    ## A press on the row of element `element`.
+    func press(self, element: int, event: Event) -> unit!:
+        let workspace = self.workspace
+        if event.x < 28.0:
+            # The eye; a drag on down the eyes gives them the same.
+            let shown = not workspace.canvas.element_visible(workspace.selected, element)
+            self.attempt("Show Vector", func () -> unit!:
+                show_element(workspace, element, shown))
+            self.eye_swipe = true
+            self.eye_shown = shown
+            return
+        if event.meta or event.control:
+            # Cmd-click: the element's outline as the selection.
+            let mode = 3 if event.shift and event.alt else (1 if event.shift else (2 if event.alt else 0))
+            self.attempt("Make Selection", func () -> unit!:
+                select_element(workspace, element, mode))
+            return
+        # A second press on the name soon after the first renames it.
+        let now = time.now() // 1000000
+        let again = element == self.last_element and now - self.last_time <= 400
+        self.last_element = element
+        self.last_time = now
+        if again and event.x >= self.name_left():
+            self.last_element = -1
+            if let rename = self.on_rename:
+                rename(element, self.name_left(), self.row_top(element) + 6.0)
+            return
+        activate(workspace, element)
+        self.drag_element = element
+        self.drag_y = event.y
+        self.drag_started = false
+
+    ## The dragged row let go at `y`: its element put where the row edge there is.
+    func drop(self, y: float) -> unit!:
+        let count = element_count(self.workspace)
+        let from_row = count - 1 - self.drag_element
+        let edge = self.edge_near(y)
+        let row = edge if edge <= from_row else edge - 1
+        let element = self.drag_element
+        self.attempt("Move Vector", func () -> unit!:
+            move_element(self.workspace, element, count - 1 - row))
+
+    func attempt(self, name: str, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            if let failed = self.on_failed:
+                failed(f"{name}: {failure.message}")
+            return
+        self.changed()
+
+    func changed(self) -> unit!:
+        if let changed = self.on_changed:
+            changed()

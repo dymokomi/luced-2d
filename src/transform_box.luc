@@ -163,6 +163,14 @@ pub class TransformBox:
         let uy = sy * self.height * 0.5 * self.scale_y
         return self.pivot_y() + self.dy + ux * math.sin(turn) + uy * math.cos(turn)
 
+    ## Where document point (`x`, `y`) of the box as found is now, while it is
+    ## not distorted: an outline drawn through the box.
+    pub func map_x(self, x: float, y: float) -> float:
+        return self.place_x((x - self.pivot_x()) / (self.width * 0.5), (y - self.pivot_y()) / (self.height * 0.5))
+
+    pub func map_y(self, x: float, y: float) -> float:
+        return self.place_y((x - self.pivot_x()) / (self.width * 0.5), (y - self.pivot_y()) / (self.height * 0.5))
+
     ## Handle `index` (0..7) in document pixels: a corner, or the middle of a
     ## side between two corners.
     pub func handle_x(self, index: int) -> float:

@@ -6,7 +6,7 @@ from panels import Panels, next_in_cycle
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
 from navigator_panel import view_box
-from transform_box import TransformBox, grab_move, grab_turn, mode_distort, mode_perspective
+from transform_box import TransformBox, grab_move, grab_turn, mode_distort, mode_perspective, mode_skew
 from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
 from size_fields import SizeFields
@@ -35,6 +35,8 @@ from input import EventKind, Key
 from ui import Command
 from swatches_panel import swatches_of
 from alpha_channels import row_shown, row_picked, next_alpha_name
+from vectors import active_element, next_path_name
+from free_transform import begin_free_transform
 from brushes_panel import saved_brushes
 from align import align_layers
 from dock_layout import parse_layout
@@ -93,6 +95,7 @@ pub func main(arguments: list[str]) -> int!:
     refining_selections()
     warping()
     alpha_channel_panel(arguments)
+    vector_panel(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1746,10 +1749,11 @@ func warping() -> unit!:
     # From a script: skew, perspective, a warp style and a puppet warp, a step each.
     let commands = ScriptCommands(workspace, actions)
     commands.apply(parse_line("@l2d skew\t20\t0") else trap("line"))
-    assert(workspace.canvas.undo_name() == "Distort" and painted_box(workspace)[2] > 165)
+    assert(workspace.canvas.undo_name() == "Skew" and painted_box(workspace)[2] > 165)
     workspace.undo()
     commands.apply(parse_line("@l2d perspective\t0.5\tfalse") else trap("line"))
     let narrowed = painted_box(workspace)
+    assert(workspace.canvas.undo_name() == "Perspective")
     assert(narrowed[0] >= 39 and narrowed[0] <= 41 and narrowed[2] >= 159 and narrowed[2] <= 161)
     workspace.undo()
     commands.apply(parse_line("@l2d warp\tArc\t0.5") else trap("line"))
@@ -1845,4 +1849,126 @@ func alpha_channel_panel(arguments: list[str]) -> unit!:
     let reopened = Canvas.open(path)
     assert(reopened.channel_count() == 2 and reopened.channel_name(0) == "Alpha 1" and reopened.channel_name(1) == "Corner")
     reopened.close()
+    panels.close()
+
+## The Vector panel: a vector layer's elements as rows (topmost first); a row
+## clicked makes its element active, the eye hides it, a drag restacks it,
+## Cmd-click selects its outline; the footer's New Path takes the Pen's next
+## path; a free transform and a move act on the active element alone; a
+## script's calls; an .l2d keeping them; and Skew and Perspective named in History.
+func vector_panel(arguments: list[str]) -> unit!:
+    let workspace = Workspace(200, 120)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let view = panels.view
+    let canvas = workspace.canvas
+    canvas.bind_headless()
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    # A red rectangle on a layer of its own, then a script's ellipse added to it.
+    foreground(workspace, 1.0, 0.0, 0.0)
+    draw_shape(workspace, "rectangle", 10.0, 10.0, 60.0, 40.0)
+    let layer = workspace.selected
+    let commands = ScriptCommands(workspace, actions)
+    foreground(workspace, 0.0, 0.0, 1.0)
+    commands.apply(parse_line("@l2d add_vector\tellipse\t50\t30\t60\t40") else trap("line"))
+    assert(workspace.selected == layer and canvas.element_count(layer) == 2 and canvas.element_name(layer, 1) == "Ellipse" and active_element(workspace) == 1)
+    # Window › Vector: the ellipse's row on top, the rectangle's below it.
+    window_command(actions, "vector").trigger()
+    let vector = panels.catalog.vector else trap("the Vector panel is made")
+    assert(panels.catalog.is_open("vector"))
+    let rows = vector.vector_list
+    rows.layout().set_size(240.0, 200.0)
+    let frame = Frame(window.Size(240.0, 200.0, 240.0, 200.0, 1.0))
+    rows.draw(frame.target())
+    frame.close()
+    assert(rows.row_top(1) == 0.0 and rows.row_top(0) == 44.0)
+    # A click on the rectangle's row makes it active; below the rows, none.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    assert(active_element(workspace) == 0)
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = 150.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = 150.0, button = 0, inside = true))
+    assert(active_element(workspace) == -1)
+    # The eye hides the ellipse, one step; undone, it shows again.
+    rows.event(Event(kind = EventKind.pointer_down, x = 10.0, y = rows.row_top(1) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 10.0, y = rows.row_top(1) + 10.0, button = 0, inside = true))
+    assert(not canvas.element_visible(layer, 1) and canvas.undo_name() == "Hide Vector")
+    workspace.undo()
+    assert(canvas.element_visible(layer, 1))
+    # The ellipse's row dragged below the rectangle's: it goes to the bottom.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(1) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_moved, x = 120.0, y = 80.0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_moved, x = 120.0, y = 88.0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = 88.0, button = 0, inside = true))
+    assert(canvas.element_name(layer, 0) == "Ellipse" and canvas.element_name(layer, 1) == "Rectangle" and canvas.undo_name() == "Send Backward")
+    workspace.undo()
+    assert(canvas.element_name(layer, 1) == "Ellipse")
+    # Cmd-click on the rectangle's row: its outline is the selection.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true, meta = true))
+    assert(canvas.has_selection() and canvas.selected_at(20, 20) == 255 and canvas.selected_at(150, 100) == 0)
+    workspace.deselect()
+    # The Move tool's press picks the element under it; the drag moves it alone.
+    panels.choose_tool("move")
+    press(view, 20.0, 20.0)
+    assert(active_element(workspace) == 0)
+    drag_to(view, 30.0, 20.0)
+    release(view, 30.0, 20.0)
+    assert(canvas.element_value(layer, 0, 20) == 10.0 and canvas.element_value(layer, 1, 20) == 0.0)
+    # A free transform of the active element: only its outline moves until Apply.
+    assert(workspace.begin_transform())
+    let session = workspace.transform else trap("a transform is up")
+    assert(session.element == 0 and not session.distorts() and not workspace.begin_transform_mode(mode_skew))
+    session.box.set_scale(200.0)
+    workspace.preview_transform()
+    let drawn = Frame(window.Size(200.0, 120.0, 200.0, 120.0, 1.0))
+    view.layout().set_size(200.0, 120.0)
+    view.draw(drawn.target())
+    drawn.close()
+    workspace.finish_transform(true)
+    assert(canvas.undo_name() == "Free Transform" and math.abs(canvas.element_value(layer, 0, 16) - 2.0) < 1e-9 and canvas.element_value(layer, 1, 16) == 1.0)
+    # The footer's New Path: an empty path, active, which the Pen's next path fills.
+    assert(next_path_name(workspace) == "Path 1")
+    vector.show()
+    workspace.as_one("New Path", func () -> unit!:
+        canvas.add_empty_path(workspace.selected_id(), next_path_name(workspace)))
+    assert(canvas.element_count(layer) == 3 and active_element(workspace) == 2 and canvas.element_value(layer, 2, 22) == 0.0)
+    panels.choose_tool("pen")
+    press(view, 150.0, 20.0)
+    release(view, 150.0, 20.0)
+    press(view, 190.0, 20.0)
+    release(view, 190.0, 20.0)
+    press(view, 170.0, 60.0)
+    release(view, 170.0, 60.0)
+    press(view, 150.0, 20.0)
+    release(view, 150.0, 20.0)
+    assert(workspace.selected == layer and canvas.element_count(layer) == 3 and canvas.element_value(layer, 2, 22) == 3.0 and canvas.element_name(layer, 2) == "Path 1")
+    # A script's calls by the element's place.
+    commands.apply(parse_line("@l2d rename_vector\t2\tTriangle") else trap("line"))
+    commands.apply(parse_line("@l2d duplicate_vector\t0") else trap("line"))
+    assert(canvas.element_count(layer) == 4 and canvas.element_name(layer, 1) == "Rectangle copy" and canvas.element_name(layer, 3) == "Triangle")
+    commands.apply(parse_line("@l2d delete_vector\t1") else trap("line"))
+    commands.apply(parse_line("@l2d show_vector\t0\tfalse") else trap("line"))
+    assert(canvas.element_count(layer) == 3 and not canvas.element_visible(layer, 0))
+    # Saved and opened again, the elements come back.
+    let path = paths.join(arguments[arguments.length - 1], "vectors.l2d")
+    workspace.save(path)
+    let reopened = Canvas.open(path)
+    assert(reopened.element_count(layer) == 3 and reopened.element_name(layer, 2) == "Triangle" and not reopened.element_visible(layer, 0))
+    reopened.close()
+    # Edit › Transform › Skew and Perspective are named so in History.
+    workspace.add_layer()
+    blue_box(workspace)
+    for mode in [mode_skew, mode_perspective]:
+        let skewed = begin_free_transform(canvas, [workspace.selected_id()], 1) else trap("a box")
+        skewed.box.mode = mode
+        let b = skewed.box
+        skewed.box.corners = [b.left + 10.0, b.top, b.left + b.width + 10.0, b.top, b.left + b.width, b.top + b.height, b.left, b.top + b.height]
+        skewed.box.distorted = true
+        skewed.preview()
+        skewed.finish(true)
+        assert(canvas.undo_name() == ("Skew" if mode == mode_skew else "Perspective"))
+        workspace.undo()
     panels.close()

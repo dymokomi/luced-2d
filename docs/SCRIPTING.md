@@ -68,6 +68,15 @@ The full, commented list is `scripting/luced.luc`.
   - `filter(name, settings)`: "Gaussian Blur", "Add Noise", "Motion Blur",
     "Lens Correction", "Bloom", "Tonal Contrast".
 - **Transforms:** `distort`, `skew`, `perspective`, `warp`, `warp_points`, `puppet_warp`.
+- **Vectors:** the Vector panel's elements of the selected layer, by their place in it
+  (0 the bottom):
+  - `add_vector(kind, x, y, width, height)` ("rectangle", "ellipse", "line",
+    "polygon") and `add_path(points, closed)` add an element, on a new vector layer
+    unless the selected layer is one or holds nothing.
+  - `new_path(name)` makes an empty path for the Pen.
+  - `select_vector` (-1 for none), `rename_vector`, `set_vector_visible`,
+    `move_vector`, `duplicate_vector`, `delete_vector`, `vector_selection` (the
+    selection modes above) and `transform_vector`.
 - **Canvas:** `resize_image`, `resize_canvas`, `crop`, `flip_canvas`.
 
 The first action that fails stops the run. What ran before it stays, as one undo step,

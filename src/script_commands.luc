@@ -8,6 +8,7 @@ from actions import Actions
 from canvas import Canvas
 from adjustments import Adjustment, adjustments, filter_table, gradient_map, blur_kind, noise_kind, first_filter_kind
 from script_transforms import is_transform_action, apply_transform
+from script_vectors import is_vector_action, apply_vector
 from alpha_channels import save_selection, load_selection, delete_channel, channel_named
 import transfer
 import ui
@@ -276,6 +277,8 @@ pub class ScriptCommands:
             workspace.flip_canvas(flag(fields, 0))
         elif is_transform_action(action):
             apply_transform(workspace, action, fields)
+        elif is_vector_action(action):
+            apply_vector(workspace, action, fields)
         else:
             error(ui.invalid, f"no such action: {action}")
 

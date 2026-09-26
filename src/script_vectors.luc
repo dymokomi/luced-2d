@@ -1,0 +1,88 @@
+## A script's vector calls (scripting/luced.luc's "Vectors"): elements added
+## to the selected layer, and the Vector panel's edits by an element's place
+## in the layer (0 the bottom), each one undo step within the run's.
+from workspace import Workspace
+from vectors import ensure_vector_layer, element_count, activate, rename_element, show_element, move_element, duplicate_element, delete_element, select_element
+import ui
+
+## The kinds `add_vector` draws, by the canvas's numbers.
+func kind_named(name: str) -> int!:
+    let kinds = ["rectangle", "ellipse", "line", "polygon"]
+    var index = 0
+    while index < kinds.length:
+        if kinds[index] == name.lower():
+            return index
+        index += 1
+    error(ui.invalid, f"no vector kind is called {name}: rectangle, ellipse, line or polygon")
+
+## Whether `action` is one of these.
+pub func is_vector_action(action: str) -> bool:
+    return action in ["add_vector", "add_path", "new_path", "select_vector", "rename_vector", "show_vector", "move_vector", "duplicate_vector",
+                      "delete_vector", "vector_selection", "transform_vector"]
+
+pub func apply_vector(workspace: Workspace, action: str, fields: list[str]) -> unit!:
+    let canvas = workspace.canvas
+    if action == "add_vector":
+        let kind = kind_named(field(fields, 0))
+        let line = kind == 2
+        workspace.as_one("Shape", func () -> unit!:
+            ensure_vector_layer(workspace)
+            canvas.add_shape(workspace.selected_id(), kind, decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4),
+                             workspace.shape_sides, workspace.shape_radius, workspace.shape_fill and not line, workspace.red, workspace.green, workspace.blue,
+                             workspace.shape_stroke or line, workspace.red if line else workspace.back_red, workspace.green if line else workspace.back_green,
+                             workspace.blue if line else workspace.back_blue, workspace.shape_weight if line else workspace.shape_stroke_width))
+    elif action == "add_path":
+        if fields.length < 5:
+            error(ui.invalid, "a path takes two points or more")
+        canvas.clear_points()
+        var at = 1
+        while at + 1 < fields.length:
+            # A corner anchor: both handles on its point.
+            for repeat in [0, 1, 2]:
+                discard(repeat)
+                canvas.add_point(decimal(fields, at), decimal(fields, at + 1))
+            at += 2
+        workspace.as_one("Path", func () -> unit!:
+            ensure_vector_layer(workspace)
+            canvas.add_path(workspace.selected_id(), bool(field(fields, 0)), workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
+                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width))
+    elif action == "new_path":
+        workspace.as_one("New Path", func () -> unit!:
+            ensure_vector_layer(workspace)
+            canvas.add_empty_path(workspace.selected_id(), field(fields, 0)))
+    elif action == "select_vector":
+        let element = number(fields, 0)
+        activate(workspace, -1 if element < 0 else checked(workspace, element))
+    elif action == "rename_vector":
+        rename_element(workspace, checked(workspace, number(fields, 0)), field(fields, 1))
+    elif action == "show_vector":
+        show_element(workspace, checked(workspace, number(fields, 0)), bool(field(fields, 1)))
+    elif action == "move_vector":
+        move_element(workspace, checked(workspace, number(fields, 0)), number(fields, 1))
+    elif action == "duplicate_vector":
+        duplicate_element(workspace, checked(workspace, number(fields, 0)))
+    elif action == "delete_vector":
+        delete_element(workspace, checked(workspace, number(fields, 0)))
+    elif action == "vector_selection":
+        select_element(workspace, checked(workspace, number(fields, 0)), number(fields, 1))
+    else:
+        canvas.transform_element(workspace.selected_id(), checked(workspace, number(fields, 0)), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3),
+                                 decimal(fields, 4), decimal(fields, 5), decimal(fields, 6), decimal(fields, 7))
+    workspace.touch()
+
+## Element `element` of the selected layer, or why there is none.
+func checked(workspace: Workspace, element: int) -> int!:
+    if element < 0 or element >= element_count(workspace):
+        error(ui.invalid, f"the selected layer has no vector element {element}")
+    return element
+
+func field(fields: list[str], index: int) -> str!:
+    if index >= fields.length:
+        error(ui.invalid, f"field {index + 1} is missing")
+    return fields[index]
+
+func number(fields: list[str], index: int) -> int!:
+    return int(float(field(fields, index)))
+
+func decimal(fields: list[str], index: int) -> float!:
+    return float(field(fields, index))

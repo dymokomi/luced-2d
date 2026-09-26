@@ -18,7 +18,7 @@ from mesh_warp import MeshWarp
 from gradient_edit import GradientEdit
 from selection_options import SelectionOptions
 from type_options import TypeOptions
-from transform_box import TransformBox
+from transform_box import TransformBox, mode_free
 from crop_box import CropBox
 
 pub class Workspace:
@@ -1054,6 +1054,9 @@ pub class Workspace:
         if self.transform == none and not self.begin_transform():
             return false
         if let session = self.transform:
+            # A vector element follows only scale, turn and move: its box stays free.
+            if not session.distorts() and mode != mode_free:
+                return false
             session.box.mode = mode
         self.touch()
         return true

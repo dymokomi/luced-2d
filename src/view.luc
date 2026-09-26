@@ -16,6 +16,8 @@ from snapping import Snapper
 from free_transform import box_around
 from shape_tool import ShapeDrag, is_shape
 from pen_tool import PenTool
+from vector_overlay import VectorOverlay
+from vectors import pick_element
 from tool_cursor import cursor_for, draw_magnifier
 import theme
 import math
@@ -71,6 +73,8 @@ pub class CanvasView: Widget:
     ## A shape tool's shape while it is dragged out.
     pub let shape: ShapeDrag
     pub let pen: PenTool
+    ## The active vector element's outline over the canvas.
+    let vector_overlay: VectorOverlay
     ## The Clone Stamp preview's picture and its side in pixels.
     var clone_image: Image? = none
     var clone_side: int = 0
@@ -112,6 +116,8 @@ pub class CanvasView: Widget:
     ## the whole layer, or with a selection its selected pixels (copied with
     ## Alt), shown through a canvas preview.
     var moving: bool = false
+    ## A move drag of the active vector element alone: its outline shows where it goes.
+    var move_element: bool = false
     var move_pixels: bool = false
     var move_copy: bool = false
     var move_shown_x: int = 0
@@ -150,6 +156,7 @@ pub class CanvasView: Widget:
         self.magnetic = MagneticLasso()
         self.shape = ShapeDrag()
         self.pen = PenTool()
+        self.vector_overlay = VectorOverlay()
         self.guides = GuideDrag()
         self.snapper = Snapper()
         self.checker = Image(256, 256)
@@ -197,7 +204,7 @@ pub class CanvasView: Widget:
         let y1 = math.min(size.height, top + float(workspace.height()) * workspace.zoom)
         if x1 > x0 and y1 > y0:
             self.draw_checker(painter, x0, y0, x1, y1)
-            if self.moving and not self.move_pixels:
+            if self.moving and not self.move_pixels and not self.move_element:
                 let dx = (self.move_now_x - self.move_x) / workspace.zoom
                 let dy = (self.move_now_y - self.move_y) / workspace.zoom
                 workspace.canvas.draw_moving(target, whole, workspace.zoom, left, top, workspace.selected_id(), dx, dy)
@@ -236,6 +243,12 @@ pub class CanvasView: Widget:
         if self.pen.drawing and workspace.tool != "pen":
             self.pen.cancel()
         self.pen.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
+        var element_dx = 0.0
+        var element_dy = 0.0
+        if self.moving and self.move_element:
+            element_dx = float(self.move_whole(self.move_now_x - self.move_x))
+            element_dy = float(self.move_whole(self.move_now_y - self.move_y))
+        self.vector_overlay.draw(painter, workspace, element_dx, element_dy, workspace.look.accent, theme.backdrop())
         # The pointer may have gone to another panel without the view hearing of
         # it; the layout's hover says where it is now.
         let pointer_here = self.pointer_inside and (self.box.contains_pointer() or self.painting)
@@ -773,8 +786,15 @@ pub class CanvasView: Widget:
             workspace.pick_layer(self.document_x(event.x), self.document_y(event.y))
             if let changed = self.on_changed:
                 changed()
+        # On a vector layer the press picks the element under it, which then moves
+        # alone; a press on none of them moves the whole layer.
+        let on_element = not workspace.canvas.has_selection() and not event.alt and pick_element(workspace, self.document_x(event.x), self.document_y(event.y), 4.0 / workspace.zoom)
+        if on_element:
+            if let changed = self.on_changed:
+                changed()
         if event.alt and not workspace.canvas.has_selection():
             workspace.duplicate()
+        self.move_element = on_element
         self.moving = true
         self.move_x = event.x
         self.move_y = event.y
@@ -828,7 +848,7 @@ pub class CanvasView: Widget:
         let snapped_y = self.snapper.snap_y(y)
         if let session = self.workspace.transform:
             let moving = session.box.grabbed == grab_move or session.box.grabbed == grab_turn
-            session.box.drag(x if moving else snapped_x, y if moving else snapped_y, shift, alt, distort)
+            session.box.drag(x if moving else snapped_x, y if moving else snapped_y, shift, alt, distort and session.distorts())
             self.workspace.preview_transform()
             return
         if let crop = self.workspace.crop_box:

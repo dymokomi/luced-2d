@@ -1,0 +1,133 @@
+## Vector elements as the Vector panel, the canvas and scripts share them:
+## the selected layer's shapes, pen paths and SVG outlines (luce-image's vector
+## layers), bottom first in the canvas as in the layer stack. One may be
+## active: moves, free transforms, the shape options and the Pen then act on it
+## alone. Every change here is one undo step; which element is active is not.
+from workspace import Workspace
+from transform_box import TransformBox
+from vector_outline import outline_box
+
+## Whether the selected layer holds vector elements.
+pub func vector_layer(workspace: Workspace) -> bool!:
+    let index = workspace.selected
+    return index >= 0 and index < workspace.layer_count() and workspace.canvas.layer_shaped(index)
+
+## How many elements the selected layer holds; 0 for any other layer.
+pub func element_count(workspace: Workspace) -> int!:
+    if not vector_layer(workspace):
+        return 0
+    return workspace.canvas.element_count(workspace.selected)
+
+## The selected layer's active element, or -1.
+pub func active_element(workspace: Workspace) -> int!:
+    if not vector_layer(workspace):
+        return -1
+    return workspace.canvas.active_element(workspace.selected)
+
+## Make element `element` of the selected layer active (-1: none, the whole layer).
+pub func activate(workspace: Workspace, element: int) -> unit!:
+    if not vector_layer(workspace):
+        return
+    workspace.canvas.set_active_element(workspace.selected_id(), element)
+    workspace.touch()
+
+## What an element is, for its row: its kind, or "Outline" for an SVG's.
+pub func kind_label(workspace: Workspace, element: int) -> str!:
+    let canvas = workspace.canvas
+    let index = workspace.selected
+    let kind = int(canvas.element_value(index, element, 0))
+    if kind == 4:
+        if canvas.element_value(index, element, 22) == 0.0:
+            return "Empty path"
+        return "Outline" if canvas.element_value(index, element, 23) > 0.0 else "Path"
+    return ["Rectangle", "Ellipse", "Line", "Polygon"][kind]
+
+## The first "Path N" no element of the selected layer is called yet.
+pub func next_path_name(workspace: Workspace) -> str!:
+    var number = 1
+    while element_named(workspace, f"Path {number}") >= 0:
+        number += 1
+    return f"Path {number}"
+
+## The element of the selected layer called `name`, or -1.
+pub func element_named(workspace: Workspace, name: str) -> int!:
+    var element = 0
+    while element < element_count(workspace):
+        if workspace.canvas.element_name(workspace.selected, element) == name:
+            return element
+        element += 1
+    return -1
+
+## The panel's New Path: an empty path, active, for the Pen to draw into — on
+## the selected layer when it is a vector layer or holds nothing, else on a new
+## layer above it.
+pub func new_path(workspace: Workspace) -> unit!:
+    let canvas = workspace.canvas
+    workspace.as_one("New Path", func () -> unit!:
+        ensure_vector_layer(workspace)
+        canvas.add_empty_path(workspace.selected_id(), next_path_name(workspace)))
+    workspace.touch()
+
+## The selected layer ready to take a new element: kept when it is a vector
+## layer or holds nothing, else a new "Vector" layer above it. Inside the
+## caller's step.
+pub func ensure_vector_layer(workspace: Workspace) -> unit!:
+    if not vector_layer(workspace) and not empty_pixel_layer(workspace):
+        workspace.add_layer()
+        workspace.rename("Vector")
+
+## Whether the selected layer is a pixel layer with nothing painted.
+func empty_pixel_layer(workspace: Workspace) -> bool!:
+    let canvas = workspace.canvas
+    let index = workspace.selected
+    if index < 0 or index >= workspace.layer_count() or canvas.layer_is_group(index) or canvas.layer_adjustment(index) >= 0:
+        return false
+    return not canvas.measure_content(workspace.selected_id())
+
+pub func duplicate_element(workspace: Workspace, element: int) -> unit!:
+    workspace.canvas.duplicate_element(workspace.selected_id(), element)
+    workspace.touch()
+
+pub func delete_element(workspace: Workspace, element: int) -> unit!:
+    workspace.canvas.delete_element(workspace.selected_id(), element)
+    workspace.touch()
+
+pub func rename_element(workspace: Workspace, element: int, name: str) -> unit!:
+    workspace.canvas.rename_element(workspace.selected_id(), element, name)
+    workspace.touch()
+
+pub func show_element(workspace: Workspace, element: int, visible: bool) -> unit!:
+    workspace.canvas.set_element_visible(workspace.selected_id(), element, visible)
+    workspace.touch()
+
+## Element `element` put at place `to` in the layer (0 the bottom).
+pub func move_element(workspace: Workspace, element: int, to: int) -> unit!:
+    let last = element_count(workspace) - 1
+    let place = 0 if to < 0 else (last if to > last else to)
+    if place == element:
+        return
+    workspace.canvas.move_element(workspace.selected_id(), element, place)
+    workspace.touch()
+
+## Make Selection: element `element`'s outline as the selection, combined by
+## `mode` (0 new, 1 add, 2 subtract, 3 intersect).
+pub func select_element(workspace: Workspace, element: int, mode: int) -> unit!:
+    workspace.canvas.select_element(workspace.selected, element, mode)
+    workspace.touch()
+
+## A press at document point (`x`, `y`) on the selected vector layer: the
+## topmost element under it becomes active, or none when none is there.
+## Whether one was found.
+pub func pick_element(workspace: Workspace, x: float, y: float, reach: float) -> bool!:
+    if not vector_layer(workspace):
+        return false
+    let found = workspace.canvas.element_at(workspace.selected, x, y, reach)
+    activate(workspace, found)
+    return found >= 0
+
+## The box a free transform of the active element starts from; none without one.
+pub func element_box(workspace: Workspace) -> TransformBox?!:
+    let element = active_element(workspace)
+    if element < 0:
+        return none
+    return outline_box(workspace.canvas, workspace.selected, element)

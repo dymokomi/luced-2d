@@ -4,8 +4,12 @@
 ## Cancel puts everything back. With a selection only its pixels float, on the
 ## selected layer, and the outline goes with them. With `outline` (Select ›
 ## Transform Selection) only the selection's outline moves, the pixels stay.
+## With a vector layer's element active (vectors.luc) only that element moves:
+## its outline is shown through the box (the view draws it) and it is drawn
+## again, crisp, on Apply; it follows scale, turn and move, not distortion.
 from canvas import Canvas
-from transform_box import TransformBox
+from transform_box import TransformBox, mode_skew, mode_distort, mode_perspective
+from vector_outline import outline_box
 
 pub class FreeTransform:
     pub let box: TransformBox
@@ -15,21 +19,30 @@ pub class FreeTransform:
     pub var sampling: int = 1
     ## Only the selection's outline moves (Select › Transform Selection).
     pub let outline: bool
+    ## The vector element moving alone on the layer, or -1.
+    pub let element: int
     let canvas: Canvas
 
-    pub func init(self, canvas: Canvas, ids: list[int], box: TransformBox, outline: bool = false):
+    pub func init(self, canvas: Canvas, ids: list[int], box: TransformBox, outline: bool = false, element: int = -1):
         self.canvas = canvas
         self.ids = ids
         self.box = box
         self.outline = outline
+        self.element = element
 
     ## Whether the selected pixels float rather than whole layers moving.
     pub func floats(self) -> bool:
-        return not self.outline and self.canvas.transform_floats()
+        return not self.outline and self.element < 0 and self.canvas.transform_floats()
+
+    ## Whether the box may be distorted: an element follows only scale, turn and move.
+    pub func distorts(self) -> bool:
+        return self.element < 0
 
     ## Show the layers (or the outline) as the box has them now.
     pub func preview(self) -> unit!:
         let box = self.box
+        if self.element >= 0:
+            return
         if self.outline:
             if box.distorted:
                 let c = box.corners
@@ -37,15 +50,16 @@ pub class FreeTransform:
             else:
                 self.canvas.preview_selection_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
             return
+        let name = step_name(box)
         if box.distorted:
             let c = box.corners
-            self.canvas.preview_distort(box.left, box.top, box.width, box.height, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])
+            self.canvas.preview_distort(box.left, box.top, box.width, box.height, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], name)
         else:
-            self.canvas.preview_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+            self.canvas.preview_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y(), name)
 
     pub func set_sampling(self, sampling: int) -> unit!:
         self.sampling = sampling
-        if self.outline:
+        if self.outline or self.element >= 0:
             return
         self.canvas.set_transform_sampling(sampling)
         if not self.box.unchanged():
@@ -53,10 +67,26 @@ pub class FreeTransform:
 
     ## Keep what is shown (unless the box is as found) or drop it.
     pub func finish(self, keep: bool) -> unit!:
+        if self.element >= 0:
+            let box = self.box
+            if keep and not box.unchanged() and not box.distorted:
+                self.canvas.transform_element(self.ids[0], self.element, box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+            return
         if self.outline:
             self.canvas.end_selection_transform(keep and not self.box.unchanged())
             return
         self.canvas.end_transform(keep and not self.box.unchanged())
+
+## What History calls the transform `box` makes: Edit › Transform's mode, or
+## Distort for a free box whose corners were pulled (Cmd-drag).
+pub func step_name(box: TransformBox) -> str:
+    if box.mode == mode_skew:
+        return "Skew"
+    if box.mode == mode_perspective:
+        return "Perspective"
+    if box.mode == mode_distort or box.distorted:
+        return "Distort"
+    return "Free Transform"
 
 ## Begin a free transform of layers `ids` (the first the selected one) on
 ## `canvas`: around the selection when there is one, whose pixels then float,
@@ -65,6 +95,8 @@ pub class FreeTransform:
 pub func begin_free_transform(canvas: Canvas, ids: list[int], sampling: int, box: TransformBox? = none) -> FreeTransform?!:
     if ids.length == 0:
         return none
+    if let element = element_session(canvas, ids, box):
+        return element
     var frame = box
     if frame == none:
         frame = box_around(canvas, ids)
@@ -80,6 +112,22 @@ pub func begin_free_transform(canvas: Canvas, ids: list[int], sampling: int, box
     if not found.unchanged():
         session.preview()
     return session
+
+## A transform of the one layer's active vector element alone, when there is
+## no selection to float; none otherwise.
+func element_session(canvas: Canvas, ids: list[int], box: TransformBox?) -> FreeTransform?!:
+    if ids.length != 1 or canvas.has_selection() or box != none:
+        return none
+    var index = 0
+    while index < canvas.layer_count() and canvas.layer_id(index) != ids[0]:
+        index += 1
+    if index == canvas.layer_count() or not canvas.layer_shaped(index):
+        return none
+    let element = canvas.active_element(index)
+    if element < 0:
+        return none
+    let found = outline_box(canvas, index, element) else return none
+    return FreeTransform(canvas, ids, found, element = element)
 
 ## The box a transform starts from: the selection's, or the painted box of
 ## every layer together; none when there is nothing painted.

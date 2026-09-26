@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -145,6 +145,16 @@ SCENES = {
             discard(editor.workspace.canvas.save_selection_channel("Alpha 1"))
             editor.panels.catalog.open("channels")
             editor.workspace.canvas.set_composite_view(false, true, false)
+            editor.workspace.touch()
+            editor.panels.refresh()''',
+    # A vector layer of three elements, the ellipse active: its row and its outline.
+    'vector': '''            editor.workspace.add_layer()
+            let id = editor.workspace.selected_id()
+            editor.workspace.canvas.set_shape(id, 0, 120.0, 80.0, 300.0, 200.0, 5, 12.0, true, 0.8, 0.2, 0.05, true, 0.0, 0.0, 0.0, 4.0)
+            editor.workspace.canvas.add_shape(id, 1, 300.0, 180.0, 260.0, 220.0, 5, 0.0, true, 0.05, 0.2, 0.8, false, 0.0, 0.0, 0.0, 1.0)
+            editor.workspace.canvas.add_shape(id, 3, 480.0, 60.0, 200.0, 200.0, 6, 0.0, false, 0.0, 0.0, 0.0, true, 0.1, 0.6, 0.1, 6.0)
+            editor.workspace.canvas.set_active_element(id, 1)
+            editor.panels.catalog.open("vector")
             editor.workspace.touch()
             editor.panels.refresh()''',
     # Save, undo, redo, save again: the list must show all three.
