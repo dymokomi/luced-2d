@@ -15,7 +15,7 @@ import theme
 import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.107"
+pub let version: str = "0.1.108"
 
 pub class Luce2D:
     pub let app: Application
@@ -70,6 +70,9 @@ pub class Luce2D:
         # What input could not do (a filter on a group, a file that would not
         # open) is said in a prompt rather than ending the run.
         app.set_error_handler(panels.prompts.tell)
+        # The window never waits for tiles coming back from disk: a coarser
+        # level stands in until they arrive (headless runs draw them at once).
+        Canvas.set_progressive_loading(true)
         panels.settings_dialog.apply()
         if store.warning != "":
             panels.status.set_text(store.warning)
