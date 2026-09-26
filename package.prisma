@@ -57,7 +57,7 @@ def package "luced-2d" {
 
     def dependency "luce-gpu" {
         str owner = "dymokomi"
-        str version = "^0.1.13"
+        str version = "^0.1.14"
         str path = "../luce-gpu"
     }
 

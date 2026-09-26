@@ -214,6 +214,8 @@ pub class Panels:
         self.dock_layout.arrange_default()
         kit.bind(actions.reset_layout, func () -> unit!:
             self.dock_layout.reset()
+            # Re-docking panels focuses the last one added; the keys belong to the canvas.
+            self.view.layout().request_focus()
             self.refresh())
         var align_index = 0
         for each in align_modes():
