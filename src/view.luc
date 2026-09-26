@@ -221,9 +221,12 @@ pub class CanvasView: Widget:
             self.draw_sample_ring(painter)
         self.draw_box(painter, size.width, size.height)
         self.shape.draw(painter, workspace, workspace.zoom, left, top, theme.text(), theme.backdrop())
-        if self.pointer_inside and not self.panning and not self.space_held and workspace.tool == "zoom":
+        # The pointer may have gone to another panel without the view hearing of
+        # it; the layout's hover says where it is now.
+        let pointer_here = self.pointer_inside and (self.box.contains_pointer() or self.painting)
+        if pointer_here and not self.panning and not self.space_held and workspace.tool == "zoom":
             draw_magnifier(painter, self.pointer_x, self.pointer_y, self.alt_held, theme.text(), theme.backdrop())
-        if self.pointer_inside and not self.panning and brushed(workspace.tool) and workspace.drag_for == none and workspace.sample_for == none and workspace.range_sample_for == none:
+        if pointer_here and not self.panning and brushed(workspace.tool) and workspace.drag_for == none and workspace.sample_for == none and workspace.range_sample_for == none:
             self.draw_brush_outline(painter)
             if workspace.tool == "clone" and workspace.canvas.has_clone_source():
                 self.draw_clone_preview(painter)
