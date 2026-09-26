@@ -1,0 +1,52 @@
+## The header while Warp is up, as Photoshop's: the Warp style (Custom, or
+## Arc, Arch, Bulge, Flag, Wave, Rise) and its Bend. A style puts the patch's
+## points where it says at once; dragging a point makes it Custom again.
+## Puppet Warp's header is only its hint and Cancel/Apply.
+from ui import HStack, Menu, Command, NumberField
+from workspace import Workspace
+from mesh_warp import warp_styles
+from kit import Kit
+
+pub class WarpControls:
+    pub let row: HStack
+    let style_menu: Menu
+    let bend_field: NumberField
+    let workspace: Workspace
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        var commands: list[Command] = []
+        var index = -1
+        for name in ["Custom"] + warp_styles():
+            let chosen = index
+            let command = Command(name, id = f"warp_style_{index + 1}")
+            kit.bind(command, func () -> unit!:
+                self.choose(chosen))
+            commands.append(command)
+            index += 1
+        self.style_menu = Menu("Custom ▾", commands, font = kit.font)
+        self.bend_field = NumberField(50.0, -100.0, 100.0, 1.0, suffix = "%", font = kit.font, cells = 7.0)
+        kit.keep(self.bend_field.on_change(func (value: float) -> unit!:
+            if let warp = self.workspace.mesh_warp:
+                if warp.style >= 0:
+                    warp.set_style(warp.style, value / 100.0)
+                else:
+                    warp.bend = value / 100.0
+                self.workspace.touch()))
+        self.row = HStack([kit.labelled("Warp", self.style_menu), kit.labelled("Bend", self.bend_field)], spacing = 12.0)
+
+    ## The style and bend now.
+    pub func show(self) -> unit!:
+        let warp = self.workspace.mesh_warp else return
+        self.style_menu.set_text((warp_styles()[warp.style] if warp.style >= 0 else "Custom") + " ▾")
+        self.bend_field.set_value(warp.bend * 100.0)
+
+    ## Custom (-1) leaves the points as they are; a style sets them.
+    func choose(self, style: int) -> unit!:
+        let warp = self.workspace.mesh_warp else return
+        if style < 0:
+            warp.style = -1
+        else:
+            warp.set_style(style, warp.bend)
+        self.workspace.touch()
+        self.show()

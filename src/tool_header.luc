@@ -16,6 +16,7 @@ from transform_controls import TransformControls
 from type_controls import TypeControls
 from selection_controls import SelectionControls
 from crop_controls import CropControls
+from warp_controls import WarpControls
 
 pub class ToolHeader:
     pub let bar: Toolbar
@@ -64,6 +65,7 @@ pub class ToolHeader:
     pub let type_controls: TypeControls
     pub let selection_controls: SelectionControls
     pub let crop_controls: CropControls
+    pub let warp_controls: WarpControls
     pub let controls_box: Checkbox
     ## Brush…: the window opens Brush Settings; a preset picked: the window
     ## refreshes; Apply or Cancel: the window finishes the box, keeping it or not.
@@ -114,6 +116,7 @@ pub class ToolHeader:
         self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
         self.selection_controls = SelectionControls(workspace, kit, self.wand_controls)
         self.crop_controls = CropControls(workspace, kit)
+        self.warp_controls = WarpControls(workspace, kit)
         self.type_controls = TypeControls(workspace, kit)
         self.text_controls = self.type_controls.row
         self.auto_select_box = kit.checkbox("Auto-Select", func () -> unit!:
@@ -194,7 +197,7 @@ pub class ToolHeader:
         for field in [self.weight_field, self.stroke_width_field, self.radius_field]:
             field.set_decimals(1)
         self.bar = Toolbar([self.title, self.smear_menu, self.tone_row, self.paint_row, self.radius_row, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
-                            self.transform_controls.row, Spacer(), self.box_controls],
+                            self.transform_controls.row, self.warp_controls.row, Spacer(), self.box_controls],
                            font = font, inset = 10.0, gap = 6.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
@@ -262,9 +265,14 @@ pub class ToolHeader:
         let tool = workspace.tool
         let active = tool_by_id(tool)
         let on_mask = workspace.canvas.editing_mask() and (tool == "brush" or tool == "eraser")
-        # A free transform takes over the header until it is applied or cancelled.
-        let transforming = workspace.transform != none
-        self.title.set_text("Transform" if transforming else (active.title + " on mask" if on_mask else active.title))
+        # A free transform or a warp takes over the header until it is applied or cancelled.
+        var over = ""
+        if workspace.transform != none:
+            over = "Transform"
+        elif let warp = workspace.mesh_warp:
+            over = "Puppet Warp" if warp.puppet else "Warp"
+        let transforming = over != ""
+        self.title.set_text(over if transforming else (active.title + " on mask" if on_mask else active.title))
         let retouching = tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
         self.brush_controls.layout().set_visible(not transforming and (tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or retouching))
         self.tone_row.layout().set_visible(not transforming and (tool == "dodge" or tool == "burn"))
@@ -298,8 +306,10 @@ pub class ToolHeader:
             self.type_controls.show()
         self.move_controls.layout().set_visible(not transforming and tool == "move")
         self.controls_box.set_checked(workspace.show_transform_controls)
-        self.transform_controls.row.layout().set_visible(transforming)
+        self.transform_controls.row.layout().set_visible(workspace.transform != none)
         self.transform_controls.show()
+        self.warp_controls.row.layout().set_visible(over == "Warp")
+        self.warp_controls.show()
         self.box_controls.layout().set_visible(transforming or workspace.crop_box != none or workspace.gradient != none)
         self.auto_select_box.set_checked(workspace.auto_select)
         self.size_field.set_value(workspace.brush.diameter)
@@ -308,7 +318,11 @@ pub class ToolHeader:
         self.flow_field.set_value(workspace.brush.flow * 100.0)
         self.spacing_field.set_value((workspace.smudge_spacing if self.smudging() else workspace.brush.spacing) * 100.0)
         self.preset_menu.set_text(workspace.brush.preset + " ▾")
-        if transforming:
-            self.hint.set_text(f"Corner scales (shift frees) · side stretches · alt about the middle · {ui.primary_key_name().lower()}-corner distorts · alt-drag inside copies · outside turns · Enter applies")
+        if over == "Warp":
+            self.hint.set_text("Drag a corner, a handle or inside the mesh to bend it · a style bends it at once · Enter applies · Esc cancels")
+        elif over == "Puppet Warp":
+            self.hint.set_text("Click to pin · drag a pin to bend about the others · alt-click takes a pin away · Enter applies · Esc cancels")
+        elif transforming:
+            self.hint.set_text(f"Corner scales (shift frees) · side stretches · alt about the middle · {ui.primary_key_name().lower()}-corner distorts, +shift side skews, +alt+shift corner is perspective · alt-drag inside copies · outside turns · Enter applies")
         else:
             self.hint.set_text("Click the canvas to sample a color · X swaps · D resets" if sampling else active.hint)

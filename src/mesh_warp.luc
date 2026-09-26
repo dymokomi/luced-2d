@@ -1,0 +1,295 @@
+## Edit › Transform › Warp and Edit › Puppet Warp under way on the canvas.
+##
+## Warp, as Photoshop's: a 4 by 4 Bézier patch over the layer's painted box.
+## The corners are anchors that take their two handles along; a handle bends
+## its side; a drag inside pulls the patch so the point grabbed follows the
+## pointer. The header's styles (Arc, Arch, Bulge, Flag, Wave, Rise) set the
+## points by a bend. Puppet Warp: a click on the layer puts a pin, a drag
+## moves it and the picture bends about the others, Alt-click takes one away.
+##
+## The canvas (luce-image) holds the patch or pins and shows the layer bent
+## once a frame at the view's level; Enter keeps it as one undo step.
+from canvas import Canvas
+from ui import Painter, Point
+from gpu import Rect, Color
+import math
+import ui
+
+## Warp's header styles, in luce-image's order (`set_warp_preset`'s kinds).
+pub func warp_styles() -> list[str]:
+    return ["Arc", "Arch", "Bulge", "Flag", "Wave", "Rise"]
+
+## A drag inside the patch rather than on a point.
+let grab_inside: int = 16
+
+pub class MeshWarp:
+    ## Puppet Warp's pins rather than Warp's patch.
+    pub let puppet: bool
+    let canvas: Canvas
+    ## Warp's sixteen points (x, y pairs, row by row) as the canvas has them.
+    pub var points: list[float]
+    ## Warp's header style (-1 custom, else a `warp_styles` index) and bend (-1..1).
+    pub var style: int = -1
+    pub var bend: float = 0.5
+    ## What the drag holds: a point (0..15), a pin, `grab_inside`, or -1.
+    pub var grabbed: int = -1
+    ## The pin last put or dragged, drawn filled.
+    pub var chosen: int = -1
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+    var from_points: list[float]
+    ## Where inside the patch (u, v) a drag took hold.
+    var grab_u: float = 0.0
+    var grab_v: float = 0.0
+    ## A pin's offset from the pointer, so it does not jump to it.
+    var pin_dx: float = 0.0
+    var pin_dy: float = 0.0
+
+    pub func init(self, canvas: Canvas, puppet: bool) -> unit!:
+        self.canvas = canvas
+        self.puppet = puppet
+        self.points = []
+        self.from_points = []
+        if not puppet:
+            self.read_points()
+
+    ## The patch as the canvas has it (after a style).
+    func read_points(self) -> unit!:
+        var points: list[float] = []
+        var index = 0
+        while index < 16:
+            points.append(self.canvas.warp_point_x(index))
+            points.append(self.canvas.warp_point_y(index))
+            index += 1
+        self.points = points
+
+    func write_points(self) -> unit!:
+        var index = 0
+        while index < 16:
+            self.canvas.set_warp_point(index, self.points[index * 2], self.points[index * 2 + 1])
+            index += 1
+
+    ## Warp's style `style` (-1: as found) at `bend`.
+    pub func set_style(self, style: int, bend: float) -> unit!:
+        self.style = style
+        self.bend = bend
+        self.canvas.set_warp_preset(style, bend)
+        self.read_points()
+
+    ## Warp's sixteen points set at once (x, y pairs, row by row).
+    pub func set_points(self, points: list[float]) -> unit!:
+        if points.length != 32:
+            error(ui.invalid, "a warp takes sixteen points, x and y each")
+        self.points = points.copy()
+        self.style = -1
+        self.write_points()
+
+    # -- Pressing and dragging.
+
+    ## A press at document point (`x`, `y`), handles `reach` pixels about; with
+    ## `alt` a pin under it goes. False when it takes nothing.
+    pub func press(self, x: float, y: float, reach: float, alt: bool) -> bool!:
+        self.start_x = x
+        self.start_y = y
+        if self.puppet:
+            let hit = self.canvas.puppet_hit(x, y, reach)
+            if alt:
+                if hit >= 0:
+                    self.canvas.puppet_remove_pin(hit)
+                    self.chosen = -1
+                return hit >= 0
+            self.grabbed = hit if hit >= 0 else self.canvas.puppet_add_pin(x, y)
+            self.chosen = self.grabbed
+            self.pin_dx = self.canvas.puppet_pin_x(self.grabbed) - x
+            self.pin_dy = self.canvas.puppet_pin_y(self.grabbed) - y
+            return true
+        self.from_points = self.points.copy()
+        # Corners before handles, as they sit on top.
+        for index in [0, 3, 15, 12, 1, 2, 4, 8, 7, 11, 13, 14]:
+            if math.abs(x - self.points[index * 2]) <= reach and math.abs(y - self.points[index * 2 + 1]) <= reach:
+                self.grabbed = index
+                return true
+        if self.find_inside(x, y, reach):
+            self.grabbed = grab_inside
+            return true
+        return false
+
+    ## The pointer at (`x`, `y`) with the press held.
+    pub func drag(self, x: float, y: float) -> unit!:
+        let grab = self.grabbed
+        if grab < 0:
+            return
+        if self.puppet:
+            self.canvas.puppet_move_pin(grab, x + self.pin_dx, y + self.pin_dy)
+            return
+        let move_x = x - self.start_x
+        let move_y = y - self.start_y
+        var moved = self.from_points.copy()
+        if grab == grab_inside:
+            # The least change of all sixteen that takes the grabbed point along.
+            var weights: list[float] = []
+            var total = 0.0
+            var index = 0
+            while index < 16:
+                let w = bernstein(index % 4, self.grab_u) * bernstein(index // 4, self.grab_v)
+                weights.append(w)
+                total += w * w
+                index += 1
+            index = 0
+            while index < 16:
+                moved[index * 2] += weights[index] / total * move_x
+                moved[index * 2 + 1] += weights[index] / total * move_y
+                index += 1
+        else:
+            for index in carried(grab):
+                moved[index * 2] += move_x
+                moved[index * 2 + 1] += move_y
+        self.points = moved
+        self.style = -1
+        self.write_points()
+
+    pub func release(self):
+        self.grabbed = -1
+
+    ## Whether (`x`, `y`) is on the patch, `reach` about; if so where (u, v).
+    func find_inside(self, x: float, y: float, reach: float) -> bool:
+        # The nearest of a grid of samples, then the nearest about it, finer.
+        var best_u = 0.5
+        var best_v = 0.5
+        var span = 0.5
+        var best = -1.0
+        var pass_count = 0
+        while pass_count < 4:
+            var j = -8
+            while j <= 8:
+                var i = -8
+                while i <= 8:
+                    let u = math.clamp(best_u + span * float(i) / 8.0, 0.0, 1.0)
+                    let v = math.clamp(best_v + span * float(j) / 8.0, 0.0, 1.0)
+                    let d = math.hypot(self.patch_x(u, v) - x, self.patch_y(u, v) - y)
+                    if best < 0.0 or d < best:
+                        best = d
+                        self.grab_u = u
+                        self.grab_v = v
+                    i += 1
+                j += 1
+            best_u = self.grab_u
+            best_v = self.grab_v
+            span = span / 8.0
+            pass_count += 1
+        return best <= reach
+
+    ## Where the patch takes (u, v).
+    func patch_x(self, u: float, v: float) -> float:
+        return self.patch(u, v, 0)
+
+    func patch_y(self, u: float, v: float) -> float:
+        return self.patch(u, v, 1)
+
+    func patch(self, u: float, v: float, axis: int) -> float:
+        var sum = 0.0
+        var index = 0
+        while index < 16:
+            sum += bernstein(index % 4, u) * bernstein(index // 4, v) * self.points[index * 2 + axis]
+            index += 1
+        return sum
+
+    ## Keep the warp as one undo step, or leave the layer as it was.
+    pub func finish(self, keep: bool) -> unit!:
+        self.canvas.end_mesh_warp(keep)
+
+    # -- Drawing.
+
+    ## The patch's grid and points, or the pins and their mesh, at screen
+    ## size, for a view at `zoom` with the document's corner at (`left`, `top`).
+    pub func draw(self, painter: Painter, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        if self.puppet:
+            self.draw_puppet(painter, zoom, left, top, ink, backing)
+            return
+        # The grid: the patch at thirds each way, as curves.
+        var line = 0
+        while line < 4:
+            let at = float(line) / 3.0
+            var previous_u = Point(self.patch_x(at, 0.0) * zoom + left, self.patch_y(at, 0.0) * zoom + top)
+            var previous_v = Point(self.patch_x(0.0, at) * zoom + left, self.patch_y(0.0, at) * zoom + top)
+            var step = 1
+            while step <= 24:
+                let t = float(step) / 24.0
+                let next_u = Point(self.patch_x(at, t) * zoom + left, self.patch_y(at, t) * zoom + top)
+                let next_v = Point(self.patch_x(t, at) * zoom + left, self.patch_y(t, at) * zoom + top)
+                painter.line(previous_u, next_u, 1.0, ink)
+                painter.line(previous_v, next_v, 1.0, ink)
+                previous_u = next_u
+                previous_v = next_v
+                step += 1
+            line += 1
+        # Each corner's handles on lines from it.
+        for pair in [[0, 1], [0, 4], [3, 2], [3, 7], [15, 14], [15, 11], [12, 13], [12, 8]]:
+            let a = Point(self.points[pair[0] * 2] * zoom + left, self.points[pair[0] * 2 + 1] * zoom + top)
+            let b = Point(self.points[pair[1] * 2] * zoom + left, self.points[pair[1] * 2 + 1] * zoom + top)
+            painter.line(a, b, 1.0, backing)
+            painter.rounded_rectangle(Rect(math.floor(b.x) - 4.0, math.floor(b.y) - 4.0, 9.0, 9.0), ink, 4.5)
+            painter.rounded_rectangle(Rect(math.floor(b.x) - 3.0, math.floor(b.y) - 3.0, 7.0, 7.0), backing, 3.5)
+        for index in [0, 3, 15, 12]:
+            let x = math.floor(self.points[index * 2] * zoom + left)
+            let y = math.floor(self.points[index * 2 + 1] * zoom + top)
+            painter.rectangle(Rect(x - 4.0, y - 4.0, 9.0, 9.0), ink)
+            painter.rectangle(Rect(x - 3.0, y - 3.0, 7.0, 7.0), backing)
+
+    func draw_puppet(self, painter: Painter, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        let canvas = self.canvas
+        let box_left = canvas.mesh_box_left()
+        let box_top = canvas.mesh_box_top()
+        let width = canvas.mesh_box_right() - box_left
+        let height = canvas.mesh_box_bottom() - box_top
+        # The mesh, coarser than the canvas's, as the pins bend it.
+        let across = 12
+        let down = int(math.clamp(math.ceil(12.0 * height / math.max(width, 1.0)), 2.0, 24.0))
+        var row = 0
+        while row <= down:
+            var column = 0
+            while column <= across:
+                let sx = box_left + width * float(column) / float(across)
+                let sy = box_top + height * float(row) / float(down)
+                let here = Point(canvas.puppet_place_x(sx, sy) * zoom + left, canvas.puppet_place_y(sx, sy) * zoom + top)
+                if column < across:
+                    let nx = box_left + width * float(column + 1) / float(across)
+                    painter.line(here, Point(canvas.puppet_place_x(nx, sy) * zoom + left, canvas.puppet_place_y(nx, sy) * zoom + top), 1.0, backing)
+                if row < down:
+                    let ny = box_top + height * float(row + 1) / float(down)
+                    painter.line(here, Point(canvas.puppet_place_x(sx, ny) * zoom + left, canvas.puppet_place_y(sx, ny) * zoom + top), 1.0, backing)
+                column += 1
+            row += 1
+        var pin = 0
+        while pin < canvas.puppet_pin_count():
+            let x = math.floor(canvas.puppet_pin_x(pin) * zoom + left)
+            let y = math.floor(canvas.puppet_pin_y(pin) * zoom + top)
+            painter.rounded_rectangle(Rect(x - 5.0, y - 5.0, 11.0, 11.0), backing, 5.5)
+            painter.rounded_rectangle(Rect(x - 4.0, y - 4.0, 9.0, 9.0), ink, 4.5)
+            if pin != self.chosen:
+                painter.rounded_rectangle(Rect(x - 2.0, y - 2.0, 5.0, 5.0), backing, 2.5)
+            pin += 1
+
+## The points a Warp drag on point `grab` moves: a corner takes its handles
+## and the inside point beside it along; any other point moves alone.
+func carried(grab: int) -> list[int]:
+    if grab == 0:
+        return [0, 1, 4, 5]
+    if grab == 3:
+        return [3, 2, 7, 6]
+    if grab == 12:
+        return [12, 13, 8, 9]
+    if grab == 15:
+        return [15, 14, 11, 10]
+    return [grab]
+
+## The cubic Bernstein weight `index` (0..3) at `t`.
+func bernstein(index: int, t: float) -> float:
+    let s = 1.0 - t
+    if index == 0:
+        return s * s * s
+    if index == 1:
+        return 3.0 * s * s * t
+    if index == 2:
+        return 3.0 * s * t * t
+    return t * t * t

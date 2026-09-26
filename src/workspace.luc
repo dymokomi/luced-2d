@@ -14,6 +14,7 @@ import transfer
 import paths
 from units import pixels_per
 from free_transform import FreeTransform, begin_free_transform, box_around
+from mesh_warp import MeshWarp
 from gradient_edit import GradientEdit
 from selection_options import SelectionOptions
 from type_options import TypeOptions
@@ -66,6 +67,8 @@ pub class Workspace:
     pub var gradient_transparent: bool = false
     ## The free transform under way on the canvas, if any, and how the next resamples.
     pub var transform: FreeTransform? = none
+    ## Edit › Transform › Warp or Edit › Puppet Warp under way, if any.
+    pub var mesh_warp: MeshWarp? = none
     ## A gradient placed and still live, its ends movable (`begin_gradient`).
     pub var gradient: GradientEdit? = none
     pub var transform_sampling: int = 1
@@ -1055,6 +1058,42 @@ pub class Workspace:
     pub func finish_transform(self, keep: bool) -> unit!:
         if let session = self.transform:
             self.transform = none
+            session.finish(keep)
+            self.touch()
+
+    ## Edit › Transform › Skew, Distort or Perspective (transform_box's
+    ## `mode_*`): the free-transform box, up already or put up now, with plain
+    ## handle drags doing that. False as `begin_transform`.
+    pub func begin_transform_mode(self, mode: int) -> bool!:
+        if self.transform == none and not self.begin_transform():
+            return false
+        if let session = self.transform:
+            session.box.mode = mode
+        self.touch()
+        return true
+
+    ## Edit › Transform › Warp (or, `puppet`, Edit › Puppet Warp) of the selected
+    ## layer's painted pixels (the puppet's mesh at `density`: 0 fewer, 1 normal,
+    ## 2 more points), shown live until `finish_mesh_warp`. False when something
+    ## else is under way.
+    pub func begin_mesh_warp(self, puppet: bool, density: int = 1) -> bool!:
+        if self.mesh_warp != none or self.transform != none or self.previewing():
+            return false
+        if puppet:
+            self.canvas.begin_puppet(self.selected_id(), density)
+        else:
+            self.canvas.begin_warp(self.selected_id())
+        let session = MeshWarp(self.canvas, puppet) catch failure:
+            self.canvas.end_mesh_warp(false)
+            error(failure.code, failure.message)
+        self.mesh_warp = session
+        self.touch()
+        return true
+
+    ## Keep the warp as one undo step (Enter), or drop it (Esc).
+    pub func finish_mesh_warp(self, keep: bool) -> unit!:
+        if let session = self.mesh_warp:
+            self.mesh_warp = none
             session.finish(keep)
             self.touch()
 

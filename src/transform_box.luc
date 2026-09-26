@@ -3,7 +3,11 @@
 ## frees it), a side stretches one way, Alt scales about the middle; inside the
 ## box moves (Shift keeps to an axis), outside it turns (Shift in 15° steps).
 ## Cmd-dragging a corner distorts: from then on the four corners move freely,
-## in perspective, as Compositor's Distort.
+## in perspective, as Compositor's Distort. Cmd+Shift on a side skews (the side
+## slides along itself); Cmd+Alt+Shift on a corner is perspective (the corner
+## and its neighbour along the edge dragged move oppositely). Edit › Transform
+## › Skew, Distort and Perspective put the box in that mode, so a plain drag
+## on a handle does it.
 ##
 ## The box keeps the canvas's model: the box as found, scaled by (`scale_x`,
 ## `scale_y`) and turned `angle` degrees about its middle, then moved by
@@ -18,6 +22,12 @@ pub let grab_none: int = -1
 ## 0..7 are the handles, clockwise from the top-left corner; then these.
 pub let grab_move: int = 8
 pub let grab_turn: int = 9
+
+## What dragging a handle does: Free Transform's scale, or the corner modes.
+pub let mode_free: int = 0
+pub let mode_skew: int = 1
+pub let mode_distort: int = 2
+pub let mode_perspective: int = 3
 
 pub class TransformBox:
     ## The box as found, and its middle: the transform's pivot.
@@ -34,6 +44,8 @@ pub class TransformBox:
     ## bottom-left) are the transform, and the numbers above no longer are.
     pub var distorted: bool = false
     pub var corners: list[float]
+    ## What a plain drag on a handle does (Edit › Transform's modes).
+    pub var mode: int = mode_free
     ## The drag under way: what was grabbed, where, and the model as it was.
     pub var grabbed: int = -1
     var start_x: float = 0.0
@@ -224,15 +236,22 @@ pub class TransformBox:
         self.grabbed = grab_none
 
     ## The pointer at document point (`x`, `y`) with the modifiers held;
-    ## `distort` (Cmd) on a corner starts distorting.
+    ## `distort` (Cmd) picks a corner mode by the handle and the other keys.
     pub func drag(self, x: float, y: float, shift: bool, alt: bool, distort: bool = false):
         let grab = self.grabbed
-        if distort and not self.distorted and grab >= 0 and grab < 8 and grab % 2 == 0:
+        let handle = grab >= 0 and grab < 8
+        var how = self.mode
+        if distort and handle:
+            if grab % 2 == 0:
+                how = mode_perspective if shift and alt else mode_distort
+            else:
+                how = mode_skew if shift else mode_distort
+        if how != mode_free and handle and not self.distorted:
             self.corners = self.corner_points()
             self.from_corners = self.corners.copy()
             self.distorted = true
         if self.distorted:
-            self.drag_corners(x, y, shift)
+            self.drag_corners(x, y, shift, how)
             return
         if grab == grab_move:
             var move_x = x - self.start_x
@@ -255,10 +274,13 @@ pub class TransformBox:
         elif grab >= 0 and grab < 8:
             self.stretch(grab, x, y, shift, alt)
 
-    ## Distorted: a corner goes where it is dragged, a side takes its two
-    ## corners along, inside moves them all, outside turns them about their
-    ## middle. A drag that would fold the shape over is not taken.
-    func drag_corners(self, x: float, y: float, shift: bool):
+    ## Distorted: inside moves the corners, outside turns them about their
+    ## middle, and a handle moves as `how` says (`mode_*`): distort takes a
+    ## corner (or a side's two) where it is dragged; skew slides a side along
+    ## itself, or a corner along its edge nearest the drag; perspective moves a
+    ## corner along that edge and its neighbour on it the other way. A drag that
+    ## would fold the shape over is not taken.
+    func drag_corners(self, x: float, y: float, shift: bool, how: int):
         let grab = self.grabbed
         var move_x = x - self.start_x
         var move_y = y - self.start_y
@@ -287,6 +309,30 @@ pub class TransformBox:
                 moved[at] = cx + px * math.cos(swept) - py * math.sin(swept)
                 moved[at + 1] = cy + px * math.sin(swept) + py * math.cos(swept)
                 at += 2
+        elif grab >= 0 and grab < 8 and grab % 2 == 1 and (how == mode_skew or how == mode_perspective):
+            # A side slides along itself, both its corners together.
+            let a = grab - 1
+            let b = (grab + 1) % 8
+            let along = slide(moved, a, b, move_x, move_y)
+            moved[a] += along[0]
+            moved[a + 1] += along[1]
+            moved[b] += along[0]
+            moved[b + 1] += along[1]
+        elif grab >= 0 and grab < 8 and grab % 2 == 0 and (how == mode_skew or how == mode_perspective):
+            # A corner along the edge nearest the drag's way (to its neighbour
+            # before or after it round the box).
+            let before = (grab + 6) % 8
+            let after = (grab + 2) % 8
+            let to_before = slide(moved, grab, before, move_x, move_y)
+            let to_after = slide(moved, grab, after, move_x, move_y)
+            let pick_after = to_after[0] * to_after[0] + to_after[1] * to_after[1] >= to_before[0] * to_before[0] + to_before[1] * to_before[1]
+            let along = to_after if pick_after else to_before
+            moved[grab] += along[0]
+            moved[grab + 1] += along[1]
+            if how == mode_perspective:
+                let other = after if pick_after else before
+                moved[other] -= along[0]
+                moved[other + 1] -= along[1]
         elif grab >= 0 and grab < 8:
             # A corner is itself; a side is the corners either side of it.
             var index = grab - 1 if grab % 2 == 1 else grab
@@ -366,6 +412,17 @@ pub class TransformBox:
             painter.rectangle(Rect(math.floor(hx) - 4.0, math.floor(hy) - 4.0, 9.0, 9.0), ink)
             painter.rectangle(Rect(math.floor(hx) - 3.0, math.floor(hy) - 3.0, 7.0, 7.0), backing)
             index += 1
+
+## The part of the move (`move_x`, `move_y`) along the edge from corner
+## `first` to corner `second` (indices into `corners`' x, y pairs).
+func slide(corners: list[float], first: int, second: int, move_x: float, move_y: float) -> list[float]:
+    let ex = corners[second] - corners[first]
+    let ey = corners[second + 1] - corners[first + 1]
+    let length = ex * ex + ey * ey
+    if length <= 0.0:
+        return [0.0, 0.0]
+    let t = (move_x * ex + move_y * ey) / length
+    return [ex * t, ey * t]
 
 func keep_off_zero(scale: float) -> float:
     if math.abs(scale) >= 0.001:

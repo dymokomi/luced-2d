@@ -65,6 +65,7 @@ The full, commented list is `scripting/luced.luc`.
     their defaults.
   - `filter(name, settings)`: "Gaussian Blur", "Add Noise", "Motion Blur",
     "Lens Correction", "Bloom", "Tonal Contrast".
+- **Transforms:** `distort`, `skew`, `perspective`, `warp`, `warp_points`, `puppet_warp`.
 - **Canvas:** `resize_image`, `resize_canvas`, `crop`, `flip_canvas`.
 
 The first action that fails stops the run. What ran before it stays, as one undo step,

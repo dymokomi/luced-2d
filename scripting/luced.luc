@@ -270,6 +270,50 @@ pub func filter(name: str, settings: list[float]? = none):
         fields.append(str(value))
     send("filter", fields)
 
+# mark: Transforms ===========================================================================
+
+## Edit › Transform › Distort in one go: the selected layer's painted box (the
+## selection's, whose pixels then float) with its corners moved to `corners`,
+## x and y pairs clockwise from the top-left, in perspective.
+pub func distort(corners: list[float]):
+    var fields: list[str] = []
+    for value in corners:
+        fields.append(str(value))
+    send("distort", fields)
+
+## Edit › Transform › Skew in one go: the box slanted `horizontal` degrees
+## (its top to the right) and `vertical` degrees (its right side down) about its middle.
+pub func skew(horizontal: float, vertical: float = 0.0):
+    send("skew", [str(horizontal), str(vertical)])
+
+## Edit › Transform › Perspective in one go: the box's top narrowed by
+## `amount` of its width (negative widens it), or with `vertical` its right
+## side by that much of its height; the opposite side stays.
+pub func perspective(amount: float, vertical: bool = false):
+    send("perspective", [str(amount), str(vertical)])
+
+## Edit › Transform › Warp in one go with a style — "Arc", "Arch", "Bulge",
+## "Flag", "Wave" or "Rise" — bent by `bend` (-1..1).
+pub func warp(style: str = "Arc", bend: float = 0.5):
+    send("warp", [style, str(bend)])
+
+## Edit › Transform › Warp by its patch: sixteen x, y points row by row over
+## the layer's painted box, as the Warp mesh has them (corners 0, 3, 12, 15).
+pub func warp_points(points: list[float]):
+    var fields: list[str] = []
+    for value in points:
+        fields.append(str(value))
+    send("warp_points", fields)
+
+## Edit › Puppet Warp in one go: a pin for each four of `pins` — put at the
+## first x, y and dragged to the second — the picture bent about them;
+## `density` 0 fewer, 1 normal, 2 more mesh points.
+pub func puppet_warp(pins: list[float], density: int = 1):
+    var fields = [str(density)]
+    for value in pins:
+        fields.append(str(value))
+    send("puppet_warp", fields)
+
 # mark: The canvas ===========================================================================
 
 ## Scale the whole document to `width` by `height` pixels.

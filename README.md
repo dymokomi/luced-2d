@@ -22,7 +22,10 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   that re-renders only the tiles an edit touches.
 - Move tool (`V`): drag with a live preview, or nudge, the layer's pixels;
   Edit › Free Transform (cmd-T) scales, rotates and moves a layer with a live
-  preview; Filter › Gaussian Blur.
+  preview; Edit › Transform › Skew, Distort and Perspective (or cmd-,
+  cmd-shift- and cmd-alt-shift-drag on the box's handles); Edit › Transform ›
+  Warp, a Bézier mesh with Arc, Arch, Bulge, Flag, Wave and Rise styles; Edit ›
+  Puppet Warp, pins that bend the layer about each other; Filter › Gaussian Blur.
 - Image › Crop to Selection, Canvas Size, Image Size; Layer › Duplicate, Move
   Up/Down, Merge Down (cmd-J, cmd-], cmd-[, cmd-E).
 - Per-pixel selections: rectangular marquee (`M`), elliptical marquee,
