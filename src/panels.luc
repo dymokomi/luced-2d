@@ -46,6 +46,9 @@ from units import unit_ids
 
 pub class Panels:
     pub let body: VStack
+    ## Frames until the canvas takes the keys back (0: nothing pending). Docking
+    ## focuses the panels it adds, after this frame, so the canvas asks later.
+    var focus_canvas_in: int = 0
     pub let view: CanvasView
     ## The open documents' tabs across the top of the viewport.
     pub let tabs: DocumentTabs
@@ -215,7 +218,7 @@ pub class Panels:
         kit.bind(actions.reset_layout, func () -> unit!:
             self.dock_layout.reset()
             # Re-docking panels focuses the last one added; the keys belong to the canvas.
-            self.view.layout().request_focus()
+            self.focus_canvas_in = 2
             self.refresh())
         var align_index = 0
         for each in align_modes():
@@ -741,3 +744,11 @@ pub class Panels:
             self.workspace.end_preview(false) catch failure:
                 discard(failure)
         self.kit.close()
+
+    ## Each frame: give the canvas the keys once a pending focus is due.
+    pub func settle_focus(self) -> unit!:
+        if self.focus_canvas_in <= 0:
+            return
+        self.focus_canvas_in -= 1
+        if self.focus_canvas_in == 0:
+            self.view.layout().request_focus()
