@@ -4,7 +4,6 @@
 ## exported, which leaves the document's file alone (Compositor's split). A
 ## tab with unsaved changes asks Save / Don't Save / Cancel before it closes,
 ## and quitting asks about each one in turn.
-import ui
 from ui import Application, ConfirmDialog
 from workspace import Workspace
 from prompts import Prompts
@@ -33,8 +32,7 @@ pub class DocumentFiles:
 
     pub func open_document(self) -> unit!:
         if let app = self.app:
-            # Off macOS an .l2d (a folder) cannot be picked itself; its document.prisma opens it.
-            let what = "Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF, EXR or SVG picture" if ui.on_macos() else "Open a .psd, PNG, JPEG, TIFF, EXR or SVG picture, or an .l2d's document.prisma"
+            let what = "Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF, EXR or SVG picture"
             let chosen = app.open_file(what) catch failure:
                 self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.path, "Open")
                 return

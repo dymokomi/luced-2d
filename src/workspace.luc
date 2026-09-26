@@ -272,13 +272,9 @@ pub class Workspace:
     pub func create(self, width: int, height: int) -> unit!:
         self.adopt(Document(blank_canvas(width, height), ""))
 
-    ## Open the picture at `path` in its own tab. A package's manifest (how
-    ## Windows' dialog picks an .l2d folder) stands for the package.
+    ## Open the picture or document at `path` in its own tab.
     pub func open(self, path: str) -> unit!:
-        let manifest = "document.prisma"
-        var document_path = path
-        if path.ends_with(manifest) and path.length > manifest.length + 5 and path[..<(path.length - manifest.length - 1)].ends_with(".l2d"):
-            document_path = path[..<(path.length - manifest.length - 1)]
+        let document_path = path
         # A document already open is shown, not opened a second time.
         var index = 0
         while index < self.documents.length:
