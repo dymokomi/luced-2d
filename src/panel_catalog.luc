@@ -1,0 +1,216 @@
+## Every panel a user can open (panel_list.luc), made the first time it is
+## wanted and kept after it is closed, so it opens again as it was left. The
+## dock's "+" asks for one through `on_add`; the Window menu opens or closes
+## one; the window refreshes the open ones. A new panel with no place given
+## goes beside the Layers and Properties column, or right of the viewport
+## when that column is gone.
+from ui import DStack, Panel, DockPosition, DockRequest
+from workspace import Workspace
+from kit import Kit
+from view import CanvasView
+from panel_list import panel_entries
+from layers_panel import LayersPanel
+from properties import Properties
+from brush_settings import BrushSettings
+from color_panel import ColorPanel
+from swatches_panel import SwatchesPanel
+from brushes_panel import BrushesPanel
+from history_panel import HistoryPanel
+from navigator_panel import NavigatorPanel
+from info_panel import InfoPanel
+from settings_panel import SettingsDialog
+
+pub class PanelCatalog:
+    let dock: DStack
+    let viewport: Panel
+    let workspace: Workspace
+    let kit: Kit
+    let view: CanvasView
+    let settings: SettingsDialog
+    ## The panels the window builds itself.
+    let layers: LayersPanel
+    let properties: Properties
+    let brush: BrushSettings
+    ## The ones made here on first use.
+    pub var color: ColorPanel? = none
+    pub var swatches: SwatchesPanel? = none
+    pub var brushes: BrushesPanel? = none
+    pub var history: HistoryPanel? = none
+    pub var navigator: NavigatorPanel? = none
+    pub var info: InfoPanel? = none
+    ## After a panel changes the document or the colors, the window refreshes;
+    ## a Color swatch clicked twice opens the picker; a brush preset picked
+    ## picks the Brush tool.
+    pub var refreshed: func() -> unit!? = none
+    pub var open_picker: func(bool) -> unit!? = none
+    pub var brush_chosen: func() -> unit!? = none
+
+    pub func init(self, dock: DStack, viewport: Panel, workspace: Workspace, kit: Kit, view: CanvasView, settings: SettingsDialog,
+                  layers: LayersPanel, properties: Properties, brush: BrushSettings) -> unit!:
+        self.dock = dock
+        self.viewport = viewport
+        self.workspace = workspace
+        self.kit = kit
+        self.view = view
+        self.settings = settings
+        self.layers = layers
+        self.properties = properties
+        self.brush = brush
+        var ids: list[str] = []
+        var titles: list[str] = []
+        for entry in panel_entries():
+            ids.append(entry.id)
+            titles.append(entry.title)
+        dock.set_catalog(ids, titles)
+        kit.keep(dock.on_add(self.requested))
+
+    ## The dock's "+" picked panel `request.id()`, not open: make it and put it
+    ## where the request says.
+    func requested(self, request: DockRequest) -> unit!:
+        let panel = self.panel(request.id()) else return
+        self.dock.add(panel, request.panel, request.position)
+        self.show(request.id())
+
+    ## Whether panel `id` is open, docked or floating.
+    pub func is_open(self, id: str) -> bool!:
+        return self.dock.find(id) != none
+
+    ## Window › a panel: open it where it goes, or bring it forward — or, when
+    ## it is already showing, close it.
+    pub func toggle(self, id: str) -> unit!:
+        let panel = self.panel(id) else return
+        if self.dock.contains(panel):
+            self.dock.remove(panel)
+            return
+        self.open(id)
+
+    ## Open panel `id` (or select it when it is open): Brush Settings floats the
+    ## first time, as it always has; the others dock beside the panel column.
+    pub func open(self, id: str) -> unit!:
+        let panel = self.panel(id) else return
+        if self.dock.contains(panel):
+            self.dock.select(panel)
+            return
+        self.show(id)
+        if id == "brush_settings":
+            self.dock.float(panel)
+            return
+        for neighbor in [self.properties.panel, self.layers.panel]:
+            if self.dock.contains(neighbor):
+                self.dock.add(panel, neighbor, DockPosition.tab)
+                return
+        self.dock.add(panel, self.viewport, DockPosition.right)
+
+    ## Panel `id`, made now if it never was; none for an id not in the list.
+    pub func panel(self, id: str) -> Panel?!:
+        if id == "layers":
+            return self.layers.panel
+        if id == "properties":
+            return self.properties.panel
+        if id == "brush_settings":
+            return self.brush.panel
+        if id == "color":
+            return self.color_panel().panel
+        if id == "swatches":
+            return self.swatches_panel().panel
+        if id == "brushes":
+            return self.brushes_panel().panel
+        if id == "history":
+            return self.history_panel().panel
+        if id == "navigator":
+            return self.navigator_panel().panel
+        if id == "info":
+            return self.info_panel().panel
+        return none
+
+    func color_panel(self) -> ColorPanel!:
+        if let made = self.color:
+            return made
+        let made = ColorPanel(self.workspace, self.kit)
+        made.refreshed = self.refresh
+        made.open_picker = func (background: bool) -> unit!:
+            if let open = self.open_picker:
+                open(background)
+        self.color = made
+        return made
+
+    func swatches_panel(self) -> SwatchesPanel!:
+        if let made = self.swatches:
+            return made
+        let made = SwatchesPanel(self.workspace, self.kit, self.settings.settings.swatches)
+        made.saved = self.settings.remember_swatches
+        made.refreshed = self.refresh
+        self.swatches = made
+        return made
+
+    func brushes_panel(self) -> BrushesPanel!:
+        if let made = self.brushes:
+            return made
+        let made = BrushesPanel(self.workspace, self.kit, self.settings.settings.brush_presets)
+        made.keep = self.settings.remember_brushes
+        made.chosen = func () -> unit!:
+            if let chose = self.brush_chosen:
+                chose()
+        self.brushes = made
+        return made
+
+    func history_panel(self) -> HistoryPanel!:
+        if let made = self.history:
+            return made
+        let made = HistoryPanel(self.workspace, self.kit)
+        made.refreshed = self.refresh
+        self.history = made
+        return made
+
+    func navigator_panel(self) -> NavigatorPanel!:
+        if let made = self.navigator:
+            return made
+        let made = NavigatorPanel(self.workspace, self.view, self.kit)
+        made.refreshed = self.refresh
+        self.navigator = made
+        return made
+
+    func info_panel(self) -> InfoPanel!:
+        if let made = self.info:
+            return made
+        let made = InfoPanel(self.workspace, self.view, self.kit)
+        self.info = made
+        return made
+
+    func refresh(self) -> unit!:
+        if let refresh = self.refreshed:
+            refresh()
+
+    ## Bring panel `id` up to date with the document before it shows.
+    func show(self, id: str) -> unit!:
+        if id == "brush_settings":
+            self.brush.show()
+        elif id == "properties":
+            self.properties.show()
+        elif id == "layers":
+            self.layers.show()
+        self.show_made()
+
+    ## The window refreshed: the open panels made here show the document now.
+    pub func show_made(self) -> unit!:
+        if let made = self.color:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.history:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.navigator:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.swatches:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.info:
+            if self.dock.contains(made.panel):
+                made.show()
+
+    ## Once a frame, for the panels that follow the pointer.
+    pub func poll(self) -> unit!:
+        if let made = self.info:
+            if self.dock.contains(made.panel):
+                made.poll()

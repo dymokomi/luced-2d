@@ -9,6 +9,10 @@ import paths
 import ui
 from units import is_unit
 
+## The Swatches panel's colors before any are added or deleted: grays, then
+## Photoshop's usual pure and pastel hues.
+pub let default_swatches: str = "#000000 #404040 #808080 #c0c0c0 #ffffff #ff0000 #ff8000 #ffff00 #00ff00 #00ffff #0000ff #8000ff #ff00ff #800000 #804000 #808000 #008000 #008080 #000080 #400080 #ff8080 #ffc080 #ffff80 #80ff80 #80ffff #8080ff #ff80ff"
+
 pub class Settings:
     pub var canvas_width: int = 1280
     pub var canvas_height: int = 800
@@ -20,6 +24,10 @@ pub class Settings:
     pub var units: str = "px"
     ## The colors the picker committed most recently, newest first, as sRGB hex separated by spaces.
     pub var recent: str = ""
+    ## The Swatches panel's colors, in order, as sRGB hex separated by spaces.
+    pub var swatches: str = default_swatches
+    ## The Brushes panel's saved presets (brushes_panel.luc's text form).
+    pub var brush_presets: str = ""
     ## How much memory each document's undo history may take, in gigabytes.
     pub var undo_memory: float = 4.0
     pub var shortcuts: map[str, str]
@@ -33,6 +41,8 @@ pub class Settings:
         self.accent = table.string("theme.accent", "#e7a03f")
         self.control_radius = table.number("theme.control_radius", 5.0, 0.0, 16.0)
         self.recent = table.string("colors.recent", "")
+        self.swatches = table.string("colors.swatches", default_swatches)
+        self.brush_presets = table.string("brushes.presets", "")
         self.undo_memory = table.number("memory.undo", 4.0, 0.25, 256.0)
         self.rulers = table.boolean("view.rulers", true)
         self.grid = table.boolean("view.grid", false)
@@ -52,6 +62,8 @@ pub class Settings:
         other.accent = self.accent
         other.control_radius = self.control_radius
         other.recent = self.recent
+        other.swatches = self.swatches
+        other.brush_presets = self.brush_presets
         other.undo_memory = self.undo_memory
         other.rulers = self.rulers
         other.grid = self.grid
@@ -71,7 +83,8 @@ pub class Settings:
         let grid = "true" if self.grid else "false"
         text = text + f"[view]\nrulers = {rulers}\ngrid = {grid}\n# Rulers and sizes in \"px\", \"mm\" or \"in\".\nunits = \"{self.units}\"\n\n"
         text = text + f"[memory]\n# Gigabytes each document's undo history may hold; the oldest steps go first.\nundo = {self.undo_memory}\n\n"
-        text = text + f"[colors]\n# The picker's recent colors, newest first.\nrecent = \"{self.recent}\"\n\n"
+        text = text + f"[colors]\n# The picker's recent colors, newest first.\nrecent = \"{self.recent}\"\n# The Swatches panel's colors, in order.\nswatches = \"{self.swatches}\"\n\n"
+        text = text + f"[brushes]\n# Brush presets saved in the Brushes panel: name, size, hardness, opacity, flow, spacing, angle, roundness; one per ';'.\npresets = \"{self.brush_presets}\"\n\n"
         text = text + "# Shortcuts by command id; a chord like \"cmd+shift+s\", \"f5\" or \"none\". Unlisted commands keep their defaults.\n[shortcuts]\n"
         for (id, chord) in self.shortcuts:
             text = text + f"{id} = \"{chord}\"\n"

@@ -103,6 +103,15 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   prompt; and the adjust dialog — a floating card centred over the canvas, as
   Compositor's panels, holding the open adjustment's, blur's, transform's or
   layer style's rows (label, slider, number field) with Cancel/Apply.
+- `src/panel_list.luc`, `src/panel_catalog.luc`: every panel a user can open —
+  Layers, Properties, History, Color, Swatches, Brushes, Brush Settings,
+  Navigator and Info — offered by each dock group's "+" (as a tab, or beside
+  the group after Split Right/Down) and by the Window menu, which ticks the
+  open ones. A panel is made on first use and kept when closed. Each lives in
+  its own file (`color_panel.luc`, `swatches_panel.luc`, `brushes_panel.luc`,
+  `history_panel.luc`, `navigator_panel.luc`, `info_panel.luc`); swatches and
+  saved brush presets are kept in settings.toml. File › Exit (Quit, ⌘Q, on
+  macOS) asks about unsaved documents first.
 - `src/layers.luc`: the layer list with thumbnails, masks and clipping.
 - `src/theme.luc`: the look, eleusis-layout's greys and orange.
 - `src/app.luc`: application composition.

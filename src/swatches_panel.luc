@@ -1,0 +1,122 @@
+## The Swatches panel, as Photoshop's: a grid of saved colors. A click sets the
+## foreground color, Alt-click the background; right-click deletes a swatch;
+## the "+" below adds the foreground color. The colors are kept in
+## settings.toml as sRGB hex, so they outlast the run.
+from ui import Panel, Widget, Layout, Size, Constraints, Event, Painter, Shelf, Spacer, ScrollView
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+from workspace import Workspace
+from kit import Kit
+from hex_color import parse_hex, hex_of_linear, linear_of_hex
+import theme
+import math
+
+pub class SwatchesPanel:
+    pub let panel: Panel
+    let grid: SwatchGrid
+    let workspace: Workspace
+    ## Where the colors are kept after each change, as the settings' text.
+    pub var saved: func(str) -> unit!? = none
+    pub var refreshed: func() -> unit!? = none
+
+    ## The panel over `text`, the settings' colors ("#rrggbb" separated by spaces).
+    pub func init(self, workspace: Workspace, kit: Kit, text: str) -> unit!:
+        self.workspace = workspace
+        self.grid = SwatchGrid(workspace)
+        self.grid.colors = swatches_of(text)
+        self.grid.on_changed = self.changed
+        let shelf = Shelf([kit.shelf_button("plus", self.add_foreground), Spacer()])
+        self.panel = Panel("Swatches", ScrollView(self.grid), minimum = Size(200.0, 100.0), footer = shelf, id = "swatches")
+
+    ## "+": the foreground color becomes the last swatch, unless it is one already.
+    func add_foreground(self) -> unit!:
+        let hex = hex_of_linear(self.workspace.red, self.workspace.green, self.workspace.blue)
+        if hex in self.grid.colors:
+            return
+        self.grid.colors.append(hex)
+        self.changed()
+
+    ## A swatch added, deleted or picked: keep the list and show the colors.
+    func changed(self) -> unit!:
+        self.grid.layout().invalidate()
+        if let save = self.saved:
+            save(self.grid.colors.join(" "))
+        if let refresh = self.refreshed:
+            refresh()
+
+    pub func show(self) -> unit!:
+        self.grid.layout().invalidate()
+
+## The colors in the settings' text, the malformed ones left out.
+pub func swatches_of(text: str) -> list[str]:
+    var colors: list[str] = []
+    for item in text.split(" "):
+        if parse_hex(item) != none:
+            colors.append(item.lower())
+    return colors
+
+## The chips themselves: rows as many as the width holds, 18-point squares.
+class SwatchGrid: Widget:
+    let box: Layout
+    let workspace: Workspace
+    pub var colors: list[str]
+    pub var on_changed: func() -> unit!? = none
+    let cell: float = 18.0
+    let gap: float = 3.0
+
+    pub func init(self, workspace: Workspace) -> unit!:
+        self.workspace = workspace
+        self.colors = []
+        self.box = Layout()
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_interactive(true)
+        self.box.set_flex()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    ## How many chips a row of `width` holds.
+    func per_row(self, width: float) -> int:
+        return int(math.max(1.0, math.floor((width - 8.0 + self.gap) / (self.cell + self.gap))))
+
+    pub func measure(self, available: Constraints) -> Size!:
+        let width = math.max(available.width if available.width < 16384.0 else 200.0, 60.0)
+        let rows = (self.colors.length + self.per_row(width) - 1) // self.per_row(width)
+        return Size(width, 8.0 + float(rows) * (self.cell + self.gap))
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let across = self.per_row(target.size().width)
+        var index = 0
+        for hex in self.colors:
+            let x = 4.0 + float(index % across) * (self.cell + self.gap)
+            let y = 4.0 + float(index // across) * (self.cell + self.gap)
+            let linear = linear_of_hex(hex) else [0.0, 0.0, 0.0]
+            painter.rectangle(Rect(x, y, self.cell, self.cell), theme.border())
+            painter.rectangle(Rect(x + 1.0, y + 1.0, self.cell - 2.0, self.cell - 2.0), Color(linear[0], linear[1], linear[2]))
+            index += 1
+        painter.close()
+
+    ## The swatch under (`x`, `y`), or -1.
+    func swatch_at(self, x: float, y: float) -> int:
+        let across = self.per_row(self.box.bounds().width)
+        let column = int(math.floor((x - 4.0) / (self.cell + self.gap)))
+        let row = int(math.floor((y - 4.0) / (self.cell + self.gap)))
+        if column < 0 or row < 0 or column >= across:
+            return -1
+        let index = row * across + column
+        return index if index < self.colors.length else -1
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind != EventKind.pointer_down or not event.inside:
+            return
+        let index = self.swatch_at(event.x, event.y)
+        if index < 0:
+            return
+        if event.button == 1:
+            discard(self.colors.remove_at(index))
+        else:
+            let linear = linear_of_hex(self.colors[index]) else return
+            self.workspace.set_palette(linear[0], linear[1], linear[2], event.alt)
+        if let changed = self.on_changed:
+            changed()

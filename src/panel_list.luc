@@ -1,0 +1,18 @@
+## The panels a user can open, as Photoshop's Window menu lists them: each
+## one's id and title. The dock's "+" menu and the Window menu both offer
+## them; panel_catalog.luc makes and places them. The viewport is not one:
+## it is always there.
+
+pub class PanelEntry:
+    pub let id: str
+    pub let title: str
+
+    pub func init(self, id: str, title: str):
+        self.id = id
+        self.title = title
+
+## Every panel, in the menus' order.
+pub func panel_entries() -> list[PanelEntry]!:
+    return [PanelEntry("layers", "Layers"), PanelEntry("properties", "Properties"), PanelEntry("history", "History"),
+            PanelEntry("color", "Color"), PanelEntry("swatches", "Swatches"), PanelEntry("brushes", "Brushes"),
+            PanelEntry("brush_settings", "Brush Settings"), PanelEntry("navigator", "Navigator"), PanelEntry("info", "Info")]

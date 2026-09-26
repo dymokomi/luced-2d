@@ -241,6 +241,15 @@ pub class SettingsDialog:
         self.apply()
 
     ## The picker committed `hex`: it heads the history, which is saved at once.
+    ## Keep the Swatches panel's colors, or the Brushes panel's presets, in the file.
+    pub func remember_swatches(self, text: str) -> unit!:
+        self.settings.swatches = text
+        self.store.save(self.settings)
+
+    pub func remember_brushes(self, text: str) -> unit!:
+        self.settings.brush_presets = text
+        self.store.save(self.settings)
+
     pub func remember(self, hex: str) -> unit!:
         var recent: list[str] = [hex]
         for other in self.workspace.recent:

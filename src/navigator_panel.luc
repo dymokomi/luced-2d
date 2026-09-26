@@ -1,0 +1,133 @@
+## The Navigator panel, as Photoshop's: the whole document small, with a box
+## where the view is. Click or drag in it to move the view there; the slider
+## zooms about the view's middle. The thumbnail is the canvas drawn at a small
+## zoom, which composites from the layers' coarse pyramid levels, so even a
+## 360-megapixel document costs a thumbnail's worth of work.
+from ui import Panel, Widget, Layout, Size, Constraints, Event, Painter, Slider, Text, VStack, HStack
+from gpu import RenderTarget, Rect
+from input import EventKind, Cursor
+from workspace import Workspace
+from view import CanvasView
+from kit import Kit, outline
+import theme
+import math
+
+pub class NavigatorPanel:
+    pub let panel: Panel
+    let thumbnail: Thumbnail
+    let zoom_slider: Slider
+    let percent: Text
+    let workspace: Workspace
+    let view: CanvasView
+    pub var refreshed: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, view: CanvasView, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.view = view
+        self.thumbnail = Thumbnail(workspace, view)
+        self.thumbnail.moved = self.moved
+        # The zoom in powers of two, 1/64 to 64, as the workspace allows.
+        self.zoom_slider = Slider("", -6.0, 6.0, 0.0, 0.0, font = kit.font, show_value = false)
+        self.zoom_slider.layout().set_flex(horizontal = 1.0, vertical = 0.0)
+        kit.keep(self.zoom_slider.on_change(self.zoom_to))
+        self.percent = Text("100%", font = kit.font, muted = true)
+        self.percent.layout().set_limits(Size(52.0, 0.0), Size(52.0, 16384.0))
+        let content = VStack([self.thumbnail, HStack([self.percent, self.zoom_slider], spacing = 6.0)], spacing = 6.0, padding = 6.0)
+        self.panel = Panel("Navigator", content, minimum = Size(200.0, 160.0), id = "navigator")
+
+    ## The slider at `power`: zoom 2^power about the view's middle.
+    func zoom_to(self, power: float) -> unit!:
+        let bounds = self.view.layout().bounds()
+        let wanted = math.pow(2.0, power)
+        self.workspace.zoom_about(wanted / self.workspace.zoom, bounds.width * 0.5, bounds.height * 0.5)
+        self.percent.set_text(f"{int(self.workspace.zoom * 100.0 + 0.5)}%")
+        self.moved()
+
+    func moved(self) -> unit!:
+        self.thumbnail.layout().invalidate()
+        if let refresh = self.refreshed:
+            refresh()
+
+    ## Show the zoom and the view's box as they are now.
+    pub func show(self) -> unit!:
+        self.zoom_slider.set_value(math.max(-6.0, math.min(6.0, math.log2(self.workspace.zoom))))
+        self.percent.set_text(f"{int(self.workspace.zoom * 100.0 + 0.5)}%")
+        self.thumbnail.layout().invalidate()
+
+## The document fitted into the panel, and the view's box over it.
+class Thumbnail: Widget:
+    let box: Layout
+    let workspace: Workspace
+    let view: CanvasView
+    var dragging: bool = false
+    pub var moved: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, view: CanvasView) -> unit!:
+        self.workspace = workspace
+        self.view = view
+        self.box = Layout()
+        self.box.set_interactive(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_flex()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(180.0, 120.0)
+
+    ## The zoom that fits the document in a `width` by `height` box, and where
+    ## its top-left corner goes then.
+    func fit(self, width: float, height: float) -> list[float]:
+        let w = float(self.workspace.width())
+        let h = float(self.workspace.height())
+        let zoom = math.min((width - 8.0) / w, (height - 8.0) / h)
+        return [zoom, (width - w * zoom) * 0.5, (height - h * zoom) * 0.5]
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let size = target.size()
+        let painter = Painter(target)
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.backdrop())
+        let placed = self.fit(size.width, size.height)
+        let zoom = placed[0]
+        if zoom <= 0.0:
+            painter.close()
+            return
+        let w = float(self.workspace.width()) * zoom
+        let h = float(self.workspace.height()) * zoom
+        painter.rectangle(Rect(placed[1], placed[2], w, h), theme.checker_light())
+        painter.close()
+        self.workspace.canvas.draw(target, Rect(0.0, 0.0, size.width, size.height), zoom, placed[1], placed[2])
+        # The view's box: what the canvas view shows, in document pixels, scaled.
+        let view = self.view.layout().bounds()
+        let scale = zoom / self.workspace.zoom
+        let over = Painter(target)
+        let x = placed[1] - self.workspace.offset_x * scale
+        let y = placed[2] - self.workspace.offset_y * scale
+        outline(over, Rect(x, y, view.width * scale, view.height * scale), self.workspace.look.accent)
+        over.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            self.dragging = true
+            self.center_on(event.x, event.y)
+        elif event.kind == EventKind.pointer_moved and self.dragging:
+            self.center_on(event.x, event.y)
+        elif event.kind == EventKind.pointer_up:
+            self.dragging = false
+
+    ## Put the view's middle on thumbnail point (`x`, `y`).
+    func center_on(self, x: float, y: float) -> unit!:
+        let bounds = self.box.bounds()
+        let placed = self.fit(bounds.width, bounds.height)
+        if placed[0] <= 0.0:
+            return
+        let document_x = (x - placed[1]) / placed[0]
+        let document_y = (y - placed[2]) / placed[0]
+        let view = self.view.layout().bounds()
+        self.workspace.offset_x = view.width * 0.5 - document_x * self.workspace.zoom
+        self.workspace.offset_y = view.height * 0.5 - document_y * self.workspace.zoom
+        self.workspace.fitted = true
+        self.workspace.touch()
+        if let moved = self.moved:
+            moved()

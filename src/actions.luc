@@ -9,6 +9,8 @@ from workspace import Workspace
 from canvas import Canvas
 from tools import tools
 from units import unit_ids, unit_label
+from panel_list import panel_entries
+import platform
 
 pub class Actions:
     # File
@@ -23,6 +25,10 @@ pub class Actions:
     pub let script_editor: Command
     pub let next_document: Command
     pub let previous_document: Command
+    ## File › Exit (Quit on macOS): asks about unsaved documents, then ends the run.
+    pub let exit_app: Command
+    ## Window › each panel, ticked while it is open (panel_list.luc's order).
+    pub let windows: list[Command]
     # Edit
     pub let undo: Command
     pub let redo: Command
@@ -233,6 +239,10 @@ pub class Actions:
         for tool in tools():
             let shortcut = Shortcut() if tool.key == Key.unknown else Shortcut(tool.key, shift = tool.shift)
             self.tools.append(Command(tool.name, shortcut, id = tool.id))
+        self.exit_app = Command("Quit" if platform.macos else "Exit", Shortcut(Key.q, primary = true), id = "exit")
+        self.windows = []
+        for entry in panel_entries():
+            self.windows.append(Command(entry.title, id = "window_" + entry.id))
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
@@ -243,7 +253,7 @@ pub class Actions:
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.toggle_preview, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend] + self.adjustments + self.filters + self.adjustment_layers + self.blends + self.tools + self.units
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend, self.exit_app] + self.windows + self.adjustments + self.filters + self.adjustment_layers + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:
