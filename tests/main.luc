@@ -474,10 +474,15 @@ func unsaved_changes(arguments: list[str]) -> unit!:
     assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0) and panels.files.can_quit())
     # Nothing past the canvas: Reveal All has nothing to do.
     assert(not workspace.reveal_all())
-    # The saved file opens in a tab of its own, its two layers back.
+    # The saved file opens in a tab of its own, its two layers back, and the
+    # layer selected when it was saved selected again.
+    workspace.select(0)
     workspace.save(folder + "/copy")
     workspace.open(folder + "/unsaved.l2d")
     assert(workspace.document_count() == 2 and workspace.layer_count() == 2 and workspace.path == folder + "/unsaved.l2d")
+    assert(workspace.selected == 1)
+    workspace.open(folder + "/copy.l2d")
+    assert(workspace.selected == 0)
     panels.close()
 
 ## The Layers panel's operations: titles fitted to the selection, groups

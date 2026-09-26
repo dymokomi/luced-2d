@@ -283,7 +283,13 @@ pub class Workspace:
                 self.switch_document(index)
                 return
             index += 1
-        self.adopt(Document(Canvas.open(path), document_path))
+        let opened = Canvas.open(path)
+        let document = Document(opened, document_path)
+        # The layer selected when it was saved, if the file says.
+        let chosen = opened.selected_layer()
+        if chosen >= 0 and chosen < opened.layer_count():
+            document.selected = chosen
+        self.adopt(document)
 
     ## Save the document to `path` as an `.l2d` package, which keeps every
     ## layer (a name without the extension gets it); it is the document's file
@@ -291,6 +297,8 @@ pub class Workspace:
     ## never overwrites a picture with the flattened document by surprise.
     pub func save(self, path: str) -> unit!:
         let package = path if path.lower().ends_with(".l2d") else path + ".l2d"
+        # The selected layer goes with it, to be selected again on opening.
+        self.canvas.set_selected_layer(self.selected)
         self.canvas.save_package(package)
         self.path = package
         self.touch()
