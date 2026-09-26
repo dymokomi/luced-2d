@@ -1515,6 +1515,47 @@ func magnetic_lassoing() -> unit!:
     commands.apply(parse_line("@l2d magnetic_lasso\t10\t10\t57\t0\t150\t5\t150\t195\t295\t195\t295\t5") else trap("line"))
     assert(workspace.canvas.undo_name() == "Magnetic Lasso" and workspace.canvas.selected_at(220, 100) == 255)
     panels.close()
+    selecting_and_masking()
+
+## Select and Mask from its command: the view's box previewed, the views, OK
+## as one step, Cancel putting it back, and the same from a script.
+func selecting_and_masking() -> unit!:
+    let workspace = Workspace(300, 200)
+    let font = Font()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, font)
+    workspace.canvas.bind_headless()
+    workspace.canvas.select_rectangle(100, 50, 100, 100)
+    actions.update(workspace)
+    assert(actions.select_mask.is_enabled())
+    actions.select_mask.trigger()
+    let dialog = panels.select_mask
+    assert(workspace.canvas.refining())
+    dialog.feather.set_value(6.0)
+    dialog.changed(6.0)
+    dialog.poll()
+    assert(workspace.canvas.selected_at(98, 100) > 0 and workspace.canvas.selected_at(98, 100) < 255)
+    workspace.set_refine_view(3)
+    let view = CanvasView(workspace)
+    view.layout().set_size(300.0, 200.0)
+    let frame = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
+    view.draw(frame.target())
+    frame.close()
+    assert(workspace.visible_box().length == 4)
+    dialog.apply()
+    assert(not workspace.canvas.refining() and workspace.canvas.undo_name() == "Select and Mask" and workspace.canvas.selected_at(98, 100) > 0)
+    workspace.undo()
+    assert(workspace.canvas.selected_at(98, 100) == 0)
+    actions.select_mask.trigger()
+    dialog.smooth.set_value(10.0)
+    dialog.changed(10.0)
+    dialog.poll()
+    dialog.cancel()
+    assert(not workspace.canvas.refining() and workspace.canvas.selected_at(100, 50) == 255)
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d select_and_mask\t0\t0\t4\t0\t0") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Select and Mask" and workspace.canvas.selected_at(98, 100) > 0)
+    panels.close()
 
 ## Set the foreground color, as the palette does.
 func foreground(workspace: Workspace, red: float, green: float, blue: float):

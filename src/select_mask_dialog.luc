@@ -1,0 +1,115 @@
+## Select › Select and Mask…, as Photoshop's (Refine Edge): a floating dialog
+## refining the selection's edge — edge detection Radius (the picture decides
+## the edge within it), Smooth, Feather, Contrast and Shift Edge — with the
+## selection shown as marching ants, a red overlay, or the picture on black or
+## on white. Each change refines only the cells the view shows, so a slider
+## drag keeps up on any document; OK refines all of it as one step, Cancel
+## puts the selection back.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command
+from workspace import Workspace
+from kit import Kit, SliderField
+
+func view_names() -> list[str]:
+    return ["Marching Ants", "Overlay", "On Black", "On White"]
+
+pub class SelectMaskDialog:
+    pub let dialog: Dialog
+    let view_menu: Menu
+    pub let radius: SliderField
+    pub let smooth: SliderField
+    pub let feather: SliderField
+    pub let contrast: SliderField
+    pub let shift: SliderField
+    ## Whether the canvas has the dialog's session open.
+    var open_session: bool = false
+    ## A change waiting to be shown on the next frame (a slider drag's latest).
+    var pending: bool = false
+    pub var applied: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    let workspace: Workspace
+    let kit: Kit
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        let font = kit.font
+        var views: list[Command] = []
+        var index = 0
+        while index < view_names().length:
+            let chosen = index
+            let command = Command(view_names()[index], id = f"refine_view_{index}")
+            kit.bind(command, func () -> unit!:
+                self.choose_view(chosen))
+            views.append(command)
+            index += 1
+        self.view_menu = Menu("Marching Ants ▾", views, font = font)
+        self.radius = kit.slider_field(0.0, 250.0, 0.0, 0, " px", self.changed)
+        self.smooth = kit.slider_field(0.0, 100.0, 0.0, 0, "", self.changed)
+        self.feather = kit.slider_field(0.0, 250.0, 0.0, 0, " px", self.changed)
+        self.contrast = kit.slider_field(0.0, 100.0, 0.0, 0, "%", self.changed)
+        self.shift = kit.slider_field(-100.0, 100.0, 0.0, 0, "%", self.changed)
+        self.dialog = Dialog([Text("Select and Mask", font = font), kit.dialog_row("View", self.view_menu, 110.0),
+                              Text("Edge Detection", font = font, muted = true), kit.dialog_row("Radius", self.radius.row, 110.0),
+                              Text("Global Refinements", font = font, muted = true), kit.dialog_row("Smooth", self.smooth.row, 110.0),
+                              kit.dialog_row("Feather", self.feather.row, 110.0), kit.dialog_row("Contrast", self.contrast.row, 110.0),
+                              kit.dialog_row("Shift Edge", self.shift.row, 110.0),
+                              HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 460.0, spacing = 10.0)
+        kit.dialog_keys(self.dialog, self.cancel, self.apply)
+
+    pub func open(self) -> unit!:
+        if not self.kit.may_open(self.dialog):
+            return
+        self.workspace.begin_refine() catch failure:
+            self.fail(f"Select and Mask: {failure.message}")
+            return
+        self.open_session = true
+        self.choose_view(0)
+        self.dialog.open()
+
+    func choose_view(self, view: int) -> unit!:
+        self.view_menu.set_text(view_names()[view] + " ▾")
+        if self.open_session:
+            self.workspace.set_refine_view(view)
+        self.refresh()
+
+    pub func changed(self, value: float) -> unit!:
+        discard(value)
+        self.pending = self.open_session
+        # Wake the loop for the frame that shows it.
+        self.view_menu.layout().invalidate()
+
+    ## Called every frame: show the latest change, if one waits.
+    pub func poll(self) -> unit!:
+        if not self.pending:
+            return
+        self.pending = false
+        if not self.open_session:
+            return
+        self.workspace.preview_refine(int(self.radius.value()), int(self.smooth.value()), int(self.feather.value()), self.contrast.value(), self.shift.value()) catch failure:
+            self.fail(f"Select and Mask: {failure.message}")
+            return
+        self.refresh()
+
+    pub func cancel(self) -> unit!:
+        self.close(false)
+
+    pub func apply(self) -> unit!:
+        self.close(true)
+
+    ## Close the dialog: OK (`keep`) refines the whole selection as one step.
+    func close(self, keep: bool) -> unit!:
+        self.dialog.hide()
+        self.pending = false
+        if self.open_session:
+            self.open_session = false
+            self.workspace.finish_refine(keep, int(self.radius.value()), int(self.smooth.value()), int(self.feather.value()), self.contrast.value(), self.shift.value()) catch failure:
+                self.fail(f"Select and Mask: {failure.message}")
+        self.refresh()
+
+    func refresh(self) -> unit!:
+        if let done = self.applied:
+            done()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)

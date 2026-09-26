@@ -59,6 +59,7 @@ pub class Luce2D:
             panels.adjust.poll()
             panels.rail.poll()
             panels.color_range.poll()
+            panels.select_mask.poll()
             panels.catalog.poll()
             panels.dock_layout.poll()
             panels.settle_focus()

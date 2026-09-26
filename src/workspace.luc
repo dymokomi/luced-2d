@@ -31,6 +31,9 @@ pub class Workspace:
     pub var zoom: float = 1.0
     pub var offset_x: float = 0.0
     pub var offset_y: float = 0.0
+    ## The view's size when last drawn, points: what `visible_box` covers.
+    pub var view_width: float = 0.0
+    pub var view_height: float = 0.0
     pub var selected: int = 0
     pub var revision: int = 0
     pub var fitted: bool = false
@@ -525,6 +528,37 @@ pub class Workspace:
 
     ## The Color Range dialog: opened, showing a choice live (out of history),
     ## and closed — OK selecting it as one step, Cancel putting back the selection.
+    ## The document pixels the view shows, left, top, width and height; the
+    ## whole document before the view is drawn.
+    pub func visible_box(self) -> list[int]:
+        if self.view_width <= 0.0 or self.view_height <= 0.0:
+            return [0, 0, self.width(), self.height()]
+        let left = int(math.max(0.0, math.floor(-self.offset_x / self.zoom)))
+        let top = int(math.max(0.0, math.floor(-self.offset_y / self.zoom)))
+        let right = int(math.min(float(self.width()), math.ceil((self.view_width - self.offset_x) / self.zoom)))
+        let bottom = int(math.min(float(self.height()), math.ceil((self.view_height - self.offset_y) / self.zoom)))
+        return [left, top, int(math.max(1.0, float(right - left))), int(math.max(1.0, float(bottom - top)))]
+
+    ## Select and Mask (select_mask_dialog.luc): begun, previewed over what
+    ## the view shows, and kept or put back.
+    pub func begin_refine(self) -> unit!:
+        self.canvas.begin_refine()
+        self.touch()
+
+    pub func preview_refine(self, radius: int, smooth: int, feather: int, contrast: float, shift: float) -> unit!:
+        let box = self.visible_box()
+        self.canvas.preview_refine(radius, smooth, feather, contrast, shift, box[0], box[1], box[2], box[3])
+        self.touch()
+
+    pub func finish_refine(self, keep: bool, radius: int, smooth: int, feather: int, contrast: float, shift: float) -> unit!:
+        self.canvas.end_refine(keep, radius, smooth, feather, contrast, shift)
+        self.touch()
+
+    ## 0 marching ants, 1 overlay, 2 on black, 3 on white.
+    pub func set_refine_view(self, view: int) -> unit!:
+        self.canvas.set_refine_view(view)
+        self.touch()
+
     pub func begin_color_range(self) -> unit!:
         self.canvas.begin_color_range()
 

@@ -211,6 +211,11 @@ pub class ScriptCommands:
             workspace.selecting.apply(canvas, false)
             canvas.close_magnetic(number(fields, 3))
             workspace.touch()
+        elif action == "select_and_mask":
+            workspace.begin_refine()
+            workspace.finish_refine(true, number(fields, 0), number(fields, 1), number(fields, 2), decimal(fields, 3), decimal(fields, 4)) catch failure:
+                workspace.finish_refine(false, 0, 0, 0, 0.0, 0.0)
+                error(failure.code, failure.message)
         elif action == "quick_mask":
             if flag(fields, 0) != workspace.canvas.quick_mask():
                 workspace.toggle_quick_mask()

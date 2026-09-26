@@ -221,6 +221,12 @@ pub func magnetic_lasso(points: list[float], width: float = 10.0, contrast: floa
         fields = fields + [str(value)]
     send("magnetic_lasso", fields)
 
+## Select › Select and Mask in one go: edge detection `radius` (0..250 px),
+## `smooth` (0..100), `feather` (0..250 px), `contrast` (0..100%) and
+## `shift` edge (-100..100%), as one step.
+pub func select_and_mask(radius: int = 0, smooth: int = 0, feather: int = 0, contrast: float = 0.0, shift: float = 0.0):
+    send("select_and_mask", [str(radius), str(smooth), str(feather), str(contrast), str(shift)])
+
 ## Select › Color Range. `range` is "Sampled Colors" (the sRGB triples in
 ## `colors`, within `fuzziness` 0..200), "Reds", "Yellows", "Greens", "Cyans",
 ## "Blues", "Magentas", "Highlights", "Midtones" or "Shadows"; `invert`

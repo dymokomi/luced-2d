@@ -177,6 +177,8 @@ pub class CanvasView: Widget:
         let painter = Painter(target)
         let size = target.size()
         let workspace = self.workspace
+        workspace.view_width = size.width
+        workspace.view_height = size.height
         # A live gradient is kept when another tool is chosen, and follows the
         # colors and the header's options while it stays.
         if workspace.gradient != none and workspace.tool != "gradient":
