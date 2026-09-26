@@ -153,6 +153,11 @@ pub class Workspace:
         for document in self.documents:
             document.canvas.set_history_limit(limit)
 
+    ## Let tiles use `fraction` of the GPU's and the machine's memory, one
+    ## setting for every document: past it, the least wanted move to RAM.
+    pub func set_memory_usage(self, fraction: float) -> unit!:
+        self.canvas.set_memory_usage(fraction)
+
     # -- Documents: the live fields are the current document's; switching stashes and restores them.
 
     ## Copy the live fields into the current document's record; a free

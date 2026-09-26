@@ -30,6 +30,9 @@ pub class Settings:
     pub var brush_presets: str = ""
     ## How much memory each document's undo history may take, in gigabytes.
     pub var undo_memory: float = 4.0
+    ## The share of the GPU's and the machine's memory documents' tiles may use,
+    ## in percent (25..90), as Photoshop's Memory Usage; past it, tiles move to RAM.
+    pub var memory_usage: float = 60.0
     pub var shortcuts: map[str, str]
 
     pub func init(self, source: str = "") -> unit!:
@@ -44,6 +47,7 @@ pub class Settings:
         self.swatches = table.string("colors.swatches", default_swatches)
         self.brush_presets = table.string("brushes.presets", "")
         self.undo_memory = table.number("memory.undo", 4.0, 0.25, 256.0)
+        self.memory_usage = table.number("memory.usage", 60.0, 25.0, 90.0)
         self.rulers = table.boolean("view.rulers", true)
         self.grid = table.boolean("view.grid", false)
         self.units = table.string("view.units", "px")
@@ -65,6 +69,7 @@ pub class Settings:
         other.swatches = self.swatches
         other.brush_presets = self.brush_presets
         other.undo_memory = self.undo_memory
+        other.memory_usage = self.memory_usage
         other.rulers = self.rulers
         other.grid = self.grid
         other.units = self.units
@@ -82,7 +87,7 @@ pub class Settings:
         let rulers = "true" if self.rulers else "false"
         let grid = "true" if self.grid else "false"
         text = text + f"[view]\nrulers = {rulers}\ngrid = {grid}\n# Rulers and sizes in \"px\", \"mm\" or \"in\".\nunits = \"{self.units}\"\n\n"
-        text = text + f"[memory]\n# Gigabytes each document's undo history may hold; the oldest steps go first.\nundo = {self.undo_memory}\n\n"
+        text = text + f"[memory]\n# Gigabytes each document's undo history may hold; the oldest steps go first.\nundo = {self.undo_memory}\n# Percent of the GPU's and the machine's memory tiles may use (25..90).\nusage = {self.memory_usage}\n\n"
         text = text + f"[colors]\n# The picker's recent colors, newest first.\nrecent = \"{self.recent}\"\n# The Swatches panel's colors, in order.\nswatches = \"{self.swatches}\"\n\n"
         text = text + f"[brushes]\n# Brush presets saved in the Brushes panel: name, size, hardness, opacity, flow, spacing, angle, roundness; one per ';'.\npresets = \"{self.brush_presets}\"\n\n"
         text = text + "# Shortcuts by command id; a chord like \"cmd+shift+s\", \"f5\" or \"none\". Unlisted commands keep their defaults.\n[shortcuts]\n"

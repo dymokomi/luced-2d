@@ -167,10 +167,13 @@ func settings_round_trip() -> unit!:
     edited.canvas_width = 640
     edited.accent = "#3f8ae7"
     edited.control_radius = 0.0
+    assert(fresh.memory_usage == 60.0)
+    edited.memory_usage = 40.0
     edited.shortcuts["save"] = "cmd+shift+s"
     edited.shortcuts["swap_colors"] = "none"
     let reread = Settings(edited.serialize())
     assert(reread.canvas_width == 640 and reread.canvas_height == 800 and reread.accent == "#3f8ae7" and reread.control_radius == 0.0)
+    assert(reread.memory_usage == 40.0)
     assert(reread.shortcuts["save"] == "cmd+shift+s" and reread.shortcuts["swap_colors"] == "none" and reread.shortcuts.length == 2)
     assert(fresh.shortcuts.length == 0)
     var rejected = false
