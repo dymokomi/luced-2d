@@ -1,0 +1,128 @@
+## A script's transforms (scripting/luced.luc's `distort`, `skew`,
+## `perspective`, `warp`, `warp_points` and `puppet_warp`): each done as the
+## menu command would be, box or mesh up and applied at once, one undo step.
+from workspace import Workspace
+from free_transform import begin_free_transform, box_around
+from transform_box import convex
+from mesh_warp import MeshWarp, warp_styles
+import math
+import ui
+
+## Whether `action` is one of these.
+pub func is_transform_action(action: str) -> bool:
+    return action == "distort" or action == "skew" or action == "perspective" or action == "warp" or action == "warp_points" or action == "puppet_warp"
+
+pub func apply_transform(workspace: Workspace, action: str, fields: list[str]) -> unit!:
+    if action == "warp" or action == "warp_points":
+        warp(workspace, action, fields)
+    elif action == "puppet_warp":
+        puppet_warp(workspace, fields)
+    else:
+        distort(workspace, action, fields)
+
+## Distort, Skew or Perspective: the free-transform box's corners set and applied.
+func distort(workspace: Workspace, action: str, fields: list[str]) -> unit!:
+    let ids = workspace.moving_ids()
+    let found = box_around(workspace.canvas, ids) else error(ui.invalid, "nothing to transform: the layer has no pixels")
+    let l = found.left
+    let t = found.top
+    let r = l + found.width
+    let b = t + found.height
+    var corners = [l, t, r, t, r, b, l, b]
+    if action == "distort":
+        if fields.length != 8:
+            error(ui.invalid, "distort takes four corners, x and y each")
+        corners = [decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4), decimal(fields, 5), decimal(fields, 6), decimal(fields, 7)]
+    elif action == "skew":
+        let across = math.tan(decimal(fields, 0) * math.pi / 180.0)
+        let down = math.tan(decimal(fields, 1) * math.pi / 180.0)
+        let cx = (l + r) * 0.5
+        let cy = (t + b) * 0.5
+        var at = 0
+        while at < 8:
+            let x = corners[at]
+            let y = corners[at + 1]
+            corners[at] = x - across * (y - cy)
+            corners[at + 1] = y + down * (x - cx)
+            at += 2
+    else:
+        let amount = decimal(fields, 0)
+        if bool(field(fields, 1)):
+            corners[3] += amount * found.height * 0.5
+            corners[5] -= amount * found.height * 0.5
+        else:
+            corners[0] += amount * found.width * 0.5
+            corners[2] -= amount * found.width * 0.5
+    if not convex(corners):
+        error(ui.invalid, "the corners must make a shape that does not fold over")
+    let session = begin_free_transform(workspace.canvas, ids, workspace.transform_sampling) else error(ui.invalid, "nothing to transform")
+    session.box.corners = corners
+    session.box.distorted = true
+    session.preview() catch failure:
+        session.finish(false)
+        error(failure.code, failure.message)
+    session.finish(true)
+    workspace.touch()
+
+## Warp by a style or by its sixteen points.
+func warp(workspace: Workspace, action: str, fields: list[str]) -> unit!:
+    var style = -1
+    if action == "warp":
+        let name = field(fields, 0).lower()
+        var index = 0
+        while index < warp_styles().length:
+            if warp_styles()[index].lower() == name:
+                style = index
+            index += 1
+        if style < 0:
+            error(ui.invalid, f"no warp style is called {field(fields, 0)}")
+    elif fields.length != 32:
+        error(ui.invalid, "a warp takes sixteen points, x and y each")
+    if not workspace.begin_mesh_warp(false):
+        error(ui.invalid, "cannot warp while something else is under way")
+    let session = workspace.mesh_warp else error(ui.invalid, "the warp did not start")
+    shape_warp(session, style, fields) catch failure:
+        workspace.finish_mesh_warp(false)
+        error(failure.code, failure.message)
+    workspace.finish_mesh_warp(true)
+
+func shape_warp(session: MeshWarp, style: int, fields: list[str]) -> unit!:
+    if style >= 0:
+        session.set_style(style, decimal(fields, 1))
+        return
+    var points: list[float] = []
+    for value in fields:
+        points.append(float(value))
+    session.set_points(points)
+
+## Puppet Warp: every pin put, then every pin dragged.
+func puppet_warp(workspace: Workspace, fields: list[str]) -> unit!:
+    if fields.length < 5 or (fields.length - 1) % 4 != 0:
+        error(ui.invalid, "a puppet warp takes pins of four numbers each: from x, from y, to x, to y")
+    if not workspace.begin_mesh_warp(true, int(decimal(fields, 0))):
+        error(ui.invalid, "cannot warp while something else is under way")
+    pin_all(workspace, fields) catch failure:
+        workspace.finish_mesh_warp(false)
+        error(failure.code, failure.message)
+    workspace.finish_mesh_warp(true)
+
+func pin_all(workspace: Workspace, fields: list[str]) -> unit!:
+    let canvas = workspace.canvas
+    var at = 1
+    while at + 3 < fields.length:
+        discard(canvas.puppet_add_pin(decimal(fields, at), decimal(fields, at + 1)))
+        at += 4
+    var pin = 0
+    at = 1
+    while at + 3 < fields.length:
+        canvas.puppet_move_pin(pin, decimal(fields, at + 2), decimal(fields, at + 3))
+        pin += 1
+        at += 4
+
+func field(fields: list[str], index: int) -> str!:
+    if index >= fields.length:
+        error(ui.invalid, f"field {index + 1} is missing")
+    return fields[index]
+
+func decimal(fields: list[str], index: int) -> float!:
+    return float(field(fields, index))

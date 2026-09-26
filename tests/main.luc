@@ -6,7 +6,7 @@ from panels import Panels, next_in_cycle
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
 from navigator_panel import view_box
-from transform_box import TransformBox, grab_move, grab_turn
+from transform_box import TransformBox, grab_move, grab_turn, mode_distort, mode_perspective
 from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
 from size_fields import SizeFields
@@ -52,6 +52,7 @@ pub func main(arguments: list[str]) -> int!:
     checker_regions()
     tool_gestures()
     boxes()
+    corner_modes()
     adjustment_table()
     retouch_tools()
     unsaved_changes(arguments)
@@ -88,6 +89,7 @@ pub func main(arguments: list[str]) -> int!:
     settings_save_pending(arguments)
     lasso_cycle()
     refining_selections()
+    warping()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1570,3 +1572,124 @@ func lasso_cycle() -> unit!:
     assert(next_in_cycle("polygon", "polygon") == "magnetic")
     assert(next_in_cycle("polygon", "magnetic") == "lasso")
     assert(next_in_cycle("brush", "polygon") == "brush")
+## Edit › Transform's corner modes: Cmd+Shift on a side skews (the side slides
+## along itself), Cmd+Alt+Shift on a corner is perspective (its neighbour on
+## the edge dragged moves the other way), and a mode chosen from the menu makes
+## a plain drag do it.
+func corner_modes() -> unit!:
+    let skewed = TransformBox(0.0, 0.0, 100.0, 50.0)
+    skewed.begin(5, 50.0, 50.0)
+    skewed.drag(80.0, 70.0, true, false, true)
+    assert(skewed.distorted and near(skewed.corners[4], 130.0) and near(skewed.corners[6], 30.0) and near(skewed.corners[5], 50.0) and near(skewed.corners[1], 0.0))
+    skewed.end()
+    let narrowed = TransformBox(0.0, 0.0, 100.0, 50.0)
+    narrowed.begin(0, 0.0, 0.0)
+    narrowed.drag(20.0, 5.0, true, true, true)
+    assert(near(narrowed.corners[0], 20.0) and near(narrowed.corners[1], 0.0) and near(narrowed.corners[2], 80.0) and near(narrowed.corners[3], 0.0))
+    assert(near(narrowed.corners[4], 100.0) and near(narrowed.corners[6], 0.0))
+    narrowed.end()
+    # Down the left side instead: the bottom-left corner comes up to meet it.
+    let tilted = TransformBox(0.0, 0.0, 100.0, 50.0)
+    tilted.mode = mode_perspective
+    tilted.begin(0, 0.0, 0.0)
+    tilted.drag(2.0, 10.0, false, false)
+    assert(near(tilted.corners[1], 10.0) and near(tilted.corners[7], 40.0) and near(tilted.corners[0], 0.0))
+    tilted.end()
+    let free = TransformBox(0.0, 0.0, 100.0, 50.0)
+    free.mode = mode_distort
+    free.begin(4, 100.0, 50.0)
+    free.drag(110.0, 70.0, false, false)
+    assert(near(free.corners[4], 110.0) and near(free.corners[5], 70.0) and near(free.corners[2], 100.0))
+    free.end()
+
+## A box of blue on a layer of `workspace`, 40..160 by 40..120.
+func blue_box(workspace: Workspace) -> unit!:
+    workspace.canvas.select_rectangle(40, 40, 120, 80)
+    foreground(workspace, 0.0, 0.2, 1.0)
+    workspace.fill_selection(false)
+    workspace.deselect()
+
+## The selected layer's painted box: left, top, right, bottom.
+func painted_box(workspace: Workspace) -> list[int]!:
+    assert(workspace.canvas.measure_content(workspace.selected_id()))
+    let canvas = workspace.canvas
+    return [canvas.content_left(), canvas.content_top(), canvas.content_left() + canvas.content_width(), canvas.content_top() + canvas.content_height()]
+
+## Edit › Transform › Warp and Edit › Puppet Warp from the menu, dragged on
+## the view, kept as one step and undone; the same from a script.
+func warping() -> unit!:
+    let workspace = Workspace(200, 160)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let view = panels.view
+    workspace.canvas.bind_headless()
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    workspace.add_layer()
+    blue_box(workspace)
+    let found = painted_box(workspace)
+    assert(found == [40, 40, 160, 120])
+    actions.update(workspace)
+    actions.transform_warp.trigger()
+    let warp = workspace.mesh_warp else trap("warp is up")
+    assert(not warp.puppet and near(warp.points[0], 39.0) and near(warp.points[31], 121.0))
+    # The top-left corner dragged out takes its handles along.
+    press(view, 39.0, 39.0)
+    drag_to(view, 19.0, 29.0)
+    release(view, 19.0, 29.0)
+    assert(near(warp.points[0], 19.0) and math.abs(warp.points[2] - 59.667) < 0.01 and near(warp.points[3], 29.0))
+    # Drawn once, as the view would each frame, then kept with Enter.
+    let frame = Frame(window.Size(200.0, 160.0, 200.0, 160.0, 1.0))
+    view.layout().set_size(200.0, 160.0)
+    view.draw(frame.target())
+    frame.close()
+    view.event(Event(kind = EventKind.key_down, key = Key.enter))
+    assert(workspace.mesh_warp == none and workspace.canvas.undo_name() == "Warp")
+    let bent = painted_box(workspace)
+    assert(bent[0] <= 22 and bent[1] <= 32 and bent[2] == 160 and bent[3] == 120)
+    workspace.undo()
+    assert(painted_box(workspace) == found)
+    # A style from the header: Arc lifts the middle of the top.
+    actions.update(workspace)
+    actions.transform_warp.trigger()
+    let styled = workspace.mesh_warp else trap("warp is up")
+    styled.set_style(0, 0.5)
+    workspace.finish_mesh_warp(true)
+    assert(painted_box(workspace)[1] < 32)
+    workspace.undo()
+    # Puppet Warp: two pins, the right one dragged up; Esc leaves it as it was.
+    actions.update(workspace)
+    actions.puppet_warp.trigger()
+    let puppet = workspace.mesh_warp else trap("puppet is up")
+    assert(puppet.puppet)
+    press(view, 50.0, 80.0)
+    release(view, 50.0, 80.0)
+    press(view, 150.0, 80.0)
+    drag_to(view, 150.0, 50.0)
+    release(view, 150.0, 50.0)
+    assert(workspace.canvas.puppet_pin_count() == 2 and near(workspace.canvas.puppet_pin_y(1), 50.0))
+    # Alt-click on the first pin takes it away.
+    press(view, 50.0, 80.0, alt = true)
+    release(view, 50.0, 80.0, alt = true)
+    assert(workspace.canvas.puppet_pin_count() == 1)
+    view.event(Event(kind = EventKind.key_down, key = Key.escape))
+    assert(workspace.mesh_warp == none and painted_box(workspace) == found)
+    # From a script: skew, perspective, a warp style and a puppet warp, a step each.
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d skew\t20\t0") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Distort" and painted_box(workspace)[2] > 165)
+    workspace.undo()
+    commands.apply(parse_line("@l2d perspective\t0.5\tfalse") else trap("line"))
+    let narrowed = painted_box(workspace)
+    assert(narrowed[0] >= 39 and narrowed[0] <= 41 and narrowed[2] >= 159 and narrowed[2] <= 161)
+    workspace.undo()
+    commands.apply(parse_line("@l2d warp\tArc\t0.5") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Warp" and painted_box(workspace)[1] < 32)
+    workspace.undo()
+    commands.apply(parse_line("@l2d puppet_warp\t1\t50\t80\t50\t80\t150\t80\t150\t50") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Puppet Warp" and painted_box(workspace)[1] < 30)
+    workspace.undo()
+    assert(painted_box(workspace) == found)
+    panels.close()

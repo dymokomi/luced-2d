@@ -44,6 +44,7 @@ from align import align_modes, align_layers
 from canvas import Canvas
 import math
 from units import unit_ids
+from transform_box import mode_skew, mode_distort, mode_perspective
 
 pub class Panels:
     pub let body: VStack
@@ -278,6 +279,8 @@ pub class Panels:
             # During a free transform or a live gradient, undo drops it, as nothing is kept yet.
             if self.workspace.transform != none:
                 self.workspace.finish_transform(false)
+            elif self.workspace.mesh_warp != none:
+                self.workspace.finish_mesh_warp(false)
             elif self.workspace.gradient != none:
                 self.workspace.finish_gradient(false)
             else:
@@ -332,6 +335,16 @@ pub class Panels:
                 self.adjust.filter(chosen))
             filter += 1
         kit.bind(actions.free_transform, self.free_transform)
+        kit.bind(actions.transform_skew, func () -> unit!:
+            self.transform_mode(mode_skew))
+        kit.bind(actions.transform_distort, func () -> unit!:
+            self.transform_mode(mode_distort))
+        kit.bind(actions.transform_perspective, func () -> unit!:
+            self.transform_mode(mode_perspective))
+        kit.bind(actions.transform_warp, func () -> unit!:
+            self.mesh_warp(false))
+        kit.bind(actions.puppet_warp, func () -> unit!:
+            self.mesh_warp(true))
         kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
             self.workspace.flip_layer(true)))
         kit.bind(actions.flip_vertical, self.then_refresh(func () -> unit!:
@@ -596,6 +609,28 @@ pub class Panels:
         self.view.layout().request_focus()
         self.refresh()
 
+    ## Edit › Transform › Skew, Distort or Perspective: the free-transform box
+    ## (up already, or put up now) with its handles in that mode.
+    func transform_mode(self, mode: int) -> unit!:
+        let started = self.workspace.begin_transform_mode(mode) catch failure:
+            self.prompts.tell(f"Cannot transform: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell("Nothing to transform: the layer has no pixels")
+        self.view.layout().request_focus()
+        self.refresh()
+
+    ## Edit › Transform › Warp or Edit › Puppet Warp on the selected layer.
+    func mesh_warp(self, puppet: bool) -> unit!:
+        let name = "Puppet Warp" if puppet else "Warp"
+        let started = self.workspace.begin_mesh_warp(puppet) catch failure:
+            self.prompts.tell(f"Cannot {name.lower()}: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell(f"Cannot {name.lower()} while something else is under way")
+        self.view.layout().request_focus()
+        self.refresh()
+
     ## Select › Transform Selection: the box goes up around the selection, moving its outline.
     pub func transform_selection(self) -> unit!:
         let started = self.workspace.begin_selection_transform() catch failure:
@@ -612,6 +647,8 @@ pub class Panels:
             self.workspace.finish_gradient(keep)
         elif self.workspace.transform != none:
             self.workspace.finish_transform(keep)
+        elif self.workspace.mesh_warp != none:
+            self.workspace.finish_mesh_warp(keep)
         else:
             self.workspace.finish_crop(keep)
         self.refresh()

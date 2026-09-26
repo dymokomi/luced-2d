@@ -7,6 +7,7 @@ from workspace import Workspace
 from actions import Actions
 from canvas import Canvas
 from adjustments import Adjustment, adjustments, filter_table, gradient_map, blur_kind, noise_kind, first_filter_kind
+from script_transforms import is_transform_action, apply_transform
 import transfer
 import ui
 
@@ -259,6 +260,8 @@ pub class ScriptCommands:
             workspace.resize_canvas(number(fields, 2), number(fields, 3), -number(fields, 0), -number(fields, 1))
         elif action == "flip_canvas":
             workspace.flip_canvas(flag(fields, 0))
+        elif is_transform_action(action):
+            apply_transform(workspace, action, fields)
         else:
             error(ui.invalid, f"no such action: {action}")
 

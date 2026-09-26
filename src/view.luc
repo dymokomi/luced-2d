@@ -129,6 +129,8 @@ pub class CanvasView: Widget:
     var move_now_y: float = 0.0
     ## A free transform's or the Crop tool's box being dragged.
     var boxing: bool = false
+    ## A Warp point or Puppet pin is being dragged.
+    var warping: bool = false
     ## A zoom tool drag: right zooms in, left out, about where it started.
     var zooming: bool = false
     var zoom_moved: bool = false
@@ -499,6 +501,11 @@ pub class CanvasView: Widget:
                     self.magnetic.take_back(self.workspace)
                 if let changed = self.on_changed:
                     changed()
+            elif (event.key == Key.enter or event.key == Key.escape) and not self.warping and self.workspace.mesh_warp != none:
+                # Enter keeps a Warp or Puppet Warp; Esc drops it.
+                self.workspace.finish_mesh_warp(event.key == Key.enter)
+                if let changed = self.on_changed:
+                    changed()
             elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and not self.gradient_handle and (self.workspace.transform != none or self.workspace.crop_box != none or self.workspace.gradient != none):
                 # Enter applies a free transform, a live gradient or the crop; Esc drops it.
                 if self.workspace.gradient != none:
@@ -578,6 +585,12 @@ pub class CanvasView: Widget:
             if guide >= 0:
                 self.guides.begin(workspace, guide)
                 return
+        # A warp takes every press while it is up: on its points and pins, or
+        # (Puppet Warp) a new pin.
+        if let warp = workspace.mesh_warp:
+            self.warping = warp.press(x, y, reach, event.alt)
+            workspace.touch()
+            return
         if workspace.transform != none or workspace.crop_box != none:
             self.snapper.gather(workspace, workspace.selected_ids(), false)
         if let session = workspace.transform:
@@ -838,6 +851,9 @@ pub class CanvasView: Widget:
         if let session = workspace.transform:
             session.box.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
             return
+        if let warp = workspace.mesh_warp:
+            warp.draw(painter, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
+            return
         if let crop = workspace.crop_box:
             crop.draw(painter, width, height, workspace.zoom, workspace.offset_x, workspace.offset_y, theme.text(), theme.backdrop())
             # While it is dragged, its size beside its bottom-right corner, as Photoshop shows it.
@@ -893,8 +909,12 @@ pub class CanvasView: Widget:
                     edit.grabbed = 1
                     edit.drag(x, y, event.shift)
                     self.gradient_handle = true
+        elif self.warping:
+            if let warp = self.workspace.mesh_warp:
+                warp.drag(self.document_x(event.x), self.document_y(event.y))
+                self.workspace.touch()
         elif self.boxing:
-            # Cmd (Ctrl) on a corner distorts, as in Compositor.
+            # Cmd (Ctrl) on a corner distorts, Cmd+Shift on a side skews, Cmd+Alt+Shift on a corner is perspective.
             self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt, event.meta or event.control)
         elif self.panning:
             self.workspace.pan(event.x - self.last_x, event.y - self.last_y)
@@ -1000,6 +1020,10 @@ pub class CanvasView: Widget:
             return
         if self.guides.active:
             self.guides.finish(workspace)
+        elif self.warping:
+            self.warping = false
+            if let warp = workspace.mesh_warp:
+                warp.release()
         elif self.boxing:
             self.boxing = false
             self.end_box()
