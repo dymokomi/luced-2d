@@ -98,13 +98,12 @@ class Thumbnail: Widget:
         painter.rectangle(Rect(placed[1], placed[2], w, h), theme.checker_light())
         painter.close()
         self.workspace.canvas.draw(target, Rect(0.0, 0.0, size.width, size.height), zoom, placed[1], placed[2])
-        # The view's box: what the canvas view shows, in document pixels, scaled.
+        # The view's box: what the canvas view shows of the document, scaled.
         let view = self.view.layout().bounds()
-        let scale = zoom / self.workspace.zoom
         let over = Painter(target)
-        let x = placed[1] - self.workspace.offset_x * scale
-        let y = placed[2] - self.workspace.offset_y * scale
-        outline(over, Rect(x, y, view.width * scale, view.height * scale), self.workspace.look.accent)
+        if let box = view_box(placed, float(self.workspace.width()), float(self.workspace.height()), view.width, view.height,
+                              self.workspace.zoom, self.workspace.offset_x, self.workspace.offset_y):
+            outline(over, box, self.workspace.look.accent)
         over.close()
 
     pub func event(self, event: Event) -> unit!:
@@ -131,3 +130,23 @@ class Thumbnail: Widget:
         self.workspace.touch()
         if let moved = self.moved:
             moved()
+
+## The Navigator's box for a view `view_width` by `view_height` showing the
+## document (`width` by `height`) at `zoom` from (`offset_x`, `offset_y`), in a
+## thumbnail placed as `placed` (its zoom and the document's corner there). As
+## Photoshop's, the box is what shows of the document: cut to it, so a view
+## wider than the document boxes the whole thumbnail rather than running past
+## the panel's edges. None when the view shows none of the document.
+pub func view_box(placed: list[float], width: float, height: float, view_width: float, view_height: float,
+                  zoom: float, offset_x: float, offset_y: float) -> Rect?:
+    if placed[0] <= 0.0 or zoom <= 0.0:
+        return none
+    # The document pixels the view shows, cut to the document.
+    let left = math.max(0.0, -offset_x / zoom)
+    let top = math.max(0.0, -offset_y / zoom)
+    let right = math.min(width, (view_width - offset_x) / zoom)
+    let bottom = math.min(height, (view_height - offset_y) / zoom)
+    if right <= left or bottom <= top:
+        return none
+    let scale = placed[0]
+    return Rect(placed[1] + left * scale, placed[2] + top * scale, (right - left) * scale, (bottom - top) * scale)

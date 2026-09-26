@@ -5,6 +5,7 @@ from canvas import Canvas
 from panels import Panels
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
+from navigator_panel import view_box
 from transform_box import TransformBox, grab_move, grab_turn
 from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
@@ -78,6 +79,7 @@ pub func main(arguments: list[str]) -> int!:
     hue_ranges()
     opens_photos()
     panel_catalog()
+    navigator_boxes()
     pen_paths()
     aligning()
     dock_layouts(arguments)
@@ -1357,3 +1359,19 @@ func dock_layouts(arguments: list[str]) -> unit!:
     again.close()
     pruned.close()
     missing.close()
+
+## The Navigator's box is what the view shows of the document, cut to it.
+func navigator_boxes() -> unit!:
+    let placed = [0.2, 4.0, 10.0]
+    # The whole 1280x800 document inside the view at 72%: the whole thumbnail.
+    let whole = view_box(placed, 1280.0, 800.0, 1200.0, 900.0, 0.72, 139.2, 162.0) else trap("whole box")
+    assert(near(whole.x, 4.0) and near(whole.y, 10.0) and near(whole.width, 256.0) and near(whole.height, 160.0))
+    # At 200%, the view's middle part.
+    let inner = view_box(placed, 1280.0, 800.0, 1000.0, 600.0, 2.0, -500.0, -200.0) else trap("inner box")
+    assert(near(inner.x, 54.0) and near(inner.y, 30.0) and near(inner.width, 100.0) and near(inner.height, 60.0))
+    # Past the right edge: cut there.
+    let edge = view_box(placed, 1280.0, 800.0, 1000.0, 800.0, 1.0, -800.0, 0.0) else trap("edge box")
+    assert(near(edge.x, 164.0) and near(edge.width, 96.0) and near(edge.height, 160.0))
+    # A view off the document shows none of it.
+    assert(view_box(placed, 1280.0, 800.0, 1000.0, 600.0, 2.0, 5000.0, 0.0) == none)
+
