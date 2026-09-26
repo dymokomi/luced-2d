@@ -88,8 +88,12 @@ pub class ToolHeader:
             self.workspace.brush.opacity = value / 100.0)
         self.flow_field = self.scrubber(workspace.brush.flow * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.flow = value / 100.0)
+        # Smudge keeps a spacing of its own; the field shows whichever is in use.
         self.spacing_field = self.scrubber(workspace.brush.spacing * 100.0, 1.0, 500.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.spacing = value / 100.0)
+            if self.smudging():
+                self.workspace.smudge_spacing = value / 100.0
+            else:
+                self.workspace.brush.spacing = value / 100.0)
         var presets: list[Command] = []
         for name in preset_names():
             let chosen = name
@@ -226,6 +230,10 @@ pub class ToolHeader:
             self.workspace.touch()))
         return field
 
+    ## Whether the Smudge tool is in Smudge mode, whose spacing is its own.
+    func smudging(self) -> bool:
+        return self.workspace.tool == "smear" and self.workspace.smear_mode == 0
+
     func open_brush_settings(self) -> unit!:
         if let open = self.brush_settings:
             open()
@@ -298,7 +306,7 @@ pub class ToolHeader:
         self.hardness_field.set_value(workspace.brush.hardness * 100.0)
         self.opacity_field.set_value(workspace.brush.opacity * 100.0)
         self.flow_field.set_value(workspace.brush.flow * 100.0)
-        self.spacing_field.set_value(workspace.brush.spacing * 100.0)
+        self.spacing_field.set_value((workspace.smudge_spacing if self.smudging() else workspace.brush.spacing) * 100.0)
         self.preset_menu.set_text(workspace.brush.preset + " ▾")
         if transforming:
             self.hint.set_text(f"Corner scales (shift frees) · side stretches · alt about the middle · {ui.primary_key_name().lower()}-corner distorts · alt-drag inside copies · outside turns · Enter applies")

@@ -52,6 +52,9 @@ pub class Workspace:
     pub var clone_aligned: bool = true
     pub var clone_all: bool = false
     pub var smear_mode: int = 0
+    ## Smudge's dab spacing, a fraction of the diameter: its own, not the brush's
+    ## (from about 0.2 the dabs show as beads along a soft stroke).
+    pub var smudge_spacing: float = 0.15
     ## The Gradient tool's options: radial rather than linear, the colors
     ## reversed, and from the foreground to transparent instead of to the
     ## background.
@@ -761,6 +764,7 @@ pub class Workspace:
         self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
         self.canvas.set_brush_aliased(self.tool == "pencil")
         self.canvas.set_tone(self.tone_range, self.tone_exposure)
+        self.canvas.set_smudge_spacing(self.smudge_spacing)
         self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
         self.touch()
 

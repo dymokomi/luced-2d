@@ -362,10 +362,13 @@ pub class CanvasView: Widget:
             painter.rectangle(Rect(x0, math.floor(y), x1 - x0, 1.0), ink, opacity)
             y += step
 
-    ## Advance the marching ants; called from the frame timer.
+    ## Advance the marching ants, and keep drawing while a smudge finishes on
+    ## its worker (each frame shows how far it got); called from the frame timer.
     pub func march(self):
         if self.workspace.canvas.has_selection():
             self.ants += 1.0
+            self.box.invalidate()
+        elif self.workspace.canvas.busy():
             self.box.invalidate()
         self.autoscroll()
 
