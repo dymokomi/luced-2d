@@ -101,7 +101,7 @@ pub class ReplaceColorDialog:
             if not taken:
                 added += 1
         let removed = self.subtract.length - added
-        self.hint.set_text("Click the picture for the color to replace; Shift-click adds, Alt-click takes back out." if self.subtract.length == 0 else
+        self.hint.set_text("Click a color to replace · Shift adds · Alt takes out." if self.subtract.length == 0 else
                            (f"{added} added, {removed} taken out (at most {most_samples})." if removed > 0 else f"{added} sampled (at most {most_samples})."))
         self.pending = self.open_preview
         # Wake the loop for the frame that shows it.

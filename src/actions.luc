@@ -48,6 +48,10 @@ pub class Actions:
     pub let paste_in_place: Command
     pub let fill: Command
     pub let fill_background: Command
+    ## The fills on Delete as well as Backspace, as Photoshop has them on
+    ## Windows keyboards: a command has one shortcut, so each is its own.
+    pub let fill_delete: Command
+    pub let fill_background_delete: Command
     pub let clear: Command
     pub let swap_colors: Command
     pub let reset_colors: Command
@@ -176,6 +180,8 @@ pub class Actions:
         self.fill = Command("Fill Selection with Color", Shortcut(Key.backspace, alt = true), id = "fill")
         self.clear = Command("Clear Selection", Shortcut(ui.clear_key()), id = "clear")
         self.fill_background = Command("Fill Selection with Background", Shortcut(Key.backspace, primary = true), id = "fill_background")
+        self.fill_delete = Command("Fill Selection with Color (Delete)", Shortcut(Key.delete, alt = true), id = "fill_delete")
+        self.fill_background_delete = Command("Fill Selection with Background (Delete)", Shortcut(Key.delete, primary = true), id = "fill_background_delete")
         self.swap_colors = Command("Swap Colors", Shortcut(Key.x), id = "swap_colors")
         self.reset_colors = Command("Default Colors", Shortcut(Key.d), id = "reset_colors")
         self.export_png = Command("Export PNG…", Shortcut(Key.e, primary = true, shift = true), id = "export_png")
@@ -288,7 +294,7 @@ pub class Actions:
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
-        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.replace_color, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.transform_skew, self.transform_distort, self.transform_perspective, self.transform_warp, self.puppet_warp, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
+        self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.replace_color, self.fill_background, self.fill_delete, self.fill_background_delete, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.transform_skew, self.transform_distort, self.transform_perspective, self.transform_warp, self.puppet_warp, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather, self.border, self.smooth, self.grow, self.similar, self.transform_selection, self.quick_mask, self.select_mask, self.load_selection, self.save_selection,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,

@@ -311,6 +311,10 @@ pub class Panels:
         kit.bind(actions.fill_background, func () -> unit!:
             self.workspace.fill_selection(false, true)
             self.refresh())
+        kit.bind(actions.fill_delete, func () -> unit!:
+            actions.fill.trigger())
+        kit.bind(actions.fill_background_delete, func () -> unit!:
+            actions.fill_background.trigger())
         kit.bind(actions.clear, func () -> unit!:
             # Its key (Backspace) takes a Polygonal Lasso corner back while one is drawn.
             if self.view.polygon.active:
