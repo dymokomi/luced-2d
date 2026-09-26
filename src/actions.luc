@@ -314,6 +314,10 @@ pub class Actions:
         let layers = workspace.layer_count()
         self.undo.set_enabled(canvas.can_undo() and not previewing)
         self.redo.set_enabled(canvas.can_redo() and not previewing)
+        self.redo_y.set_enabled(canvas.can_redo() and not previewing)
+        # Fills, Clear and Paste change pixels: not while a picture opens or a preview shows.
+        for command in [self.fill, self.fill_background, self.fill_delete, self.fill_background_delete, self.clear, self.paste, self.paste_in_place]:
+            command.set_enabled(not previewing)
         # The Edit menu says which step: "Undo Brush Stroke".
         self.undo.set_text("Undo " + canvas.undo_name() if canvas.can_undo() else "Undo")
         self.redo.set_text("Redo " + canvas.redo_name() if canvas.can_redo() else "Redo")
