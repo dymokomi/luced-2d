@@ -2,7 +2,7 @@ from ui import Font
 from gpu import Frame
 from workspace import Workspace
 from canvas import Canvas
-from panels import Panels
+from panels import Panels, next_in_cycle
 from actions import Actions
 from view import CanvasView, clamp_texel, texel_span
 from navigator_panel import view_box
@@ -86,6 +86,7 @@ pub func main(arguments: list[str]) -> int!:
     aligning()
     dock_layouts(arguments)
     settings_save_pending(arguments)
+    lasso_cycle()
     refining_selections()
     print("PASS luced-2d workspace, view and panels")
     return 0
@@ -1562,3 +1563,10 @@ func foreground(workspace: Workspace, red: float, green: float, blue: float):
     workspace.red = red
     workspace.green = green
     workspace.blue = blue
+
+## Shift+L steps Polygonal → Magnetic → Lasso; other keys pick their tool.
+func lasso_cycle() -> unit!:
+    assert(next_in_cycle("polygon", "brush") == "polygon")
+    assert(next_in_cycle("polygon", "polygon") == "magnetic")
+    assert(next_in_cycle("polygon", "magnetic") == "lasso")
+    assert(next_in_cycle("brush", "polygon") == "brush")

@@ -287,6 +287,8 @@ pub class ToolHeader:
         self.gradient_menu.set_text("Radial ▾" if workspace.gradient_radial else "Linear ▾")
         self.reverse_box.set_checked(workspace.gradient_reverse)
         self.transparent_box.set_checked(workspace.gradient_transparent)
+        # The wand's option as the workspace has it (it is kept between runs).
+        self.contiguous_button.set_checked(workspace.contiguous)
         let selecting = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "magnetic" or tool == "wand"
         self.selection_controls.row.layout().set_visible(not transforming and selecting)
         self.selection_controls.show(tool)

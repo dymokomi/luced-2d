@@ -14,6 +14,9 @@ pub class MagneticLasso:
     var mode: int = 0
     ## The last click, for a double-click: when (ms).
     var last_click: int = -1000
+    ## When a shape was last closed (ms): the rest of a double-click that
+    ## closed it must not start a new one.
+    var closed_at: int = -1000
 
     pub func init(self):
         self.active = false
@@ -24,6 +27,8 @@ pub class MagneticLasso:
         let double = now - self.last_click <= 400
         self.last_click = now
         let canvas = workspace.canvas
+        if not self.active and now - self.closed_at <= 400:
+            return
         if not self.active:
             let options = workspace.selecting
             canvas.begin_magnetic(x, y, view_level(zoom), options.magnetic_width, options.magnetic_contrast, options.magnetic_frequency)
@@ -32,6 +37,7 @@ pub class MagneticLasso:
             return
         let near_first = math.abs(x - canvas.magnetic_x(0)) <= reach and math.abs(y - canvas.magnetic_y(0)) <= reach
         if (near_first or double) and canvas.magnetic_count() >= 3:
+            self.closed_at = now
             self.close(workspace)
             return
         canvas.anchor_magnetic(x, y)

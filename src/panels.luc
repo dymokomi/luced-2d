@@ -475,7 +475,7 @@ pub class Panels:
         for command in actions.tools:
             let tool = command.id()
             kit.bind(command, func () -> unit!:
-                self.choose_tool(tool))
+                self.choose_tool(next_in_cycle(tool, self.workspace.tool)))
 
     ## `change` to the workspace, then refresh the window.
     func then_refresh(self, change: func() -> unit!) -> func() -> unit!:
@@ -780,3 +780,14 @@ pub class Panels:
         self.focus_canvas_in -= 1
         if self.focus_canvas_in == 0:
             self.view.layout().request_focus()
+
+## Shift+L steps through the lassos as Photoshop's does: Polygonal, then
+## Magnetic, then back to the Lasso. Other shortcuts pick their own tool.
+pub func next_in_cycle(chosen: str, current: str) -> str:
+    if chosen != "polygon":
+        return chosen
+    if current == "polygon":
+        return "magnetic"
+    if current == "magnetic":
+        return "lasso"
+    return "polygon"
