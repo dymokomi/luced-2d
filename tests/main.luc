@@ -1523,6 +1523,17 @@ func quick_masking() -> unit!:
     let frame = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
     view.draw(frame.target())
     frame.close()
+    # A stroke on the mask is listed after Quick Mask, as Photoshop lists it.
+    panels.choose_tool("brush")
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    press(view, 30.0, 30.0)
+    drag_to(view, 60.0, 60.0)
+    release(view, 60.0, 60.0)
+    let stroked = workspace.canvas.history_steps()
+    assert(workspace.canvas.history_step_name(stroked - 2) == "Quick Mask" and workspace.canvas.history_step_name(stroked - 1) == "Brush Stroke")
+    workspace.undo()
     # White fills the whole mask (the selection does not clip meanwhile): all selected.
     foreground(workspace, 1.0, 1.0, 1.0)
     workspace.fill_selection(false)
@@ -1530,7 +1541,8 @@ func quick_masking() -> unit!:
     assert(not workspace.canvas.quick_mask() and workspace.canvas.undo_name() == "Exit Quick Mask")
     assert(workspace.canvas.selected_at(200, 150) == 255 and workspace.layer_count() == 1)
     workspace.undo()
-    assert(workspace.canvas.selected_at(200, 150) == 0 and workspace.canvas.selected_at(30, 30) == 255)
+    # Undone, Exit Quick Mask brings the mode back with the selection it had.
+    assert(workspace.canvas.quick_mask() and workspace.canvas.selected_at(200, 150) == 0 and workspace.canvas.selected_at(30, 30) == 255)
     magnetic_lassoing()
 
 ## The Magnetic Lasso from the rail's group, its header options, clicks
@@ -1586,14 +1598,20 @@ func selecting_and_masking() -> unit!:
     dialog.feather.set_value(6.0)
     dialog.changed(6.0)
     dialog.poll()
-    assert(workspace.canvas.selected_at(98, 100) > 0 and workspace.canvas.selected_at(98, 100) < 255)
+    # The setting is recorded; the selection stays as it was until OK.
+    assert(workspace.canvas.selected_at(98, 100) == 0 and workspace.canvas.refine_preview_level() == -1)
     workspace.set_refine_view(3)
+    # A frame of the view works it out at the view's resolution, in the background.
     let view = CanvasView(workspace)
     view.layout().set_size(300.0, 200.0)
     let frame = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
     view.draw(frame.target())
     frame.close()
-    assert(workspace.visible_box().length == 4)
+    workspace.canvas.wait_previews()
+    let second = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
+    view.draw(second.target())
+    second.close()
+    assert(workspace.canvas.refine_preview_level() == 0)
     dialog.apply()
     assert(not workspace.canvas.refining() and workspace.canvas.undo_name() == "Select and Mask" and workspace.canvas.selected_at(98, 100) > 0)
     workspace.undo()

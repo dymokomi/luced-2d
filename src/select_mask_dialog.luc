@@ -2,9 +2,11 @@
 ## refining the selection's edge — edge detection Radius (the picture decides
 ## the edge within it), Smooth, Feather, Contrast and Shift Edge — with the
 ## selection shown as marching ants, a red overlay, or the picture on black or
-## on white. Each change refines only the cells the view shows, so a slider
-## drag keeps up on any document; OK refines all of it as one step, Cancel
-## puts the selection back.
+## on white. A change is only recorded, once a frame: the canvas works it out
+## at the view's resolution over what the view shows, on a thread of its own,
+## the newest setting cancelling an older one still working, so a slider drag
+## keeps up on any document. OK refines all of it at full size as one step,
+## Cancel leaves the selection as it was.
 from ui import Text, HStack, Spacer, Dialog, Menu, Command
 from workspace import Workspace
 from kit import Kit, SliderField
