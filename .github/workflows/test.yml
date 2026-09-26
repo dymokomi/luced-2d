@@ -111,9 +111,9 @@ jobs:
           ref: ${{ steps.pins.outputs.tls }}
           path: luce-tls
           token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
-      - name: Linux libraries the window and font backends link
+      - name: Linux libraries the window and font backends link, and a software Vulkan driver (lavapipe) for the headless canvas
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev fonts-dejavu-core
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev fonts-dejavu-core mesa-vulkan-drivers
       - uses: actions/checkout@v4
         with:
           repository: dymokomi/luce-psd
