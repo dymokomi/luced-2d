@@ -300,6 +300,15 @@ pub class Panels:
             self.prompts.ask("contract", "Contract the selection by, in pixels (1..512)", "4", "Contract"))
         kit.bind(actions.feather, func () -> unit!:
             self.prompts.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather"))
+        kit.bind(actions.border, func () -> unit!:
+            self.prompts.ask("border", "Border of the selection, width in pixels (1..200)", "10", "Border"))
+        kit.bind(actions.smooth, func () -> unit!:
+            self.prompts.ask("smooth", "Smooth the selection over, in pixels (1..100)", "2", "Smooth"))
+        kit.bind(actions.grow, self.then_refresh(func () -> unit!:
+            self.workspace.grow_selection(true)))
+        kit.bind(actions.similar, self.then_refresh(func () -> unit!:
+            self.workspace.grow_selection(false)))
+        kit.bind(actions.transform_selection, self.transform_selection)
         kit.bind(actions.crop, self.crop)
         kit.bind(actions.reveal_all, func () -> unit!:
             if not self.workspace.reveal_all():
@@ -575,6 +584,16 @@ pub class Panels:
         if not started:
             self.prompts.tell("Nothing to transform: the layer has no pixels")
         # Enter and Esc go to the canvas.
+        self.view.layout().request_focus()
+        self.refresh()
+
+    ## Select › Transform Selection: the box goes up around the selection, moving its outline.
+    pub func transform_selection(self) -> unit!:
+        let started = self.workspace.begin_selection_transform() catch failure:
+            self.prompts.tell(f"Cannot transform the selection: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell("Nothing selected to transform")
         self.view.layout().request_focus()
         self.refresh()
 

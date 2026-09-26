@@ -184,6 +184,29 @@ pub func deselect():
 pub func invert_selection():
     send("invert_selection", [])
 
+## Select › Modify: grow (positive `pixels`) or shrink (negative) the
+## selection, then feather its edge by `feather` pixels.
+pub func modify_selection(pixels: int, feather: int = 0):
+    send("modify_selection", [str(pixels), str(feather)])
+
+## Select › Modify › Border: a band `width` pixels wide along the selection's edge.
+pub func border_selection(width: int):
+    send("border_selection", [str(width)])
+
+## Select › Modify › Smooth: corners rounded and specks dropped over `radius` pixels.
+pub func smooth_selection(radius: int):
+    send("smooth_selection", [str(radius)])
+
+## Select › Grow (`contiguous`) or Similar: more of the colors the selection
+## covers, within `tolerance` (0..255, as the magic wand's).
+pub func grow_selection(contiguous: bool = true, tolerance: float = 32.0):
+    send("grow_selection", [str(contiguous), str(tolerance)])
+
+## Select › Transform Selection in one go: the outline scaled, turned by
+## `angle` degrees about (`pivot_x`, `pivot_y`) and moved by (`dx`, `dy`).
+pub func transform_selection(scale_x: float, scale_y: float, angle: float = 0.0, dx: float = 0.0, dy: float = 0.0, pivot_x: float = 0.0, pivot_y: float = 0.0):
+    send("transform_selection", [str(scale_x), str(scale_y), str(angle), str(dx), str(dy), str(pivot_x), str(pivot_y)])
+
 ## Select › Color Range. `range` is "Sampled Colors" (the sRGB triples in
 ## `colors`, within `fuzziness` 0..200), "Reds", "Yellows", "Greens", "Cyans",
 ## "Blues", "Magentas", "Highlights", "Midtones" or "Shadows"; `invert`

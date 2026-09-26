@@ -1314,6 +1314,35 @@ pub class Workspace:
             self.canvas.select_rectangle(left, top, right - left, bottom - top, mode)
         self.touch()
 
+    ## Select › Modify › Border: a band `width` pixels wide along the selection's edge.
+    pub func border_selection(self, width: int) -> unit!:
+        self.canvas.border_selection(width)
+        self.touch()
+
+    ## Select › Modify › Smooth: corners rounded and specks dropped over `radius` pixels.
+    pub func smooth_selection(self, radius: int) -> unit!:
+        self.canvas.smooth_selection(radius)
+        self.touch()
+
+    ## Select › Grow (`contiguous`) and Similar: more of the colors the
+    ## selection covers, within the magic wand's tolerance, on the selected
+    ## layer or (the wand's option) every layer.
+    pub func grow_selection(self, contiguous: bool) -> unit!:
+        self.canvas.grow_selection(self.selected_id(), self.tolerance, contiguous, self.selecting.all_layers)
+        self.touch()
+
+    ## Select › Transform Selection: the free-transform box around the
+    ## selection, moving only its outline. False when nothing is selected or
+    ## something else is under way.
+    pub func begin_selection_transform(self) -> bool!:
+        if self.transform != none or self.previewing() or not self.canvas.has_selection():
+            return false
+        let box = TransformBox(float(self.canvas.selection_left()), float(self.canvas.selection_top()), float(self.canvas.selection_width()), float(self.canvas.selection_height()))
+        self.canvas.begin_selection_transform()
+        self.transform = FreeTransform(self.canvas, [], box, outline = true)
+        self.touch()
+        return true
+
     ## The magic wand at a document pixel on the selected layer, combined by `mode` (as `select_shape`).
     pub func select_wand(self, x: float, y: float, mode: int) -> unit!:
         let px = int(math.floor(x))

@@ -2,7 +2,8 @@
 ## transform session, the layers it moves and how it resamples. The canvas
 ## shows the layers through the box live; Apply keeps it as one undo step,
 ## Cancel puts everything back. With a selection only its pixels float, on the
-## selected layer, and the outline goes with them.
+## selected layer, and the outline goes with them. With `outline` (Select ›
+## Transform Selection) only the selection's outline moves, the pixels stay.
 from canvas import Canvas
 from transform_box import TransformBox
 
@@ -12,20 +13,30 @@ pub class FreeTransform:
     pub let ids: list[int]
     ## Compositor's sampling: 0 nearest, 1 smooth, 2 high quality.
     pub var sampling: int = 1
+    ## Only the selection's outline moves (Select › Transform Selection).
+    pub let outline: bool
     let canvas: Canvas
 
-    pub func init(self, canvas: Canvas, ids: list[int], box: TransformBox):
+    pub func init(self, canvas: Canvas, ids: list[int], box: TransformBox, outline: bool = false):
         self.canvas = canvas
         self.ids = ids
         self.box = box
+        self.outline = outline
 
     ## Whether the selected pixels float rather than whole layers moving.
     pub func floats(self) -> bool:
-        return self.canvas.transform_floats()
+        return not self.outline and self.canvas.transform_floats()
 
-    ## Show the layers as the box has them now.
+    ## Show the layers (or the outline) as the box has them now.
     pub func preview(self) -> unit!:
         let box = self.box
+        if self.outline:
+            if box.distorted:
+                let c = box.corners
+                self.canvas.preview_selection_distort(box.left, box.top, box.width, box.height, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])
+            else:
+                self.canvas.preview_selection_transform(box.scale_x, box.scale_y, box.angle, box.dx, box.dy, box.pivot_x(), box.pivot_y())
+            return
         if box.distorted:
             let c = box.corners
             self.canvas.preview_distort(box.left, box.top, box.width, box.height, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])
@@ -34,12 +45,17 @@ pub class FreeTransform:
 
     pub func set_sampling(self, sampling: int) -> unit!:
         self.sampling = sampling
+        if self.outline:
+            return
         self.canvas.set_transform_sampling(sampling)
         if not self.box.unchanged():
             self.preview()
 
     ## Keep what is shown (unless the box is as found) or drop it.
     pub func finish(self, keep: bool) -> unit!:
+        if self.outline:
+            self.canvas.end_selection_transform(keep and not self.box.unchanged())
+            return
         self.canvas.end_transform(keep and not self.box.unchanged())
 
 ## Begin a free transform of layers `ids` (the first the selected one) on

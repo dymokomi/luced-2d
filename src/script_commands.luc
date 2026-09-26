@@ -184,6 +184,25 @@ pub class ScriptCommands:
             workspace.deselect()
         elif action == "invert_selection":
             workspace.invert_selection()
+        elif action == "modify_selection":
+            workspace.adjust_selection(number(fields, 0), number(fields, 1))
+        elif action == "border_selection":
+            workspace.border_selection(number(fields, 0))
+        elif action == "smooth_selection":
+            workspace.smooth_selection(number(fields, 0))
+        elif action == "grow_selection":
+            let tolerance = workspace.tolerance
+            workspace.tolerance = decimal(fields, 1)
+            workspace.grow_selection(flag(fields, 0)) catch failure:
+                workspace.tolerance = tolerance
+                error(failure.code, failure.message)
+            workspace.tolerance = tolerance
+        elif action == "transform_selection":
+            workspace.canvas.begin_selection_transform()
+            workspace.canvas.preview_selection_transform(decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4), decimal(fields, 5), decimal(fields, 6)) catch failure:
+                workspace.canvas.end_selection_transform(false)
+                error(failure.code, failure.message)
+            workspace.canvas.end_selection_transform(true)
         elif action == "select_color_range":
             var colors: list[float] = []
             var subtract: list[bool] = []

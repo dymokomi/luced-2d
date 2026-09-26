@@ -85,6 +85,7 @@ pub func main(arguments: list[str]) -> int!:
     aligning()
     dock_layouts(arguments)
     settings_save_pending(arguments)
+    refining_selections()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1405,3 +1406,55 @@ func settings_save_pending(arguments: list[str]) -> unit!:
     dialog.scratch_field.set_text("")
     dialog.save()
     assert(store.load().scratch == "")
+
+## Select › Modify › Border and Smooth, Grow and Similar, and Transform
+## Selection through the workspace, each one undo step.
+func refining_selections() -> unit!:
+    let workspace = Workspace(400, 300)
+    workspace.canvas.bind_headless()
+    # Red on the left, blue in a column, red again on the right.
+    foreground(workspace, 1.0, 0.0, 0.0)
+    workspace.canvas.select_rectangle(0, 0, 150, 300)
+    workspace.fill_selection(false)
+    foreground(workspace, 0.0, 0.0, 1.0)
+    workspace.canvas.select_rectangle(150, 0, 50, 300)
+    workspace.fill_selection(false)
+    foreground(workspace, 1.0, 0.0, 0.0)
+    workspace.canvas.select_rectangle(200, 0, 200, 300)
+    workspace.fill_selection(false)
+    workspace.canvas.select_rectangle(10, 10, 5, 5)
+    workspace.grow_selection(true)
+    assert(workspace.canvas.undo_name() == "Grow" and workspace.canvas.selected_at(140, 290) == 255 and workspace.canvas.selected_at(300, 150) == 0)
+    workspace.grow_selection(false)
+    assert(workspace.canvas.undo_name() == "Similar" and workspace.canvas.selected_at(300, 150) == 255 and workspace.canvas.selected_at(170, 150) == 0)
+    workspace.canvas.select_rectangle(50, 50, 100, 100)
+    workspace.border_selection(8)
+    assert(workspace.canvas.undo_name() == "Border" and workspace.canvas.selected_at(100, 100) == 0 and workspace.canvas.selected_at(50, 100) > 0)
+    workspace.undo()
+    workspace.smooth_selection(3)
+    assert(workspace.canvas.undo_name() == "Smooth" and workspace.canvas.selected_at(100, 100) == 255)
+    # The box moves the outline; Apply keeps it, the pixels stay.
+    workspace.canvas.select_rectangle(100, 100, 50, 50)
+    assert(workspace.begin_selection_transform())
+    let session = workspace.transform else trap("a transform is under way")
+    assert(session.outline and not session.floats())
+    session.box.dx = 60.0
+    workspace.preview_transform()
+    workspace.finish_transform(true)
+    assert(workspace.transform == none and workspace.canvas.undo_name() == "Transform Selection")
+    assert(workspace.canvas.selection_left() == 160 and workspace.canvas.selected_at(120, 120) == 0)
+    workspace.undo()
+    assert(workspace.canvas.selection_left() == 100)
+    # Cancelled, nothing changes.
+    assert(workspace.begin_selection_transform())
+    let again = workspace.transform else trap("a transform is under way")
+    again.box.dx = 30.0
+    workspace.preview_transform()
+    workspace.finish_transform(false)
+    assert(workspace.canvas.selection_left() == 100)
+
+## Set the foreground color, as the palette does.
+func foreground(workspace: Workspace, red: float, green: float, blue: float):
+    workspace.red = red
+    workspace.green = green
+    workspace.blue = blue

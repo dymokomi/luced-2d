@@ -67,6 +67,22 @@ pub class Prompts:
             workspace.export(trimmed, self.export_quality, self.export_matte) catch failure:
                 self.reject(text, f"Could not export: {failure.message}")
                 return
+        elif mode == "border" or mode == "smooth":
+            let most = 200 if mode == "border" else 100
+            let amount = int(trimmed) catch failure:
+                self.reject(text, f"Enter a whole number: 1..{most}")
+                return
+            if amount < 1 or amount > most:
+                self.reject(text, f"Enter a whole number: 1..{most}")
+                return
+            if mode == "border":
+                workspace.border_selection(amount) catch failure:
+                    self.reject(text, f"Could not make the border: {failure.message}")
+                    return
+            else:
+                workspace.smooth_selection(amount) catch failure:
+                    self.reject(text, f"Could not smooth: {failure.message}")
+                    return
         elif mode == "expand" or mode == "contract" or mode == "feather":
             let amount = int(trimmed) catch failure:
                 self.reject(text, "Enter a whole number: 1..512")
