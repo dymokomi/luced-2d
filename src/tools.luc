@@ -55,7 +55,10 @@ pub func tools() -> list[Tool]!:
                  "Click corners, drag curves · click the first anchor to close · Enter ends · on a path: drag anchors or handles (alt: one handle), click the curve to add, an anchor to remove"),
             Tool("hand", "Hand", "Hand", "pan-tool", Key.h, "Drag to pan"),
             Tool("idle", "Idle", "Idle", "node-tool", Key.a, "A tool that does nothing on the canvas: a safe place to rest · Space pans · Z zooms"),
-            Tool("zoom", "Zoom", "Zoom", "zoom-in", Key.z, "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool")]
+            Tool("zoom", "Zoom", "Zoom", "zoom-in", Key.z, "Click to zoom in · alt-click to zoom out · drag right or left to zoom · hold Z with any tool"),
+            # Last, so the others keep their places; the rail shows it in the lassos' group.
+            Tool("magnetic", "Magnetic Lasso", "Magnetic Lasso", "lasso-tool", Key.unknown,
+                 "Click, then move along an edge: the wire snaps to it · click adds an anchor · Backspace takes one back · double-click or Enter closes · Esc cancels")]
 
 ## The tool whose id is `id`; the brush for an unknown one.
 pub func tool_by_id(id: str) -> Tool!:
@@ -68,7 +71,7 @@ pub func tool_by_id(id: str) -> Tool!:
 ## tool; a long press (or a right-click) on it offers the others. Tools in no
 ## group have a button of their own.
 pub func tool_groups() -> list[list[str]]:
-    return [["marquee", "ellipse", "lasso", "polygon"], ["brush", "pencil"], ["dodge", "burn"], ["rectangle", "shape_ellipse", "line", "shape_polygon"]]
+    return [["marquee", "ellipse", "lasso", "polygon", "magnetic"], ["brush", "pencil"], ["dodge", "burn"], ["rectangle", "shape_ellipse", "line", "shape_polygon"]]
 
 ## The group holding `tool`, as its index in `tool_groups()`, or -1.
 pub func group_of(tool: str) -> int:

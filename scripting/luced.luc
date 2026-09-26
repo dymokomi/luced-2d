@@ -212,6 +212,15 @@ pub func grow_selection(contiguous: bool = true, tolerance: float = 32.0):
 pub func transform_selection(scale_x: float, scale_y: float, angle: float = 0.0, dx: float = 0.0, dy: float = 0.0, pivot_x: float = 0.0, pivot_y: float = 0.0):
     send("transform_selection", [str(scale_x), str(scale_y), str(angle), str(dx), str(dy), str(pivot_x), str(pivot_y)])
 
+## The Magnetic Lasso: its first anchor at the first of `points` (x, y
+## pairs, document pixels), a click at each of the others, then closed back
+## to the start along the edge; `mode` 0 new, 1 add, 2 subtract, 3 intersect.
+pub func magnetic_lasso(points: list[float], width: float = 10.0, contrast: float = 10.0, frequency: int = 57, mode: int = 0):
+    var fields = [str(width), str(contrast), str(frequency), str(mode)]
+    for value in points:
+        fields = fields + [str(value)]
+    send("magnetic_lasso", fields)
+
 ## Select › Color Range. `range` is "Sampled Colors" (the sRGB triples in
 ## `colors`, within `fuzziness` 0..200), "Reds", "Yellows", "Greens", "Cyans",
 ## "Blues", "Magentas", "Highlights", "Midtones" or "Shadows"; `invert`

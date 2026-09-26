@@ -803,7 +803,7 @@ pub class Workspace:
     ## sample; the Move tool's auto-select; the brush and the eraser swap.
     pub func cycle_tool_mode(self) -> unit!:
         let tool = self.tool
-        if tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "wand":
+        if tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "magnetic" or tool == "wand":
             self.selecting.mode = (self.selecting.mode + 1) % 4
         elif tool == "smear":
             self.smear_mode = (self.smear_mode + 1) % 3

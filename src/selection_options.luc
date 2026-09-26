@@ -13,6 +13,12 @@ pub class SelectionOptions:
     ## The wand's sample: 1, 3 or 5 pixels square.
     pub var sample: int = 1
     pub var all_layers: bool = false
+    ## The Magnetic Lasso's: pixels round the pointer searched for an edge
+    ## (1..256), the weakest edge it follows in percent (1..100), and how
+    ## often anchors fall on their own (0..100).
+    pub var magnetic_width: float = 10.0
+    pub var magnetic_contrast: float = 10.0
+    pub var magnetic_frequency: int = 57
 
     pub func init(self):
         self.mode = 0

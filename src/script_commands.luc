@@ -197,6 +197,20 @@ pub class ScriptCommands:
                 workspace.tolerance = tolerance
                 error(failure.code, failure.message)
             workspace.tolerance = tolerance
+        elif action == "magnetic_lasso":
+            let canvas = workspace.canvas
+            if fields.length < 10:
+                error(ui.invalid, "the Magnetic Lasso needs three points or more")
+            canvas.begin_magnetic(decimal(fields, 4), decimal(fields, 5), 0, decimal(fields, 0), decimal(fields, 1), number(fields, 2))
+            var at = 6
+            while at + 1 < fields.length:
+                canvas.anchor_magnetic(decimal(fields, at), decimal(fields, at + 1)) catch failure:
+                    canvas.cancel_magnetic()
+                    error(failure.code, failure.message)
+                at += 2
+            workspace.selecting.apply(canvas, false)
+            canvas.close_magnetic(number(fields, 3))
+            workspace.touch()
         elif action == "quick_mask":
             if flag(fields, 0) != workspace.canvas.quick_mask():
                 workspace.toggle_quick_mask()

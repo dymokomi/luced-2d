@@ -11,6 +11,7 @@ from crop_box import CropBox, crop_new
 from layer_ops import OpacityKeys, set_opacity_all
 from size_fields import SizeFields
 from polygon_lasso import PolygonLasso
+from magnetic_lasso import MagneticLasso, view_level
 from guides import GuideDrag
 from snapping import Snapper
 from adjustments import adjustments
@@ -1478,6 +1479,42 @@ func quick_masking() -> unit!:
     assert(workspace.canvas.selected_at(200, 150) == 255 and workspace.layer_count() == 1)
     workspace.undo()
     assert(workspace.canvas.selected_at(200, 150) == 0 and workspace.canvas.selected_at(30, 30) == 255)
+    magnetic_lassoing()
+
+## The Magnetic Lasso from the rail's group, its header options, clicks
+## along an edge closing round the white half, and the same from a script.
+func magnetic_lassoing() -> unit!:
+    let workspace = Workspace(300, 200)
+    let font = Font()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, font)
+    workspace.canvas.bind_headless()
+    foreground(workspace, 1.0, 1.0, 1.0)
+    workspace.canvas.select_rectangle(150, 0, 150, 200)
+    workspace.fill_selection(false)
+    workspace.canvas.deselect()
+    workspace.choose_tool("magnetic")
+    assert(group_of("magnetic") == group_of("lasso"))
+    workspace.selecting.magnetic_width = 12.0
+    let lasso = MagneticLasso()
+    lasso.click(workspace, 150.0, 5.0, false, false, 1.0, 6.0, 0)
+    lasso.hover(workspace, 144.0, 100.0)
+    assert(workspace.canvas.magnetic_count() > 50)
+    lasso.click(workspace, 150.0, 195.0, false, false, 1.0, 6.0, 1000)
+    lasso.click(workspace, 295.0, 195.0, false, false, 1.0, 6.0, 2000)
+    lasso.click(workspace, 295.0, 5.0, false, false, 1.0, 6.0, 3000)
+    lasso.close(workspace)
+    assert(workspace.canvas.undo_name() == "Magnetic Lasso" and workspace.canvas.selected_at(220, 100) == 255 and workspace.canvas.selected_at(100, 100) == 0)
+    # Backspace at the first anchor lets it go.
+    lasso.click(workspace, 20.0, 20.0, false, false, 0.25, 6.0, 9000)
+    assert(view_level(0.25) == 2 and workspace.canvas.magnetic_active())
+    lasso.take_back(workspace)
+    assert(not lasso.active and not workspace.canvas.magnetic_active())
+    let commands = ScriptCommands(workspace, actions)
+    workspace.canvas.deselect()
+    commands.apply(parse_line("@l2d magnetic_lasso\t10\t10\t57\t0\t150\t5\t150\t195\t295\t195\t295\t5") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Magnetic Lasso" and workspace.canvas.selected_at(220, 100) == 255)
+    panels.close()
 
 ## Set the foreground color, as the palette does.
 func foreground(workspace: Workspace, red: float, green: float, blue: float):

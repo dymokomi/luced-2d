@@ -10,6 +10,7 @@ from kit import outline, dropped_paths
 from transform_box import grab_move, grab_turn
 from layer_ops import OpacityKeys, set_opacity_all
 from polygon_lasso import PolygonLasso
+from magnetic_lasso import MagneticLasso
 from guides import GuideDrag
 from snapping import Snapper
 from free_transform import box_around
@@ -66,6 +67,7 @@ pub class CanvasView: Widget:
     let opacity_keys: OpacityKeys
     ## The Polygonal Lasso's shape while its corners are clicked.
     pub let polygon: PolygonLasso
+    pub let magnetic: MagneticLasso
     ## A shape tool's shape while it is dragged out.
     pub let shape: ShapeDrag
     pub let pen: PenTool
@@ -143,6 +145,7 @@ pub class CanvasView: Widget:
         self.selection = SelectionDrag()
         self.opacity_keys = OpacityKeys()
         self.polygon = PolygonLasso()
+        self.magnetic = MagneticLasso()
         self.shape = ShapeDrag()
         self.pen = PenTool()
         self.guides = GuideDrag()
@@ -219,6 +222,9 @@ pub class CanvasView: Widget:
         if self.polygon.active and workspace.tool != "polygon":
             self.polygon.cancel()
         self.polygon.draw(painter, workspace.zoom, left, top, theme.text(), theme.backdrop())
+        if self.magnetic.active and workspace.tool != "magnetic":
+            self.magnetic.cancel(workspace)
+        self.magnetic.draw(painter, workspace, left, top, theme.text(), theme.backdrop())
         self.guides.draw(painter, workspace, size.width, size.height)
         self.draw_pixel_grid(painter, size.width, size.height)
         if self.ringing:
@@ -432,6 +438,8 @@ pub class CanvasView: Widget:
             self.pointer_inside = event.inside
             if self.polygon.active:
                 self.polygon.hover(self.document_x(event.x), self.document_y(event.y))
+            if self.magnetic.active:
+                self.magnetic.hover(self.workspace, self.document_x(event.x), self.document_y(event.y))
             if self.pen.drawing and not self.pen.holding():
                 self.pen.hover(self.document_x(event.x), self.document_y(event.y))
             self.drag(event)
@@ -477,6 +485,16 @@ pub class CanvasView: Widget:
                     self.polygon.cancel()
                 else:
                     self.polygon.take_back()
+                if let changed = self.on_changed:
+                    changed()
+            elif self.magnetic.active and (event.key == Key.enter or event.key == Key.escape or event.key == Key.backspace or event.key == Key.delete):
+                # The Magnetic Lasso's keys: Enter closes, Esc lets go, Backspace takes an anchor back.
+                if event.key == Key.enter:
+                    self.magnetic.close(self.workspace)
+                elif event.key == Key.escape:
+                    self.magnetic.cancel(self.workspace)
+                else:
+                    self.magnetic.take_back(self.workspace)
                 if let changed = self.on_changed:
                     changed()
             elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and not self.gradient_handle and (self.workspace.transform != none or self.workspace.crop_box != none or self.workspace.gradient != none):
@@ -658,6 +676,8 @@ pub class CanvasView: Widget:
             workspace.select_wand(x, y, workspace.selecting.mode_for(event.shift, event.alt))
         elif tool == "polygon":
             self.polygon.click(workspace, x, y, event.shift, event.alt, 6.0 / workspace.zoom, time.now() // 1000000)
+        elif tool == "magnetic":
+            self.magnetic.click(workspace, x, y, event.shift, event.alt, workspace.zoom, 6.0 / workspace.zoom, time.now() // 1000000)
         elif tool == "marquee" or tool == "ellipse" or tool == "lasso":
             # A marquee's corners pull to the canvas, the guides and the layers.
             self.snapper.gather(workspace, [], tool != "lasso")
@@ -785,7 +805,7 @@ pub class CanvasView: Widget:
                 workspace.move_selected_pixels(dx, dy, false)
             else:
                 workspace.move_layer(dx, dy)
-        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "wand"):
+        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "magnetic" or tool == "wand"):
             workspace.move_selection(dx, dy)
 
     ## A free transform's or the Crop tool's box dragged to a document point.

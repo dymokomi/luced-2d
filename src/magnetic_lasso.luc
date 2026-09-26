@@ -1,0 +1,95 @@
+## The Magnetic Lasso, as Photoshop's: a click sets the first anchor and a
+## wire follows the pointer along the nearest edge, anchors falling on their
+## own as it goes (the header's Width, Contrast and Frequency); a click adds
+## one, Backspace or Delete takes the last back, double-click, Enter or a
+## click on the first anchor closes the shape along the edge, Esc lets it go.
+## The canvas traces the wire over the view's pyramid level (canvas/magnetic.lucb).
+from ui import Painter, Point
+from gpu import Rect, Color
+from workspace import Workspace
+import math
+
+pub class MagneticLasso:
+    pub var active: bool = false
+    var mode: int = 0
+    ## The last click, for a double-click: when (ms).
+    var last_click: int = -1000
+
+    pub func init(self):
+        self.active = false
+
+    ## A click at document point (`x`, `y`) at `now` ms, the view at `zoom`;
+    ## `reach` document pixels round the first anchor close the shape.
+    pub func click(self, workspace: Workspace, x: float, y: float, shift: bool, alt: bool, zoom: float, reach: float, now: int) -> unit!:
+        let double = now - self.last_click <= 400
+        self.last_click = now
+        let canvas = workspace.canvas
+        if not self.active:
+            let options = workspace.selecting
+            canvas.begin_magnetic(x, y, view_level(zoom), options.magnetic_width, options.magnetic_contrast, options.magnetic_frequency)
+            self.active = true
+            self.mode = options.mode_for(shift, alt)
+            return
+        let near_first = math.abs(x - canvas.magnetic_x(0)) <= reach and math.abs(y - canvas.magnetic_y(0)) <= reach
+        if (near_first or double) and canvas.magnetic_count() >= 3:
+            self.close(workspace)
+            return
+        canvas.anchor_magnetic(x, y)
+
+    ## The wire to the edge nearest the pointer.
+    pub func hover(self, workspace: Workspace, x: float, y: float) -> unit!:
+        if self.active:
+            workspace.canvas.move_magnetic(x, y)
+
+    ## Take the last anchor back; at the first, let the shape go.
+    pub func take_back(self, workspace: Workspace):
+        if not workspace.canvas.remove_magnetic_anchor():
+            self.cancel(workspace)
+
+    pub func cancel(self, workspace: Workspace):
+        self.active = false
+        workspace.canvas.cancel_magnetic()
+
+    ## Close the shape along the edge back to the start and select it.
+    pub func close(self, workspace: Workspace) -> unit!:
+        self.active = false
+        let canvas = workspace.canvas
+        if canvas.magnetic_count() < 3:
+            canvas.cancel_magnetic()
+            return
+        workspace.selecting.apply(canvas, false)
+        canvas.close_magnetic(self.mode)
+        workspace.touch()
+
+    ## The wire so far and its anchors, at screen resolution.
+    pub func draw(self, painter: Painter, workspace: Workspace, left: float, top: float, ink: Color, backing: Color) -> unit!:
+        let canvas = workspace.canvas
+        if not self.active or not canvas.magnetic_active():
+            return
+        let zoom = workspace.zoom
+        let count = canvas.magnetic_count()
+        var index = 1
+        while index < count:
+            let a = Point(canvas.magnetic_x(index - 1) * zoom + left, canvas.magnetic_y(index - 1) * zoom + top)
+            let b = Point(canvas.magnetic_x(index) * zoom + left, canvas.magnetic_y(index) * zoom + top)
+            painter.line(a, b, 3.0, backing)
+            painter.line(a, b, 1.0, ink)
+            index += 1
+        # Each anchor a small square, the first (where a click closes) larger.
+        for anchor in 0..<canvas.magnetic_anchors():
+            let at = canvas.magnetic_anchor(anchor)
+            let ax = math.floor(canvas.magnetic_x(at) * zoom + left)
+            let ay = math.floor(canvas.magnetic_y(at) * zoom + top)
+            let size = 3.0 if anchor == 0 else 2.0
+            painter.rectangle(Rect(ax - size, ay - size, size * 2.0 + 1.0, size * 2.0 + 1.0), ink)
+            painter.rectangle(Rect(ax - size + 1.0, ay - size + 1.0, size * 2.0 - 1.0, size * 2.0 - 1.0), backing)
+
+## The pyramid level whose samples are about a screen pixel at `zoom`: 0 at
+## 100% and closer, one more each halving.
+pub func view_level(zoom: float) -> int:
+    var level = 0
+    var scale = zoom
+    while scale < 0.75 and level < 16:
+        scale *= 2.0
+        level += 1
+    return level

@@ -1,6 +1,7 @@
 ## The tool header's options for the marquees, lassos and wand, after
 ## Compositor's: the four modes (new, add, subtract, intersect) as buttons,
-## Feather, Anti-alias, and for the wand its Sample Size and All Layers.
+## Feather, Anti-alias, for the wand its Sample Size and All Layers, and for
+## the Magnetic Lasso its Width, Contrast and Frequency.
 from ui import Widget, HStack, Button, ButtonStyle, NumberField, Checkbox, Menu, Command
 from workspace import Workspace
 from kit import Kit
@@ -13,6 +14,10 @@ pub class SelectionControls:
     let sample_menu: Menu
     let all_box: Checkbox
     let wand_extras: HStack
+    let magnetic_extras: HStack
+    let width_field: NumberField
+    let contrast_field: NumberField
+    let frequency_field: NumberField
     let workspace: Workspace
 
     ## `wand_options` (the tolerance and Contiguous) show with the wand's own.
@@ -45,8 +50,19 @@ pub class SelectionControls:
         self.all_box = kit.checkbox("All Layers", func () -> unit!:
             self.workspace.selecting.all_layers = not self.workspace.selecting.all_layers)
         self.wand_extras = HStack([kit.labelled("Sample", self.sample_menu), self.all_box, wand_options], spacing = 12.0)
+        # The Magnetic Lasso's Width, Contrast and Frequency.
+        self.width_field = NumberField(10.0, 1.0, 256.0, 1.0, suffix = " px", font = kit.font, cells = 6.0)
+        kit.keep(self.width_field.on_change(func (value: float) -> unit!:
+            self.workspace.selecting.magnetic_width = value))
+        self.contrast_field = NumberField(10.0, 1.0, 100.0, 1.0, suffix = "%", font = kit.font, cells = 5.0)
+        kit.keep(self.contrast_field.on_change(func (value: float) -> unit!:
+            self.workspace.selecting.magnetic_contrast = value))
+        self.frequency_field = NumberField(57.0, 0.0, 100.0, 1.0, font = kit.font, cells = 4.0)
+        kit.keep(self.frequency_field.on_change(func (value: float) -> unit!:
+            self.workspace.selecting.magnetic_frequency = int(value + 0.5)))
+        self.magnetic_extras = HStack([kit.labelled("Width", self.width_field), kit.labelled("Contrast", self.contrast_field), kit.labelled("Frequency", self.frequency_field)], spacing = 12.0)
         self.row = HStack([HStack([self.modes[0], self.modes[1], self.modes[2], self.modes[3]], spacing = 2.0), kit.labelled("Feather", self.feather_field),
-                           self.antialias_box, self.wand_extras], spacing = 12.0)
+                           self.antialias_box, self.wand_extras, self.magnetic_extras], spacing = 12.0)
 
     ## The options as they are, for `tool`.
     pub func show(self, tool: str) -> unit!:
@@ -59,5 +75,9 @@ pub class SelectionControls:
         self.antialias_box.set_checked(options.antialias)
         self.antialias_box.layout().set_visible(tool != "marquee")
         self.wand_extras.layout().set_visible(tool == "wand")
+        self.magnetic_extras.layout().set_visible(tool == "magnetic")
+        self.width_field.set_value(options.magnetic_width)
+        self.contrast_field.set_value(options.magnetic_contrast)
+        self.frequency_field.set_value(float(options.magnetic_frequency))
         self.sample_menu.set_text(("Point Sample" if options.sample == 1 else f"{options.sample} by {options.sample} Average") + " ▾")
         self.all_box.set_checked(options.all_layers)
