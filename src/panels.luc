@@ -38,6 +38,7 @@ from tool_rail import ToolRail
 from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
 from panel_catalog import PanelCatalog
 from panel_list import panel_entries
+from align import align_modes, align_layers
 from canvas import Canvas
 import math
 from units import unit_ids
@@ -208,6 +209,14 @@ pub class Panels:
         self.catalog.open_picker = self.pick_color
         self.catalog.brush_chosen = func () -> unit!:
             self.choose_tool("brush")
+        self.catalog.align_commands = actions.aligns
+        var align_index = 0
+        for each in align_modes():
+            let chosen = each
+            kit.bind(actions.aligns[align_index], func () -> unit!:
+                discard(align_layers(self.workspace, chosen))
+                self.refresh())
+            align_index += 1
         var window_index = 0
         for entry in panel_entries():
             let id = entry.id

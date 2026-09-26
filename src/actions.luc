@@ -10,6 +10,7 @@ from canvas import Canvas
 from tools import tools
 from units import unit_ids, unit_label
 from panel_list import panel_entries
+from align import align_modes, align_title
 import platform
 
 pub class Actions:
@@ -29,6 +30,8 @@ pub class Actions:
     pub let exit_app: Command
     ## Window › each panel, ticked while it is open (panel_list.luc's order).
     pub let windows: list[Command]
+    ## Layer › Align and Distribute, in align.luc's order (align_modes).
+    pub let aligns: list[Command]
     # Edit
     pub let undo: Command
     pub let redo: Command
@@ -243,6 +246,9 @@ pub class Actions:
         self.windows = []
         for entry in panel_entries():
             self.windows.append(Command(entry.title, id = "window_" + entry.id))
+        self.aligns = []
+        for each in align_modes():
+            self.aligns.append(Command(align_title(each), id = "align_" + each))
         self.bigger = Command("Bigger Brush", Shortcut(Key.right_bracket), id = "bigger")
         self.smaller = Command("Smaller Brush", Shortcut(Key.left_bracket), id = "smaller")
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
@@ -253,7 +259,7 @@ pub class Actions:
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.toggle_preview, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
-                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend, self.exit_app] + self.windows + self.adjustments + self.filters + self.adjustment_layers + self.blends + self.tools + self.units
+                    self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend, self.exit_app] + self.windows + self.aligns + self.adjustments + self.filters + self.adjustment_layers + self.blends + self.tools + self.units
 
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:
@@ -301,6 +307,11 @@ pub class Actions:
         self.flip_canvas_horizontal.set_enabled(not previewing)
         self.flip_canvas_vertical.set_enabled(not previewing)
         self.layer_style.set_enabled(not previewing)
+        # Aligning needs a selected layer, distributing three: counted, not measured.
+        let chosen = workspace.selected_ids().length
+        for command in self.aligns:
+            let spreads = command.id().starts_with("align_distribute")
+            command.set_enabled(not previewing and chosen >= (3 if spreads else 1))
 
 ## Photoshop's keys for the adjustments that have one; none for the rest.
 func adjustment_shortcut(kind: int) -> Shortcut:

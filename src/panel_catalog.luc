@@ -4,7 +4,7 @@
 ## one; the window refreshes the open ones. A new panel with no place given
 ## goes beside the Layers and Properties column, or right of the viewport
 ## when that column is gone.
-from ui import DStack, Panel, DockPosition, DockRequest
+from ui import DStack, Panel, DockPosition, DockRequest, Command
 from workspace import Workspace
 from kit import Kit
 from view import CanvasView
@@ -18,6 +18,7 @@ from brushes_panel import BrushesPanel
 from history_panel import HistoryPanel
 from navigator_panel import NavigatorPanel
 from info_panel import InfoPanel
+from align_panel import AlignPanel
 from settings_panel import SettingsDialog
 
 pub class PanelCatalog:
@@ -38,6 +39,9 @@ pub class PanelCatalog:
     pub var history: HistoryPanel? = none
     pub var navigator: NavigatorPanel? = none
     pub var info: InfoPanel? = none
+    pub var align: AlignPanel? = none
+    ## Layer › Align and Distribute's commands, which the Align panel's buttons run.
+    pub var align_commands: list[Command]
     ## After a panel changes the document or the colors, the window refreshes;
     ## a Color swatch clicked twice opens the picker; a brush preset picked
     ## picks the Brush tool.
@@ -56,6 +60,7 @@ pub class PanelCatalog:
         self.layers = layers
         self.properties = properties
         self.brush = brush
+        self.align_commands = []
         var ids: list[str] = []
         var titles: list[str] = []
         for entry in panel_entries():
@@ -121,6 +126,8 @@ pub class PanelCatalog:
             return self.navigator_panel().panel
         if id == "info":
             return self.info_panel().panel
+        if id == "align":
+            return self.align_panel().panel
         return none
 
     func color_panel(self) -> ColorPanel!:
@@ -177,6 +184,13 @@ pub class PanelCatalog:
         self.info = made
         return made
 
+    func align_panel(self) -> AlignPanel!:
+        if let made = self.align:
+            return made
+        let made = AlignPanel(self.workspace, self.kit, self.align_commands)
+        self.align = made
+        return made
+
     func refresh(self) -> unit!:
         if let refresh = self.refreshed:
             refresh()
@@ -206,6 +220,9 @@ pub class PanelCatalog:
             if self.dock.contains(made.panel):
                 made.show()
         if let made = self.info:
+            if self.dock.contains(made.panel):
+                made.show()
+        if let made = self.align:
             if self.dock.contains(made.panel):
                 made.show()
 

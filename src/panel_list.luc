@@ -15,4 +15,4 @@ pub class PanelEntry:
 pub func panel_entries() -> list[PanelEntry]!:
     return [PanelEntry("layers", "Layers"), PanelEntry("properties", "Properties"), PanelEntry("history", "History"),
             PanelEntry("color", "Color"), PanelEntry("swatches", "Swatches"), PanelEntry("brushes", "Brushes"),
-            PanelEntry("brush_settings", "Brush Settings"), PanelEntry("navigator", "Navigator"), PanelEntry("info", "Info")]
+            PanelEntry("brush_settings", "Brush Settings"), PanelEntry("navigator", "Navigator"), PanelEntry("info", "Info"), PanelEntry("align", "Align")]

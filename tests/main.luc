@@ -32,6 +32,7 @@ from input import EventKind, Key
 from ui import Command
 from swatches_panel import swatches_of
 from brushes_panel import saved_brushes
+from align import align_layers
 import math
 import window
 
@@ -75,6 +76,7 @@ pub func main(arguments: list[str]) -> int!:
     hue_ranges()
     opens_photos()
     panel_catalog()
+    aligning()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1194,3 +1196,49 @@ func panel_catalog() -> unit!:
     # File › Exit on a changed document asks rather than ending the run.
     panels.files.quit()
     panels.close()
+
+## Layer › Align and Distribute on three painted layers, each one undo step.
+func aligning() -> unit!:
+    let workspace = Workspace(300, 200)
+    workspace.canvas.bind_headless()
+    workspace.add_layer()
+    workspace.add_layer()
+    let painted = [[10, 20, 30, 30], [100, 50, 20, 40], [200, 120, 40, 10]]
+    for index in 0..<3:
+        workspace.select(index)
+        workspace.canvas.select_rectangle(painted[index][0], painted[index][1], painted[index][2], painted[index][3])
+        workspace.fill_selection(false)
+        workspace.deselect()
+    workspace.select(0)
+    workspace.toggle_picked(1)
+    workspace.toggle_picked(2)
+    assert(workspace.selected_ids().length == 3)
+    # Several layers line up against the box around them all.
+    assert(align_layers(workspace, "left"))
+    assert(left_of(workspace, 0) == 10 and left_of(workspace, 1) == 10 and left_of(workspace, 2) == 10)
+    assert(workspace.canvas.undo_name() == "Align Left Edges")
+    workspace.undo()
+    assert(left_of(workspace, 1) == 100 and left_of(workspace, 2) == 200 and workspace.selected_ids().length == 3)
+    # Centers meet at the middle of that box, 10..240.
+    assert(align_layers(workspace, "hcenter"))
+    assert(left_of(workspace, 0) == 110 and left_of(workspace, 1) == 115 and left_of(workspace, 2) == 105)
+    workspace.undo()
+    # Distributing keeps the outermost two and centers the middle one between them.
+    assert(align_layers(workspace, "distribute_h"))
+    assert(left_of(workspace, 0) == 10 and left_of(workspace, 1) == 113 and left_of(workspace, 2) == 200)
+    workspace.undo()
+    assert(left_of(workspace, 1) == 100)
+    # Alone, a layer lines up against the canvas; with a selection, against that.
+    workspace.select(2)
+    assert(align_layers(workspace, "bottom") and top_of(workspace, 2) == 190)
+    workspace.canvas.select_rectangle(50, 40, 100, 100)
+    assert(align_layers(workspace, "right") and left_of(workspace, 2) == 110)
+    assert(not align_layers(workspace, "right"))
+
+func left_of(workspace: Workspace, index: int) -> int!:
+    assert(workspace.canvas.measure_content(workspace.canvas.layer_id(index)))
+    return workspace.canvas.content_left()
+
+func top_of(workspace: Workspace, index: int) -> int!:
+    assert(workspace.canvas.measure_content(workspace.canvas.layer_id(index)))
+    return workspace.canvas.content_top()

@@ -1,0 +1,41 @@
+## The Align panel, as Photoshop's: six buttons lining the selected layers up
+## by their edges or centers, two spacing three or more evenly, and a line
+## saying what they line up against. Each button runs the Layer menu's
+## command of the same name (align.luc does the work).
+from ui import Panel, Text, VStack, HStack, Spacer, Size, Command, Widget
+from workspace import Workspace
+from align import align_modes, align_icon
+from kit import Kit
+
+pub class AlignPanel:
+    pub let panel: Panel
+    let workspace: Workspace
+    let target: Text
+
+    pub func init(self, workspace: Workspace, kit: Kit, commands: list[Command]) -> unit!:
+        self.workspace = workspace
+        var aligning: list[Widget] = []
+        var spreading: list[Widget] = []
+        let modes = align_modes()
+        for index in 0..<modes.length:
+            let button = kit.tool_button(align_icon(modes[index]), commands[index])
+            if modes[index].starts_with("distribute"):
+                spreading.append(button)
+            else:
+                aligning.append(button)
+        self.target = Text("", font = kit.font, muted = true)
+        let content = VStack([Text("Align", font = kit.font), HStack(aligning + [Spacer()], spacing = 4.0),
+                              Text("Distribute", font = kit.font), HStack(spreading + [Spacer()], spacing = 4.0),
+                              self.target, Spacer()], spacing = 6.0, padding = 8.0)
+        self.panel = Panel("Align", content, minimum = Size(230.0, 150.0), id = "align")
+        self.show()
+
+    ## Say what the selected layers would line up against.
+    pub func show(self) -> unit!:
+        let chosen = self.workspace.selected_ids().length
+        var against = "the selected layers"
+        if self.workspace.canvas.has_selection():
+            against = "the selection"
+        elif chosen <= 1:
+            against = "the canvas"
+        self.target.set_text("Aligns to " + against)
