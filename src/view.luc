@@ -204,9 +204,10 @@ pub class CanvasView: Widget:
         # Marching ants along the selection's edge, at screen resolution, moving
         # with selected pixels being dragged; while a shape is being dragged its
         # outline is drawn plainly; while selected pixels float in a transform
-        # the box shows where they go, and the outline follows on Apply.
+        # the box shows where they go, and the outline follows on Apply. Quick
+        # Mask tints what it masks instead.
         let floating = workspace.canvas.transforming() and workspace.canvas.transform_floats()
-        if workspace.canvas.has_selection() and not floating:
+        if (workspace.canvas.has_selection() or workspace.canvas.quick_mask()) and not floating:
             var ants_left = left
             var ants_top = top
             if self.moving and self.move_pixels:

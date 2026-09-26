@@ -189,6 +189,11 @@ pub func invert_selection():
 pub func modify_selection(pixels: int, feather: int = 0):
     send("modify_selection", [str(pixels), str(feather)])
 
+## Quick Mask on (`on`) or off: while on, painting edits the selection
+## (black masks, white selects); turning it off makes that the selection.
+pub func quick_mask(on: bool = true):
+    send("quick_mask", [str(on)])
+
 ## Select › Modify › Border: a band `width` pixels wide along the selection's edge.
 pub func border_selection(width: int):
     send("border_selection", [str(width)])

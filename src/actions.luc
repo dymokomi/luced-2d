@@ -72,6 +72,7 @@ pub class Actions:
     pub let grow: Command
     pub let similar: Command
     pub let transform_selection: Command
+    pub let quick_mask: Command
     # Image
     pub let crop: Command
     pub let flip_canvas_horizontal: Command
@@ -185,6 +186,7 @@ pub class Actions:
         self.grow = Command("Grow", id = "grow")
         self.similar = Command("Similar", id = "similar")
         self.transform_selection = Command("Transform Selection", id = "transform_selection")
+        self.quick_mask = Command("Edit in Quick Mask Mode", Shortcut(Key.q), id = "quick_mask")
         self.crop = Command("Crop to Selection", id = "crop")
         self.flip_canvas_horizontal = Command("Flip Canvas Horizontal", id = "flip_canvas_horizontal")
         self.flip_canvas_vertical = Command("Flip Canvas Vertical", id = "flip_canvas_vertical")
@@ -267,7 +269,7 @@ pub class Actions:
         self.harder = Command("Harder Brush", Shortcut(Key.right_bracket, shift = true), id = "harder")
         self.softer = Command("Softer Brush", Shortcut(Key.left_bracket, shift = true), id = "softer")
         self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.undo, self.redo, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.fill_background, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
-                    self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather, self.border, self.smooth, self.grow, self.similar, self.transform_selection,
+                    self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather, self.border, self.smooth, self.grow, self.similar, self.transform_selection, self.quick_mask,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
                     self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.toggle_preview, self.load_transparency,
@@ -297,6 +299,8 @@ pub class Actions:
         self.grow.set_enabled(selection and not previewing)
         self.similar.set_enabled(selection and not previewing)
         self.transform_selection.set_enabled(selection and not previewing and workspace.transform == none)
+        self.quick_mask.set_enabled(not previewing and workspace.transform == none)
+        self.quick_mask.set_checked(canvas.quick_mask())
         self.crop.set_enabled(selection)
         self.layer_up.set_enabled(workspace.selected < layers - 1)
         self.layer_down.set_enabled(workspace.selected > 0)

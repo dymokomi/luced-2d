@@ -184,6 +184,8 @@ pub class Panels:
         var rail_items: list[Widget] = self.rail.items
         rail_items.append(Rule())
         rail_items.append(self.palette)
+        # Quick Mask's button under the swatches, as Photoshop's.
+        rail_items.append(self.rail.quick)
         let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
         rail.layout().set_limits(Size(44.0, 100.0), Size(44.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
@@ -309,6 +311,7 @@ pub class Panels:
         kit.bind(actions.similar, self.then_refresh(func () -> unit!:
             self.workspace.grow_selection(false)))
         kit.bind(actions.transform_selection, self.transform_selection)
+        kit.bind(actions.quick_mask, self.then_refresh(self.workspace.toggle_quick_mask))
         kit.bind(actions.crop, self.crop)
         kit.bind(actions.reveal_all, func () -> unit!:
             if not self.workspace.reveal_all():

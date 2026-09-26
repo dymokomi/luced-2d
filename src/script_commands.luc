@@ -197,6 +197,9 @@ pub class ScriptCommands:
                 workspace.tolerance = tolerance
                 error(failure.code, failure.message)
             workspace.tolerance = tolerance
+        elif action == "quick_mask":
+            if flag(fields, 0) != workspace.canvas.quick_mask():
+                workspace.toggle_quick_mask()
         elif action == "transform_selection":
             workspace.canvas.begin_selection_transform()
             workspace.canvas.preview_selection_transform(decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4), decimal(fields, 5), decimal(fields, 6)) catch failure:

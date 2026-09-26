@@ -1314,6 +1314,16 @@ pub class Workspace:
             self.canvas.select_rectangle(left, top, right - left, bottom - top, mode)
         self.touch()
 
+    ## Quick Mask (Q): the selection becomes a mask the painting tools edit
+    ## (black masks, white selects, gray is partial), tinted red in the view;
+    ## again turns the mask back into the selection. One undo step each way.
+    pub func toggle_quick_mask(self) -> unit!:
+        if self.canvas.quick_mask():
+            self.canvas.exit_quick_mask()
+        else:
+            self.canvas.enter_quick_mask()
+        self.touch()
+
     ## Select › Modify › Border: a band `width` pixels wide along the selection's edge.
     pub func border_selection(self, width: int) -> unit!:
         self.canvas.border_selection(width)

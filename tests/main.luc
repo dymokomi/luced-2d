@@ -1452,6 +1452,32 @@ func refining_selections() -> unit!:
     workspace.preview_transform()
     workspace.finish_transform(false)
     assert(workspace.canvas.selection_left() == 100)
+    quick_masking()
+
+## Quick Mask from the Q command, the rail's button marking it, the view's
+## tint drawn, a fill on the mask becoming the selection.
+func quick_masking() -> unit!:
+    let workspace = Workspace(300, 200)
+    let font = Font()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, font)
+    workspace.canvas.bind_headless()
+    workspace.canvas.select_rectangle(20, 20, 50, 50)
+    actions.quick_mask.trigger()
+    assert(workspace.canvas.quick_mask() and workspace.canvas.undo_name() == "Quick Mask")
+    let view = CanvasView(workspace)
+    view.layout().set_size(300.0, 200.0)
+    let frame = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
+    view.draw(frame.target())
+    frame.close()
+    # White fills the whole mask (the selection does not clip meanwhile): all selected.
+    foreground(workspace, 1.0, 1.0, 1.0)
+    workspace.fill_selection(false)
+    actions.quick_mask.trigger()
+    assert(not workspace.canvas.quick_mask() and workspace.canvas.undo_name() == "Exit Quick Mask")
+    assert(workspace.canvas.selected_at(200, 150) == 255 and workspace.layer_count() == 1)
+    workspace.undo()
+    assert(workspace.canvas.selected_at(200, 150) == 0 and workspace.canvas.selected_at(30, 30) == 255)
 
 ## Set the foreground color, as the palette does.
 func foreground(workspace: Workspace, red: float, green: float, blue: float):
