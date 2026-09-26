@@ -22,7 +22,7 @@ pub func menu_bar(actions: Actions, font: Font) -> Toolbar!:
                                     actions.filters[2], actions.filters[3]], font = font),
                     Menu("View", [actions.fit, actions.actual_size, actions.zoom_in, actions.zoom_out, divider(), actions.show_rulers, actions.show_grid, actions.show_guides, actions.snap, actions.lock_guides, actions.clear_guides, actions.show_transform_controls]
                                  + actions.units + [divider(), actions.next_document, actions.previous_document], font = font),
-                    Menu("Window", actions.windows, font = font),
+                    Menu("Window", actions.windows + [divider(), actions.reset_layout], font = font),
                     Spacer()], font = font)
 
 ## A menu's separator line.

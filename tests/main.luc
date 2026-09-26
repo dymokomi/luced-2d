@@ -33,6 +33,8 @@ from ui import Command
 from swatches_panel import swatches_of
 from brushes_panel import saved_brushes
 from align import align_layers
+from dock_layout import parse_layout
+from gpu import Rect
 import math
 import window
 
@@ -77,6 +79,7 @@ pub func main(arguments: list[str]) -> int!:
     opens_photos()
     panel_catalog()
     aligning()
+    dock_layouts(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1242,3 +1245,44 @@ func left_of(workspace: Workspace, index: int) -> int!:
 func top_of(workspace: Workspace, index: int) -> int!:
     assert(workspace.canvas.measure_content(workspace.canvas.layer_id(index)))
     return workspace.canvas.content_top()
+
+## The dock's arrangement kept across runs: what it writes reads back into
+## the same arrangement, panels it no longer knows are left out, anything
+## malformed is refused, and Reset Layout brings back the first one.
+func dock_layouts(arguments: list[str]) -> unit!:
+    let folder = arguments[arguments.length - 1]
+    let path = paths.join(folder, "layout.txt")
+    for broken in ["", "luce-dock 2\ngroup 0 viewport", "luce-dock 1\nsplit h 2 \ngroup 0 a\ngroup 0 b",
+                   "luce-dock 1\ngroup 3 viewport", "luce-dock 1\nsplit v 0.5\ngroup 0 viewport", "luce-dock 1\ngroup 0 viewport\nfloat 1 2 x 4 info"]:
+        assert(parse_layout(broken) == none)
+    let panels = Panels(Workspace(300, 200), Actions(), Font())
+    let first = panels.dock.layout_text()
+    assert(first == "luce-dock 1\nsplit h 0.76\ngroup 0 viewport\nsplit v 0.55\ngroup 0 layers\ngroup 0 properties\n")
+    panels.catalog.open("swatches")
+    panels.catalog.open("history")
+    let navigator = panels.catalog.panel("navigator") else trap("navigator is a panel")
+    panels.dock.float(navigator, Rect(40.0, 50.0, 260.0, 220.0))
+    panels.dock_layout.restore(path)
+    panels.dock_layout.save()
+    let kept = panels.dock.layout_text()
+    assert(files.read_text(path, limit = 65536) == kept)
+    # A new window brings back the same arrangement.
+    let again = Panels(Workspace(300, 200), Actions(), Font())
+    again.dock_layout.restore(path)
+    assert(again.dock.layout_text() == kept and again.dock.is_floating(again.catalog.panel("navigator") else trap("navigator")))
+    # Unknown panels are left out; a kept file without the viewport is passed over.
+    files.write_text(path, "luce-dock 1\nsplit v 0.4\ngroup 0 viewport bogus\ngroup 0 color nothing\n")
+    let pruned = Panels(Workspace(300, 200), Actions(), Font())
+    pruned.dock_layout.restore(path)
+    assert(pruned.dock.layout_text() == "luce-dock 1\nsplit v 0.4\ngroup 0 viewport\ngroup 0 color\n")
+    files.write_text(path, "luce-dock 1\ngroup 0 layers\n")
+    let missing = Panels(Workspace(300, 200), Actions(), Font())
+    missing.dock_layout.restore(path)
+    assert(missing.dock.layout_text() == first)
+    # Window › Reset Layout.
+    again.dock_layout.reset()
+    assert(again.dock.layout_text() == first)
+    panels.close()
+    again.close()
+    pruned.close()
+    missing.close()

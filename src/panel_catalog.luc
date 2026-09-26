@@ -196,7 +196,7 @@ pub class PanelCatalog:
             refresh()
 
     ## Bring panel `id` up to date with the document before it shows.
-    func show(self, id: str) -> unit!:
+    pub func show(self, id: str) -> unit!:
         if id == "brush_settings":
             self.brush.show()
         elif id == "properties":
