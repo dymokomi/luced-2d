@@ -111,9 +111,9 @@ jobs:
           ref: ${{ steps.pins.outputs.tls }}
           path: luce-tls
           token: ${{ secrets.LUCE_READ_TOKEN || github.token }}
-      - name: Linux libraries the window and font backends link, and a software Vulkan driver (lavapipe) for the headless canvas
+      - name: Linux libraries the window and font backends link, a software Vulkan driver (lavapipe) for the headless canvas, and a virtual X display for the clipboard tests
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev fonts-dejavu-core mesa-vulkan-drivers
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev fonts-dejavu-core mesa-vulkan-drivers xvfb
       - uses: actions/checkout@v4
         with:
           repository: dymokomi/luce-psd
@@ -167,4 +167,10 @@ jobs:
         env:
           LUC_HOME: ${{ runner.temp }}/luc-home
           LUCE_STD: ${{ github.workspace }}/luce-base/src/std
-        run: python3 tests/run.py --base build/toolchain/luce-base --luce build/toolchain/luce
+        # Linux has no display on the runner: the clipboard tests get a virtual one.
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a python3 tests/run.py --base build/toolchain/luce-base --luce build/toolchain/luce
+          else
+            python3 tests/run.py --base build/toolchain/luce-base --luce build/toolchain/luce
+          fi
