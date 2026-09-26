@@ -904,10 +904,15 @@ pub class Workspace:
             self.canvas.redo()
             self.after_history(width, height)
 
-    ## Undo or redo may have changed the layers under the selection — keep it
-    ## in range — or the canvas size from `width` × `height`: fit it again.
-    func after_history(self, width: int, height: int):
-        self.picked = []
+    ## Undo or redo may have changed the layers under the selection — keep the
+    ## picked layers that are still there, and it in range — or the canvas size
+    ## from `width` × `height`: fit it again.
+    func after_history(self, width: int, height: int) -> unit!:
+        var kept: list[int] = []
+        for id in self.picked:
+            if self.index_of(id) >= 0:
+                kept.append(id)
+        self.picked = kept
         if self.selected >= self.layer_count():
             self.selected = self.layer_count() - 1
         if self.selected < 0:

@@ -32,6 +32,9 @@ from input import EventKind, Key
 from ui import Command
 from swatches_panel import swatches_of
 from brushes_panel import saved_brushes
+from align import align_layers
+from dock_layout import parse_layout
+from gpu import Rect
 import math
 import window
 
@@ -76,6 +79,8 @@ pub func main(arguments: list[str]) -> int!:
     opens_photos()
     panel_catalog()
     pen_paths()
+    aligning()
+    dock_layouts(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1263,3 +1268,89 @@ func pen_paths() -> unit!:
     release(view, 40.0, 76.0)
     view.event(Event(kind = EventKind.key_down, key = Key.enter))
     assert(workspace.layer_count() == before + 2 and canvas.layer_path_count(workspace.selected) == 2 and not canvas.layer_path_closed(workspace.selected))
+## Layer › Align and Distribute on three painted layers, each one undo step.
+func aligning() -> unit!:
+    let workspace = Workspace(300, 200)
+    workspace.canvas.bind_headless()
+    workspace.add_layer()
+    workspace.add_layer()
+    let painted = [[10, 20, 30, 30], [100, 50, 20, 40], [200, 120, 40, 10]]
+    for index in 0..<3:
+        workspace.select(index)
+        workspace.canvas.select_rectangle(painted[index][0], painted[index][1], painted[index][2], painted[index][3])
+        workspace.fill_selection(false)
+        workspace.deselect()
+    workspace.select(0)
+    workspace.toggle_picked(1)
+    workspace.toggle_picked(2)
+    assert(workspace.selected_ids().length == 3)
+    # Several layers line up against the box around them all.
+    assert(align_layers(workspace, "left"))
+    assert(left_of(workspace, 0) == 10 and left_of(workspace, 1) == 10 and left_of(workspace, 2) == 10)
+    assert(workspace.canvas.undo_name() == "Align Left Edges")
+    workspace.undo()
+    assert(left_of(workspace, 1) == 100 and left_of(workspace, 2) == 200 and workspace.selected_ids().length == 3)
+    # Centers meet at the middle of that box, 10..240.
+    assert(align_layers(workspace, "hcenter"))
+    assert(left_of(workspace, 0) == 110 and left_of(workspace, 1) == 115 and left_of(workspace, 2) == 105)
+    workspace.undo()
+    # Distributing keeps the outermost two and centers the middle one between them.
+    assert(align_layers(workspace, "distribute_h"))
+    assert(left_of(workspace, 0) == 10 and left_of(workspace, 1) == 113 and left_of(workspace, 2) == 200)
+    workspace.undo()
+    assert(left_of(workspace, 1) == 100)
+    # Alone, a layer lines up against the canvas; with a selection, against that.
+    workspace.select(2)
+    assert(align_layers(workspace, "bottom") and top_of(workspace, 2) == 190)
+    workspace.canvas.select_rectangle(50, 40, 100, 100)
+    assert(align_layers(workspace, "right") and left_of(workspace, 2) == 110)
+    assert(not align_layers(workspace, "right"))
+
+func left_of(workspace: Workspace, index: int) -> int!:
+    assert(workspace.canvas.measure_content(workspace.canvas.layer_id(index)))
+    return workspace.canvas.content_left()
+
+func top_of(workspace: Workspace, index: int) -> int!:
+    assert(workspace.canvas.measure_content(workspace.canvas.layer_id(index)))
+    return workspace.canvas.content_top()
+
+## The dock's arrangement kept across runs: what it writes reads back into
+## the same arrangement, panels it no longer knows are left out, anything
+## malformed is refused, and Reset Layout brings back the first one.
+func dock_layouts(arguments: list[str]) -> unit!:
+    let folder = arguments[arguments.length - 1]
+    let path = paths.join(folder, "layout.txt")
+    for broken in ["", "luce-dock 2\ngroup 0 viewport", "luce-dock 1\nsplit h 2 \ngroup 0 a\ngroup 0 b",
+                   "luce-dock 1\ngroup 3 viewport", "luce-dock 1\nsplit v 0.5\ngroup 0 viewport", "luce-dock 1\ngroup 0 viewport\nfloat 1 2 x 4 info"]:
+        assert(parse_layout(broken) == none)
+    let panels = Panels(Workspace(300, 200), Actions(), Font())
+    let first = panels.dock.layout_text()
+    assert(first == "luce-dock 1\nsplit h 0.76\ngroup 0 viewport\nsplit v 0.55\ngroup 0 layers\ngroup 0 properties\n")
+    panels.catalog.open("swatches")
+    panels.catalog.open("history")
+    let navigator = panels.catalog.panel("navigator") else trap("navigator is a panel")
+    panels.dock.float(navigator, Rect(40.0, 50.0, 260.0, 220.0))
+    panels.dock_layout.restore(path)
+    panels.dock_layout.save()
+    let kept = panels.dock.layout_text()
+    assert(files.read_text(path, limit = 65536) == kept)
+    # A new window brings back the same arrangement.
+    let again = Panels(Workspace(300, 200), Actions(), Font())
+    again.dock_layout.restore(path)
+    assert(again.dock.layout_text() == kept and again.dock.is_floating(again.catalog.panel("navigator") else trap("navigator")))
+    # Unknown panels are left out; a kept file without the viewport is passed over.
+    files.write_text(path, "luce-dock 1\nsplit v 0.4\ngroup 0 viewport bogus\ngroup 0 color nothing\n")
+    let pruned = Panels(Workspace(300, 200), Actions(), Font())
+    pruned.dock_layout.restore(path)
+    assert(pruned.dock.layout_text() == "luce-dock 1\nsplit v 0.4\ngroup 0 viewport\ngroup 0 color\n")
+    files.write_text(path, "luce-dock 1\ngroup 0 layers\n")
+    let missing = Panels(Workspace(300, 200), Actions(), Font())
+    missing.dock_layout.restore(path)
+    assert(missing.dock.layout_text() == first)
+    # Window › Reset Layout.
+    again.dock_layout.reset()
+    assert(again.dock.layout_text() == first)
+    panels.close()
+    again.close()
+    pruned.close()
+    missing.close()

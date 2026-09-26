@@ -8,6 +8,7 @@ from panels import Panels
 from actions import Actions
 from settings import Store
 from tool_memory import tools_path, restore_tools, remember_tools
+from dock_layout import layout_path
 from update_check import UpdateCheck
 import theme
 import crash
@@ -37,6 +38,8 @@ pub class Luce2D:
         restore_tools(workspace, tools_path())
         let panels = Panels(workspace, actions, font, store)
         panels.choose_tool(workspace.tool)
+        # The panels as the last run left them.
+        panels.dock_layout.restore(layout_path())
         let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme(workspace.look))
         panels.files.app = app
         # Keys go to the canvas from the start, so a tool's letter picks the tool.
@@ -56,6 +59,7 @@ pub class Luce2D:
             panels.rail.poll()
             panels.color_range.poll()
             panels.catalog.poll()
+            panels.dock_layout.poll()
             panels.refresh_if_changed()
             if update.poll():
                 panels.status.set_text(update.notice)))
@@ -84,6 +88,8 @@ pub class Luce2D:
 
     pub func close(self):
         remember_tools(self.workspace, tools_path()) catch failure:
+            discard(failure)
+        self.panels.dock_layout.save() catch failure:
             discard(failure)
         self.update.close()
         for connection in self.connections:

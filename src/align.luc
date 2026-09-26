@@ -1,0 +1,244 @@
+## Layer › Align and Distribute, and the Align panel's buttons, as Photoshop's.
+## What moves are the selected layers, a selected group as one piece with
+## everything in it. They line up against the selection when there is one,
+## else against the canvas when a single piece is selected, else against the
+## box around them all. Distribute spaces the centers of three or more pieces
+## evenly between the outermost two. Each run is one undo step.
+from workspace import Workspace
+import math
+
+## The modes, in the menus' and the panel's order.
+pub func align_modes() -> list[str]:
+    return ["left", "hcenter", "right", "top", "vcenter", "bottom", "distribute_h", "distribute_v"]
+
+## A mode's name in the menu and the history.
+pub func align_title(mode: str) -> str:
+    if mode == "left":
+        return "Align Left Edges"
+    if mode == "hcenter":
+        return "Align Horizontal Centers"
+    if mode == "right":
+        return "Align Right Edges"
+    if mode == "top":
+        return "Align Top Edges"
+    if mode == "vcenter":
+        return "Align Vertical Centers"
+    if mode == "bottom":
+        return "Align Bottom Edges"
+    if mode == "distribute_h":
+        return "Distribute Horizontal Centers"
+    return "Distribute Vertical Centers"
+
+## A mode's icon (luciaos-assets).
+pub func align_icon(mode: str) -> str:
+    if mode == "left":
+        return "align-left"
+    if mode == "hcenter":
+        return "align-horizontal-center"
+    if mode == "right":
+        return "align-right"
+    if mode == "top":
+        return "align-top"
+    if mode == "vcenter":
+        return "align-vertical-center"
+    if mode == "bottom":
+        return "align-bottom"
+    if mode == "distribute_h":
+        return "distribute-horizontal"
+    return "distribute-vertical"
+
+## A box in document pixels, right and bottom exclusive.
+pub class Box:
+    pub var left: float
+    pub var top: float
+    pub var right: float
+    pub var bottom: float
+
+    pub func init(self, left: float, top: float, right: float, bottom: float):
+        self.left = left
+        self.top = top
+        self.right = right
+        self.bottom = bottom
+
+    func grow(self, other: Box):
+        self.left = math.min(self.left, other.left)
+        self.top = math.min(self.top, other.top)
+        self.right = math.max(self.right, other.right)
+        self.bottom = math.max(self.bottom, other.bottom)
+
+## One piece that moves as a whole: its pixel layers and the box they paint.
+pub class Piece:
+    pub let ids: list[int]
+    pub let box: Box
+
+    pub func init(self, ids: list[int], box: Box):
+        self.ids = ids
+        self.box = box
+
+## How far each piece moves, in whole pixels.
+pub class Shift:
+    pub let dx: int
+    pub let dy: int
+
+    pub func init(self, dx: int, dy: int):
+        self.dx = dx
+        self.dy = dy
+
+## The selected pieces with pixels, bottom to top: a selected layer, or a
+## selected group with every pixel layer inside it. A layer inside a selected
+## group goes with the group, not again on its own.
+pub func pieces(workspace: Workspace) -> list[Piece]!:
+    var found: list[Piece] = []
+    var index = 0
+    while index < workspace.layer_count():
+        if workspace.is_selected(index) and not under_selected(workspace, index):
+            var ids: list[int] = []
+            if workspace.canvas.layer_is_group(index):
+                let group = workspace.canvas.layer_id(index)
+                var at = 0
+                while at < workspace.layer_count():
+                    if not workspace.canvas.layer_is_group(at) and inside(workspace, at, group):
+                        ids.append(workspace.canvas.layer_id(at))
+                    at += 1
+            else:
+                ids.append(workspace.canvas.layer_id(index))
+            if let box = painted_box(workspace, ids):
+                found.append(Piece(ids, box))
+        index += 1
+    return found
+
+## Whether a group holding the layer at `index` is selected.
+func under_selected(workspace: Workspace, index: int) -> bool!:
+    var parent = workspace.canvas.layer_parent(index)
+    while parent != 0:
+        let holder = workspace.index_of(parent)
+        if holder < 0:
+            return false
+        if workspace.is_selected(holder):
+            return true
+        parent = workspace.canvas.layer_parent(holder)
+    return false
+
+## Whether the layer at `index` sits somewhere inside group `group`.
+func inside(workspace: Workspace, index: int, group: int) -> bool!:
+    var parent = workspace.canvas.layer_parent(index)
+    while parent != 0:
+        if parent == group:
+            return true
+        let holder = workspace.index_of(parent)
+        if holder < 0:
+            return false
+        parent = workspace.canvas.layer_parent(holder)
+    return false
+
+## The box around what layers `ids` paint; none when they paint nothing.
+func painted_box(workspace: Workspace, ids: list[int]) -> Box?!:
+    let canvas = workspace.canvas
+    var found: Box? = none
+    for id in ids:
+        if not canvas.measure_content(id):
+            continue
+        let box = Box(float(canvas.content_left()), float(canvas.content_top()),
+                      float(canvas.content_left() + canvas.content_width()), float(canvas.content_top() + canvas.content_height()))
+        if let so_far = found:
+            so_far.grow(box)
+        else:
+            found = box
+    return found
+
+## What the pieces line up against: the selection, else the canvas for a
+## single piece, else the box around them all.
+pub func target_of(workspace: Workspace, found: list[Piece]) -> Box!:
+    let canvas = workspace.canvas
+    if canvas.has_selection():
+        return Box(float(canvas.selection_left()), float(canvas.selection_top()),
+                   float(canvas.selection_left() + canvas.selection_width()), float(canvas.selection_top() + canvas.selection_height()))
+    if found.length == 1:
+        return Box(0.0, 0.0, float(workspace.width()), float(workspace.height()))
+    let all = Box(found[0].box.left, found[0].box.top, found[0].box.right, found[0].box.bottom)
+    for piece in found:
+        all.grow(piece.box)
+    return all
+
+## The move each box makes for `mode` against `target`. Distributing keeps
+## the outermost two where they are and needs three boxes; with fewer nothing moves.
+pub func shifts(boxes: list[Box], target: Box, mode: str) -> list[Shift]:
+    var moved: list[Shift] = []
+    if mode == "distribute_h" or mode == "distribute_v":
+        let across = mode == "distribute_h"
+        var centers: list[float] = []
+        for box in boxes:
+            centers.append((box.left + box.right) * 0.5 if across else (box.top + box.bottom) * 0.5)
+        # Each box's rank by its center, the lowest first.
+        var order: list[int] = []
+        for index in 0..<boxes.length:
+            var at = 0
+            while at < order.length and centers[order[at]] <= centers[index]:
+                at += 1
+            order.insert(at, index)
+        var goal: list[float] = centers.copy()
+        if boxes.length >= 3:
+            let first = centers[order[0]]
+            let last = centers[order[order.length - 1]]
+            for rank in 0..<order.length:
+                goal[order[rank]] = first + (last - first) * float(rank) / float(order.length - 1)
+        for index in 0..<boxes.length:
+            let step = whole(goal[index] - centers[index])
+            moved.append(Shift(step if across else 0, 0 if across else step))
+        return moved
+    for box in boxes:
+        var dx = 0.0
+        var dy = 0.0
+        if mode == "left":
+            dx = target.left - box.left
+        elif mode == "hcenter":
+            dx = (target.left + target.right) * 0.5 - (box.left + box.right) * 0.5
+        elif mode == "right":
+            dx = target.right - box.right
+        elif mode == "top":
+            dy = target.top - box.top
+        elif mode == "vcenter":
+            dy = (target.top + target.bottom) * 0.5 - (box.top + box.bottom) * 0.5
+        elif mode == "bottom":
+            dy = target.bottom - box.bottom
+        moved.append(Shift(whole(dx), whole(dy)))
+    return moved
+
+## A distance in whole pixels, halves away from nothing as the eye expects.
+func whole(distance: float) -> int:
+    return int(math.floor(distance + 0.5))
+
+## Whether `mode` can do anything with the layers selected now.
+pub func can_align(workspace: Workspace, mode: str) -> bool!:
+    let count = pieces(workspace).length
+    if mode == "distribute_h" or mode == "distribute_v":
+        return count >= 3
+    return count >= 1
+
+## Align or distribute the selected layers by `mode`, as one undo step;
+## false when nothing had to move.
+pub func align_layers(workspace: Workspace, mode: str) -> bool!:
+    if workspace.canvas.previewing():
+        return false
+    let found = pieces(workspace)
+    if found.length == 0:
+        return false
+    var boxes: list[Box] = []
+    for piece in found:
+        boxes.append(piece.box)
+    let moves = shifts(boxes, target_of(workspace, found), mode)
+    var any = false
+    for shift in moves:
+        if shift.dx != 0 or shift.dy != 0:
+            any = true
+    if not any:
+        return false
+    workspace.as_one(align_title(mode), func () -> unit!:
+        for index in 0..<found.length:
+            let shift = moves[index]
+            if shift.dx == 0 and shift.dy == 0:
+                continue
+            for id in found[index].ids:
+                workspace.canvas.move_layer(id, shift.dx, shift.dy))
+    workspace.touch()
+    return true

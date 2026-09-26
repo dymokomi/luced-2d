@@ -5,7 +5,7 @@
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
-from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, DockPosition, Rule, Dialog, ContextMenu, NumberField
+from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, Rule, Dialog, ContextMenu, NumberField
 from input import Key
 from workspace import Workspace
 from actions import Actions
@@ -38,6 +38,8 @@ from tool_rail import ToolRail
 from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
 from panel_catalog import PanelCatalog
 from panel_list import panel_entries
+from dock_layout import DockLayout
+from align import align_modes, align_layers
 from canvas import Canvas
 import math
 from units import unit_ids
@@ -73,6 +75,8 @@ pub class Panels:
     pub let layers_panel: LayersPanel
     ## Every panel the "+" and the Window menu open (panel_catalog.luc).
     pub let catalog: PanelCatalog
+    ## The arrangement kept across runs (dock_layout.luc).
+    pub let dock_layout: DockLayout
     ## The tool rail: its buttons, groups and flyouts (tool_rail.luc).
     pub let rail: ToolRail
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
@@ -196,18 +200,28 @@ pub class Panels:
         canvas_row.layout().set_flex()
         let viewport = VStack([self.tabs, canvas_row], spacing = 0.0)
         viewport.layout().set_flex()
-        self.viewport_panel = Panel("Viewport", viewport, minimum = Size(320.0, 200.0), closable = false)
-        self.dock = DStack([self.viewport_panel, self.layers_panel.panel, self.properties.panel], font = font)
-        self.dock.move(self.layers_panel.panel, self.viewport_panel, DockPosition.right)
-        self.dock.move(self.properties.panel, self.layers_panel.panel, DockPosition.bottom)
-        self.dock.set_fraction(self.viewport_panel, 0.76)
-        self.dock.set_fraction(self.layers_panel.panel, 0.55)
+        self.viewport_panel = Panel("Viewport", viewport, minimum = Size(320.0, 200.0), closable = false, id = "viewport")
+        self.dock = DStack([self.viewport_panel], font = font)
         self.dock.layout().set_flex()
         self.catalog = PanelCatalog(self.dock, self.viewport_panel, workspace, kit, self.view, self.settings_dialog, self.layers_panel, self.properties, self.brush)
         self.catalog.refreshed = self.refresh
         self.catalog.open_picker = self.pick_color
         self.catalog.brush_chosen = func () -> unit!:
             self.choose_tool("brush")
+        self.catalog.align_commands = actions.aligns
+        # The panels as they always start; the app brings back the kept arrangement.
+        self.dock_layout = DockLayout(self.dock, self.catalog, self.viewport_panel)
+        self.dock_layout.arrange_default()
+        kit.bind(actions.reset_layout, func () -> unit!:
+            self.dock_layout.reset()
+            self.refresh())
+        var align_index = 0
+        for each in align_modes():
+            let chosen = each
+            kit.bind(actions.aligns[align_index], func () -> unit!:
+                discard(align_layers(self.workspace, chosen))
+                self.refresh())
+            align_index += 1
         var window_index = 0
         for entry in panel_entries():
             let id = entry.id

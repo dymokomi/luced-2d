@@ -1,0 +1,302 @@
+## The dock's arrangement kept across runs, in `~/.luced-2d/layout.txt`: what
+## luce-ui's `DStack.layout_text` writes (the split tree, each group's tabs by
+## panel id, the floating windows), read back and rebuilt through the dock's
+## own calls when the window opens. Panels the catalog no longer knows are
+## left out; a file that does not read, or leaves no viewport, gives the
+## default arrangement and is not rewritten until the arrangement changes.
+## Window › Reset Layout puts the default back.
+from ui import DStack, Panel, DockPosition
+from gpu import Rect
+import ui
+from panel_catalog import PanelCatalog
+from panel_list import panel_entries
+import files
+import paths
+
+## One node of a kept arrangement: a split of two children, or a tab group.
+pub class DockNode:
+    pub var split: bool = false
+    pub var horizontal: bool = false
+    pub var fraction: float = 0.5
+    ## A group's tabs by panel id, in order, and the selected one's place.
+    pub var ids: list[str]
+    pub var selected: int = 0
+    pub var first: DockNode? = none
+    pub var second: DockNode? = none
+
+    pub func init(self):
+        self.ids = []
+
+## A floating window of a kept arrangement.
+pub class DockFloat:
+    pub let id: str
+    pub let window: Rect
+
+    pub func init(self, id: str, window: Rect):
+        self.id = id
+        self.window = window
+
+## A kept arrangement: its tree and its floating windows.
+pub class DockPlan:
+    pub var root: DockNode
+    pub var floats: list[DockFloat]
+
+    pub func init(self, root: DockNode, floats: list[DockFloat]):
+        self.root = root
+        self.floats = floats
+
+## The lines of a kept arrangement and how far reading has got.
+class Reading:
+    let lines: list[str]
+    var at: int = 0
+
+    func init(self, lines: list[str]):
+        self.lines = lines
+
+## A kept arrangement read from `text`; none for anything malformed.
+pub func parse_layout(text: str) -> DockPlan?:
+    var lines: list[str] = []
+    for line in text.split("\n"):
+        if line.trim() != "":
+            lines.append(line.trim())
+    if lines.length < 2 or lines[0] != "luce-dock 1":
+        return none
+    let reading = Reading(lines)
+    reading.at = 1
+    let root = read_node(reading) else return none
+    var floats: list[DockFloat] = []
+    while reading.at < lines.length:
+        let fields = lines[reading.at].split(" ")
+        reading.at += 1
+        if fields.length != 6 or fields[0] != "float":
+            return none
+        var numbers: list[float] = []
+        for field in fields[1..<5]:
+            let number = float(field) catch _:
+                return none
+            numbers.append(number)
+        if numbers[2] <= 0.0 or numbers[3] <= 0.0:
+            return none
+        floats.append(DockFloat(fields[5], Rect(numbers[0], numbers[1], numbers[2], numbers[3])))
+    return DockPlan(root, floats)
+
+## The node at the reading's place, and everything under it.
+func read_node(reading: Reading) -> DockNode?:
+    if reading.at >= reading.lines.length:
+        return none
+    let fields = reading.lines[reading.at].split(" ")
+    reading.at += 1
+    let node = DockNode()
+    if fields[0] == "group" and fields.length >= 3:
+        let selected = int(fields[1]) catch _:
+            return none
+        node.ids = fields[2..]
+        if selected < 0 or selected >= node.ids.length:
+            return none
+        node.selected = selected
+        return node
+    if fields[0] == "split" and fields.length == 3 and (fields[1] == "h" or fields[1] == "v"):
+        let fraction = float(fields[2]) catch _:
+            return none
+        if not (fraction >= 0.0 and fraction <= 1.0):
+            return none
+        node.split = true
+        node.horizontal = fields[1] == "h"
+        node.fraction = fraction
+        node.first = read_node(reading)
+        node.second = read_node(reading)
+        if node.first == none or node.second == none:
+            return none
+        return node
+    return none
+
+## `node` with the panels `known` does not take left out: an emptied group
+## goes, and a split left with one child becomes that child. None when nothing is left.
+pub func prune(node: DockNode, known: func(str) -> bool) -> DockNode?:
+    if not node.split:
+        var kept: list[str] = []
+        var selected = 0
+        for index in 0..<node.ids.length:
+            if known(node.ids[index]):
+                if index == node.selected:
+                    selected = kept.length
+                kept.append(node.ids[index])
+        if kept.length == 0:
+            return none
+        let pruned = DockNode()
+        pruned.ids = kept
+        pruned.selected = selected
+        return pruned
+    let first = node.first else return none
+    let second = node.second else return none
+    let a = prune(first, known)
+    let b = prune(second, known)
+    if a == none:
+        return b
+    if b == none:
+        return a
+    let pruned = DockNode()
+    pruned.split = true
+    pruned.horizontal = node.horizontal
+    pruned.fraction = node.fraction
+    pruned.first = a
+    pruned.second = b
+    return pruned
+
+## Whether panel `id` is somewhere in `node`.
+func holds(node: DockNode, id: str) -> bool:
+    if not node.split:
+        return id in node.ids
+    if let first = node.first:
+        if holds(first, id):
+            return true
+    if let second = node.second:
+        return holds(second, id)
+    return false
+
+## The panel a subtree is built out from: the viewport when it is there (the
+## dock always holds it), else its first group's first tab.
+func anchor(node: DockNode) -> str:
+    if holds(node, "viewport"):
+        return "viewport"
+    var at = node
+    while at.split:
+        at = at.first else return ""
+    return at.ids[0]
+
+## Where the arrangement lives, beside the settings.
+pub func layout_path(directory: str = "") -> str!:
+    let chosen = directory if directory != "" else paths.join(files.home_directory(), ".luced-2d")
+    files.ensure_directory(chosen)
+    return paths.join(chosen, "layout.txt")
+
+## The arrangement's keeper: restores it when the app starts, writes it when
+## it has changed (checked every half second or so) and when the window closes.
+pub class DockLayout:
+    let dock: DStack
+    let catalog: PanelCatalog
+    let viewport: Panel
+    ## Every panel id the catalog makes.
+    let ids: list[str]
+    ## The file; empty until `restore`, so tests and scripts leave the user's alone.
+    var path: str = ""
+    var written: str = ""
+    var frames: int = 0
+
+    pub func init(self, dock: DStack, catalog: PanelCatalog, viewport: Panel) -> unit!:
+        self.dock = dock
+        self.catalog = catalog
+        self.viewport = viewport
+        self.ids = []
+        for entry in panel_entries():
+            self.ids.append(entry.id)
+
+    ## The default arrangement: Layers right of the viewport, Properties below it.
+    pub func arrange_default(self) -> unit!:
+        let layers = self.catalog.panel("layers") else return
+        let properties = self.catalog.panel("properties") else return
+        self.catalog.show("layers")
+        self.catalog.show("properties")
+        self.dock.add(layers, self.viewport, DockPosition.right)
+        self.dock.add(properties, layers, DockPosition.bottom)
+        self.dock.set_fraction(self.viewport, 0.76)
+        self.dock.set_fraction(layers, 0.55)
+
+    ## Take every panel out but the viewport.
+    func clear(self) -> unit!:
+        for entry in panel_entries():
+            if let open = self.dock.find(entry.id):
+                self.dock.remove(open)
+
+    ## Window › Reset Layout.
+    pub func reset(self) -> unit!:
+        self.clear()
+        self.arrange_default()
+        self.save()
+
+    ## Keep the arrangement in `path` from now on, rebuilding the one kept there
+    ## when it reads; otherwise the arrangement stays as it is.
+    pub func restore(self, path: str) -> unit!:
+        self.path = path
+        # No file yet: the first save writes one. A file that does not read is
+        # left as it is until the arrangement changes.
+        let text = files.read_text(path, limit = 65536) catch failure:
+            discard(failure)
+            return
+        self.written = self.dock.layout_text()
+        let plan = parse_layout(text) else return
+        let root = prune(plan.root, self.known) else return
+        if not holds(root, "viewport"):
+            return
+        self.clear()
+        self.build(root, "viewport") catch failure:
+            discard(failure)
+            self.clear()
+            self.arrange_default()
+            return
+        for floating in plan.floats:
+            if floating.id != "viewport" and self.known(floating.id) and not holds(root, floating.id):
+                let panel = self.panel(floating.id) else continue
+                self.catalog.show(floating.id)
+                self.dock.float(panel, floating.window)
+        self.written = self.dock.layout_text()
+
+    ## Whether the catalog makes panel `id` (the viewport is always there).
+    func known(self, id: str) -> bool:
+        return id == "viewport" or id in self.ids
+
+    func panel(self, id: str) -> Panel?!:
+        if id == "viewport":
+            return self.viewport
+        return self.catalog.panel(id)
+
+    ## Build `node` out from panel `start`, already docked: a group's other tabs
+    ## beside it; a split's other side off it, at the split's fraction, then
+    ## each side from its own anchor.
+    func build(self, node: DockNode, start: str) -> unit!:
+        let placed = self.panel(start) else error(ui.invalid, "a kept panel is gone")
+        if not node.split:
+            for id in node.ids:
+                if id != start:
+                    let panel = self.panel(id) else continue
+                    self.catalog.show(id)
+                    self.dock.add(panel, placed, DockPosition.tab)
+            let shown = self.panel(node.ids[node.selected]) else return
+            self.dock.select(shown)
+            return
+        let first = node.first else return
+        let second = node.second else return
+        let a = anchor(first)
+        let b = anchor(second)
+        if start == a:
+            let other = self.panel(b) else return
+            self.catalog.show(b)
+            self.dock.add(other, placed, DockPosition.right if node.horizontal else DockPosition.bottom)
+        else:
+            let other = self.panel(a) else return
+            self.catalog.show(a)
+            self.dock.add(other, placed, DockPosition.left if node.horizontal else DockPosition.top)
+        let near = self.panel(a) else return
+        self.dock.set_fraction(near, node.fraction)
+        self.build(first, a)
+        self.build(second, b)
+
+    ## Once a frame: every thirty frames, write the arrangement if it changed.
+    pub func poll(self) -> unit!:
+        if self.path == "":
+            return
+        self.frames += 1
+        if self.frames < 30:
+            return
+        self.frames = 0
+        self.save()
+
+    ## Write the arrangement now if it differs from what the file holds.
+    pub func save(self) -> unit!:
+        if self.path == "":
+            return
+        let text = self.dock.layout_text()
+        if text == self.written:
+            return
+        files.write_text(self.path, text)
+        self.written = text
