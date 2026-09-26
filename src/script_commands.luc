@@ -95,12 +95,15 @@ pub class ScriptCommands:
         elif action == "open":
             workspace.open(field(fields, 0))
             self.bind_new()
+            # The script's next line acts on the picture: it waits for it.
+            workspace.canvas.finish_opening()
         elif action == "save":
             workspace.save(field(fields, 0))
         elif action == "export":
             workspace.export(field(fields, 0), number(fields, 1))
         elif action == "place":
             workspace.place_file(field(fields, 0), float(workspace.width()) * 0.5, float(workspace.height()) * 0.5)
+            workspace.canvas.finish_opening()
         elif action == "undo":
             workspace.undo()
         elif action == "redo":

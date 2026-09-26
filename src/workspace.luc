@@ -354,12 +354,16 @@ pub class Workspace:
         return false
 
     ## Put the picture at `path` on a new layer named after the file, centred on
-    ## document point (`x`, `y`), and select it.
+    ## document point (`x`, `y`), and select it. In the window the layer fills
+    ## in as the picture decodes, and edits wait until it is in; the layer
+    ## takes its place first, since moving it is one of them.
     pub func place_file(self, path: str, x: float, y: float) -> unit!:
+        # One picture opens at a time: a drop of several waits for the one before.
+        self.canvas.finish_opening()
         self.as_one("Place", func () -> unit!:
             let id = self.canvas.add_layer(paths.stem(path))
-            self.canvas.place_layer(id, path, int(x), int(y))
-            self.place_above_selected(id))
+            self.place_above_selected(id)
+            self.canvas.place_layer(id, path, int(x), int(y)))
 
     # -- Units and the grid.
 

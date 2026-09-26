@@ -323,6 +323,8 @@ pub class Actions:
         # Fills, Clear and Paste change pixels: not while a picture opens or a preview shows.
         for command in [self.fill, self.fill_background, self.fill_delete, self.fill_background_delete, self.clear, self.paste, self.paste_in_place]:
             command.set_enabled(not previewing)
+        # A place waits for a picture still opening; the menu does not offer it meanwhile.
+        self.import_image.set_enabled(not canvas.is_opening())
         # The Edit menu says which step: "Undo Brush Stroke".
         self.undo.set_text("Undo " + canvas.undo_name() if canvas.can_undo() else "Undo")
         self.redo.set_text("Redo " + canvas.redo_name() if canvas.can_redo() else "Redo")
