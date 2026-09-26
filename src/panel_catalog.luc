@@ -68,6 +68,7 @@ pub class PanelCatalog:
             titles.append(entry.title)
         dock.set_catalog(ids, titles)
         kit.keep(dock.on_add(self.requested))
+        kit.keep(dock.on_close(self.closed))
 
     ## The dock's "+" picked panel `request.id()`, not open: make it and put it
     ## where the request says.
@@ -75,6 +76,13 @@ pub class PanelCatalog:
         let panel = self.panel(request.id()) else return
         self.dock.add(panel, request.panel, request.position)
         self.show(request.id())
+        # The Window menu ticks what is open: at once, not when next it opens.
+        self.refresh()
+
+    ## A panel's tab was closed: the Window menu no longer ticks it.
+    func closed(self, panel: Panel) -> unit!:
+        discard(panel)
+        self.refresh()
 
     ## Whether panel `id` is open, docked or floating.
     pub func is_open(self, id: str) -> bool!:
