@@ -314,6 +314,10 @@ pub class Panels:
         kit.bind(actions.fill_background, func () -> unit!:
             self.workspace.fill_selection(false, true)
             self.refresh())
+        kit.bind(actions.next_document_tab, func () -> unit!:
+            actions.next_document.trigger())
+        kit.bind(actions.previous_document_tab, func () -> unit!:
+            actions.previous_document.trigger())
         kit.bind(actions.redo_y, func () -> unit!:
             actions.redo.trigger())
         kit.bind(actions.fill_delete, func () -> unit!:
