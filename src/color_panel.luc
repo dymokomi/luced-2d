@@ -1,49 +1,92 @@
-## The Color panel, as Photoshop's: the foreground and background colors as
-## the tool rail shows them, and sliders for one of them in sRGB 0..255 with
-## its hex. Clicking a swatch picks which color the sliders edit (a second
-## click on it opens the full picker); every edit sets that color at once.
-from ui import Panel, VStack, HStack, Text, TextField, Spacer, Size, Widget
+## The Color panel, as Photoshop's and Krita's: the foreground and background
+## colors as the tool rail shows them with the edited one's hex, and a picker
+## for it in one of four modes chosen in the header's menu: GIMP's hue ring
+## around a turning triangle, the ring around a square, a hue/saturation
+## wheel over a brightness strip, or channel sliders. Clicking a swatch picks
+## which color is edited (a second click on it opens the full picker); every
+## edit sets that color at once, a drag every step.
+from ui import Panel, VStack, HStack, Text, TextField, Spacer, Size, Menu, Command, ColorWheel, ShadedField
+from gpu import Color
 from workspace import Workspace
-from kit import Kit, SliderField
+from kit import Kit
 from palette import Palette
-from hex_color import parse_hex, hex_of_srgb, hex_of_linear
+from hex_color import parse_hex, hex_of_srgb
+from color_model import StableHsb, model_ids, model_index
+from color_sliders import ColorSliders
+from color_picker import linear_of
+import color as science
+import hsl
 import transfer
 import math
+
+## The modes, in the menu's order: their names in the settings and on screen.
+pub func mode_ids() -> list[str]:
+    return ["triangle", "square", "wheel", "sliders"]
+
+func mode_names() -> list[str]:
+    return ["Triangle", "Square", "Wheel", "Sliders"]
 
 pub class ColorPanel:
     pub let panel: Panel
     let workspace: Workspace
     let kit: Kit
     let palette: Palette
-    let rows: list[SliderField]
+    pub let wheel: ColorWheel
+    ## The wheel mode's brightness strip, black to the color at full brightness.
+    pub let strip: ShadedField
+    pub let sliders: ColorSliders
     let hex_field: TextField
     let editing: Text
-    ## Whether the sliders edit the background color rather than the foreground.
+    let mode_menu: Menu
+    let mode_commands: list[Command]
+    ## Triangle, square, wheel or sliders, as `mode_ids`.
+    pub var mode: int = 0
+    ## Each color's HSB as the user left it, foreground then background.
+    let states: list[StableHsb]
+    ## Whether the picker edits the background color rather than the foreground.
     var background: bool = false
     ## The full color picker for a color, opened by a second click on its swatch.
     pub var open_picker: func(bool) -> unit!? = none
     ## After an edit the window refreshes.
     pub var refreshed: func() -> unit!? = none
+    ## The mode or the sliders' model changed: keep them (mode id, model id).
+    pub var saved: func(str, str) -> unit!? = none
 
-    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+    pub func init(self, workspace: Workspace, kit: Kit, mode: str = "triangle", model: str = "rgb") -> unit!:
         self.workspace = workspace
         self.kit = kit
+        self.states = [StableHsb(), StableHsb()]
         self.palette = Palette(workspace)
         self.palette.on_pick = self.pick_swatch
         self.editing = Text("Foreground", font = kit.font, muted = true)
-        self.rows = []
-        var sliders: list[Widget] = []
-        for label in ["R", "G", "B"]:
-            let pair = kit.slider_field(0.0, 255.0, 0.0, 0, "", func (value: float) -> unit!:
-                discard(value)
-                self.take_sliders())
-            self.rows.append(pair)
-            sliders.append(kit.dialog_row(label, pair.row, width = 16.0))
         self.hex_field = TextField("#000000", font = kit.font, cells = 9.0)
         kit.keep(self.hex_field.on_commit(self.take_hex))
-        let top = HStack([self.palette, VStack([self.editing, HStack([Text("#", font = kit.font, muted = true), self.hex_field], spacing = 2.0)], spacing = 4.0), Spacer()], spacing = 10.0)
-        let content = VStack([top] + sliders + [Spacer()], spacing = 6.0, padding = 8.0)
-        self.panel = Panel("Color", content, minimum = Size(220.0, 150.0), id = "color")
+        self.wheel = ColorWheel()
+        kit.keep(self.wheel.on_change(self.take_wheel))
+        self.strip = ShadedField(200.0, 14.0)
+        self.strip.layout().set_flex(1.0, 0.0)
+        kit.keep(self.strip.on_change(self.take_strip))
+        self.sliders = ColorSliders(kit, model_index(model))
+        self.sliders.changed = self.take_sliders
+        self.sliders.model_chosen = self.save
+        self.mode_commands = []
+        var index = 0
+        for name in mode_names():
+            let chosen = index
+            let command = Command(name, id = f"color_mode_{mode_ids()[index]}")
+            kit.bind(command, func () -> unit!:
+                self.choose_mode(chosen))
+            self.mode_commands.append(command)
+            index += 1
+        self.mode_menu = Menu("Triangle ▾", self.mode_commands, font = kit.font)
+        let hex_row = HStack([Text("#", font = kit.font, muted = true), self.hex_field], spacing = 2.0)
+        let top = HStack([self.palette, VStack([self.editing, hex_row], spacing = 4.0), Spacer(), VStack([self.mode_menu, self.sliders.menu], spacing = 4.0)], spacing = 10.0)
+        # Short of room, the wheel gives way, never the header or the strip.
+        top.layout().set_shrink(0.0, 0.0)
+        self.strip.layout().set_shrink(0.0, 0.0)
+        let content = VStack([top, self.wheel, self.strip, self.sliders.content, Spacer()], spacing = 8.0, padding = 8.0)
+        self.panel = Panel("Color", content, minimum = Size(220.0, 330.0), id = "color")
+        self.set_mode(mode_index_of(mode))
         self.show()
 
     ## A swatch clicked: edit that color here; clicking the one already being
@@ -56,32 +99,79 @@ pub class ColorPanel:
         self.background = background
         self.show()
 
-    ## The color being edited, as linear components.
-    func current(self) -> list[float]:
+    ## The edited color's HSB.
+    pub func state(self) -> StableHsb:
+        return self.states[1 if self.background else 0]
+
+    ## The edited color, encoded sRGB 0..1.
+    func current(self) -> science.Color:
         let w = self.workspace
         if self.background:
-            return [w.back_red, w.back_green, w.back_blue]
-        return [w.red, w.green, w.blue]
+            return encoded(w.back_red, w.back_green, w.back_blue)
+        return encoded(w.red, w.green, w.blue)
 
-    ## Show the edited color in the sliders and the hex field.
+    ## Show the edited color everywhere: its HSB follows the palette, keeping
+    ## the hue through greys and the saturation through black.
     pub func show(self) -> unit!:
         self.editing.set_text("Background" if self.background else "Foreground")
-        let color = self.current()
-        var index = 0
-        for pair in self.rows:
-            let encoded = transfer.srgb_encode(math.max(0.0, math.min(1.0, color[index])))
-            pair.set_value(math.floor(encoded * 255.0 + 0.5))
-            index += 1
-        self.hex_field.set_text(hex_of_linear(color[0], color[1], color[2]))
+        let state = self.state()
+        state.follow(self.current())
+        self.show_state()
+
+    func show_state(self) -> unit!:
+        let state = self.state()
+        self.wheel.set_hsb(state.hue, state.saturation, state.brightness)
+        var ramp: list[Color] = []
+        var step = 0
+        while step <= 16:
+            let shade = linear_of(hsl.from_hsv(hsl.HSV(state.hue, state.saturation, float(step) / 16.0)))
+            ramp.append(shade)
+            step += 1
+        self.strip.set_grid(ramp + ramp, 17)
+        self.strip.set_marker(state.brightness, 0.5)
+        self.sliders.show(state)
+        let color = state.srgb()
+        self.hex_field.set_text(hex_of_srgb(color.red, color.green, color.blue))
         self.palette.layout().invalidate()
 
-    ## A slider moved: the color from all three.
+    ## Show picker `mode` (as `mode_ids`) and keep it for the next launch.
+    pub func choose_mode(self, mode: int) -> unit!:
+        self.set_mode(mode)
+        self.save()
+
+    ## Show picker `mode` without keeping it.
+    pub func set_mode(self, mode: int) -> unit!:
+        self.mode = mode
+        self.mode_menu.set_text(mode_names()[mode] + " ▾")
+        var index = 0
+        for command in self.mode_commands:
+            command.set_checked(index == mode)
+            index += 1
+        # The wheel draws the triangle (0), the square (1) or the disc (2).
+        if mode < 3:
+            self.wheel.set_shape(mode)
+        self.wheel.layout().set_visible(mode < 3)
+        self.strip.layout().set_visible(mode == 2)
+        self.sliders.content.layout().set_visible(mode == 3)
+        self.sliders.menu.layout().set_visible(mode == 3)
+
+    func save(self) -> unit!:
+        if let keep = self.saved:
+            keep(mode_ids()[self.mode], model_ids()[self.sliders.model])
+
+    # -- Edits: each sets the palette at once.
+
+    func take_wheel(self) -> unit!:
+        self.state().assign(self.wheel.hue_value(), self.wheel.saturation_value(), self.wheel.brightness_value())
+        self.apply()
+
+    func take_strip(self) -> unit!:
+        let state = self.state()
+        state.assign(state.hue, state.saturation, self.strip.u())
+        self.apply()
+
     func take_sliders(self) -> unit!:
-        let red = self.rows[0].value() / 255.0
-        let green = self.rows[1].value() / 255.0
-        let blue = self.rows[2].value() / 255.0
-        self.set_srgb(red, green, blue)
-        self.hex_field.set_text(hex_of_srgb(red, green, blue))
+        self.apply()
 
     ## A hex typed: the color, if it is one ("#" optional).
     func take_hex(self, text: str) -> unit!:
@@ -89,11 +179,26 @@ pub class ColorPanel:
         if trimmed.length == 0:
             return
         let values = parse_hex(trimmed if trimmed[..<1] == "#" else "#" + trimmed) else return
-        self.set_srgb(values[0], values[1], values[2])
-        self.show()
+        self.state().follow(science.Color(values[0], values[1], values[2]))
+        self.apply()
 
-    func set_srgb(self, red: float, green: float, blue: float) -> unit!:
-        self.workspace.set_palette(transfer.srgb_decode(red), transfer.srgb_decode(green), transfer.srgb_decode(blue), self.background)
-        self.palette.layout().invalidate()
+    ## The state's color onto the palette, and every control showing it.
+    func apply(self) -> unit!:
+        let color = self.state().srgb()
+        self.workspace.set_palette(transfer.srgb_decode(color.red), transfer.srgb_decode(color.green), transfer.srgb_decode(color.blue), self.background)
+        self.show_state()
         if let refresh = self.refreshed:
             refresh()
+
+func mode_index_of(id: str) -> int:
+    var index = 0
+    for known in mode_ids():
+        if known == id:
+            return index
+        index += 1
+    return 0
+
+## The encoded sRGB of linear components, held to 0..1.
+func encoded(red: float, green: float, blue: float) -> science.Color:
+    return science.Color(transfer.srgb_encode(math.max(0.0, math.min(1.0, red))), transfer.srgb_encode(math.max(0.0, math.min(1.0, green))),
+                         transfer.srgb_encode(math.max(0.0, math.min(1.0, blue))))

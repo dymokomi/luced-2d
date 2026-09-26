@@ -1,0 +1,95 @@
+## The Color panel's model of a color: HSB of encoded sRGB (Photoshop's HSB)
+## that keeps its hue through greys and its hue and saturation through black,
+## and the sliders' channel models (RGB, HSB, Lab, grayscale) through luce-color.
+import color as science
+import hsl
+import lab
+import space
+import math
+
+## The sliders' models, in the menu's order: their names in the settings and on screen.
+pub func model_ids() -> list[str]:
+    return ["rgb", "hsb", "lab", "gray"]
+
+pub func model_names() -> list[str]:
+    return ["RGB", "HSB", "Lab", "Grayscale"]
+
+## The model `id` names; RGB for one this version does not know.
+pub func model_index(id: str) -> int:
+    var index = 0
+    for known in model_ids():
+        if known == id:
+            return index
+        index += 1
+    return 0
+
+## Channel labels, ranges and suffixes of each model.
+pub func channel_labels(model: int) -> list[str]:
+    return [["R", "G", "B"], ["H", "S", "B"], ["L", "a", "b"], ["K"]][model]
+
+pub func channel_low(model: int) -> list[float]:
+    return [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, -128.0, -128.0], [0.0]][model]
+
+pub func channel_high(model: int) -> list[float]:
+    return [[255.0, 255.0, 255.0], [360.0, 100.0, 100.0], [100.0, 127.0, 127.0], [100.0]][model]
+
+pub func channel_suffix(model: int) -> list[str]:
+    return [["", "", ""], ["°", "%", "%"], ["", "", ""], ["%"]][model]
+
+## A color's hue, saturation and brightness (degrees, 0..1, 0..1) as the
+## user last set them. Following a color that is already this one changes
+## nothing; a grey keeps the hue, black the hue and the saturation, so a drag
+## through grey or down to black does not snap the hue to red.
+pub class StableHsb:
+    pub var hue: float = 0.0
+    pub var saturation: float = 0.0
+    pub var brightness: float = 0.0
+
+    ## The encoded sRGB color this HSB is.
+    pub func srgb(self) -> science.Color:
+        return hsl.from_hsv(hsl.HSV(self.hue, self.saturation, self.brightness))
+
+    pub func assign(self, hue: float, saturation: float, brightness: float) -> unit:
+        self.hue = hue
+        self.saturation = math.max(0.0, math.min(1.0, saturation))
+        self.brightness = math.max(0.0, math.min(1.0, brightness))
+
+    ## Take `color` (encoded sRGB), keeping what it does not decide.
+    pub func follow(self, color: science.Color) -> unit:
+        let here = self.srgb()
+        if math.abs(here.red - color.red) < 1e-4 and math.abs(here.green - color.green) < 1e-4 and math.abs(here.blue - color.blue) < 1e-4:
+            return
+        let hsv = hsl.to_hsv(color)
+        # Under half an 8-bit step the hue (and, near black, the saturation) is
+        # rounding noise, as a Lab grey's is: keep ours.
+        if hsv.v > 0.002:
+            if hsv.s > 0.002:
+                self.hue = hsv.h
+            self.saturation = hsv.s
+        self.brightness = hsv.v
+
+## The channels of `model` for the color `state` holds, in the sliders' units.
+pub func channels_of(state: StableHsb, model: int) -> list[float]:
+    let color = state.srgb()
+    if model == 0:
+        return [color.red * 255.0, color.green * 255.0, color.blue * 255.0]
+    if model == 1:
+        return [state.hue, state.saturation * 100.0, state.brightness * 100.0]
+    let l = space.to_lab(color, space.srgb)
+    if model == 2:
+        return [l.l, l.a, l.b]
+    # Grayscale is ink, as Photoshop's K: 0 is white, 100 black, by lightness.
+    return [100.0 - l.l]
+
+## Set `state` from `model`'s channels (the sliders' units), in the sRGB gamut.
+pub func take_channels(state: StableHsb, model: int, values: list[float]) -> unit:
+    if model == 1:
+        state.assign(values[0], values[1] / 100.0, values[2] / 100.0)
+        return
+    if model == 0:
+        state.follow(science.Color(values[0] / 255.0, values[1] / 255.0, values[2] / 255.0))
+        return
+    if model == 2:
+        state.follow(space.clamp(space.from_lab(lab.Lab(values[0], values[1], values[2]), space.srgb)))
+        return
+    state.follow(space.clamp(space.from_lab(lab.Lab(100.0 - values[0], 0.0, 0.0), space.srgb)))

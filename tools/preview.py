@@ -17,9 +17,21 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
+
+def color_scene(mode):
+    return '''            editor.workspace.set_color(0.8069, 0.3515, 0.0497)
+            editor.panels.catalog.open("color")
+            let color = editor.panels.catalog.color else trap("the Color panel")
+            # A capture keeps nothing in the user's settings.
+            color.saved = none
+            color.set_mode(%d)
+            color.sliders.choose(1)
+            color.show()
+            editor.panels.refresh()''' % mode
+
 
 SCENES = {
     'style': '''            editor.panels.style.open()
@@ -602,6 +614,11 @@ SCENES = {
             print(f"CLIPBOARD after layer via copy layers {editor.workspace.layer_count()} selected {editor.workspace.canvas.layer_name(editor.workspace.selected)}")
             clipboard.write_text(saved)
             editor.panels.refresh()''',
+    # The Color panel's picker in each mode, on an orange foreground.
+    'colortriangle': color_scene(0),
+    'colorsquare': color_scene(1),
+    'colorwheel': color_scene(2),
+    'colorsliders': color_scene(3),
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
             editor.panels.pick_color(false)

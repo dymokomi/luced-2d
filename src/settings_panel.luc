@@ -259,6 +259,12 @@ pub class SettingsDialog:
         self.settings.swatches = text
         self.store.save(self.settings)
 
+    ## The Color panel's picker mode and slider model, kept for the next launch.
+    pub func remember_color_mode(self, mode: str, model: str) -> unit!:
+        self.settings.color_mode = mode
+        self.settings.color_model = model
+        self.store.save(self.settings)
+
     pub func remember_brushes(self, text: str) -> unit!:
         self.settings.brush_presets = text
         self.store.save(self.settings)

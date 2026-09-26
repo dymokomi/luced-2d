@@ -41,6 +41,10 @@ from brushes_panel import saved_brushes
 from align import align_layers
 from dock_layout import parse_layout
 from gpu import Rect
+from kit import Kit
+from color_panel import ColorPanel
+from ui import ColorWheel
+import transfer
 import math
 import window
 
@@ -96,6 +100,7 @@ pub func main(arguments: list[str]) -> int!:
     warping()
     alpha_channel_panel(arguments)
     vector_panel(arguments)
+    color_panel_modes()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1972,3 +1977,126 @@ func vector_panel(arguments: list[str]) -> unit!:
         assert(canvas.undo_name() == ("Skew" if mode == mode_skew else "Perspective"))
         workspace.undo()
     panels.close()
+
+func wheel_press(wheel: ColorWheel, x: float, y: float, shift: bool = false) -> unit!:
+    wheel.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = 0, inside = true, shift = shift))
+
+func wheel_drag(wheel: ColorWheel, x: float, y: float, shift: bool = false) -> unit!:
+    wheel.event(Event(kind = EventKind.pointer_moved, x = x, y = y, inside = true, shift = shift))
+
+func wheel_release(wheel: ColorWheel, x: float, y: float) -> unit!:
+    wheel.event(Event(kind = EventKind.pointer_up, x = x, y = y, button = 0, inside = true))
+
+## Whether the foreground is the encoded sRGB (red, green, blue), near enough.
+func foreground_is(workspace: Workspace, red: float, green: float, blue: float) -> bool:
+    return encodes_as(workspace.red, red) and encodes_as(workspace.green, green) and encodes_as(workspace.blue, blue)
+
+func encodes_as(linear: float, encoded: float) -> bool:
+    return math.abs(transfer.srgb_encode(linear) - encoded) < 0.002
+
+## The Color panel's picker in each mode: presses and drags on the ring and on
+## the triangle, square and disc set the foreground every step; a drag keeps
+## the part it began on; Shift drags fine; greys and black keep the hue and
+## saturation; the mode and the sliders' model are kept in the settings.
+func color_panel_modes() -> unit!:
+    let workspace = Workspace(64, 64)
+    let panel = ColorPanel(workspace, Kit(Font()), "triangle", "rgb")
+    var kept = ""
+    panel.saved = func (mode: str, model: str) -> unit!:
+        kept = mode + " " + model
+    let app = Application(panel.panel)
+    app.layout(260.0, 560.0)
+    let wheel = panel.wheel
+    # Stretched across the panel, then square to that width on the next arrangement.
+    wheel.layout().invalidate()
+    app.layout(260.0, 560.0)
+    let bounds = wheel.layout().bounds()
+    assert(bounds.width == bounds.height and bounds.width > 200.0)
+    workspace.set_color(1.0, 0.0, 0.0)
+    panel.show()
+    assert(panel.state().hue == 0.0 and math.abs(panel.state().saturation - 1.0) < 1e-9 and math.abs(panel.state().brightness - 1.0) < 1e-9)
+    # Triangle: the ring at 120° is green, at once.
+    wheel_press(wheel, wheel.ring_point_x(120.0), wheel.ring_point_y(120.0))
+    assert(foreground_is(workspace, 0.0, 1.0, 0.0))
+    # Dragged on inside the ring's hole, the drag still turns only the hue.
+    let x = wheel.field_point_x(0.5, 0.5)
+    let y = wheel.field_point_y(0.5, 0.5)
+    wheel_drag(wheel, wheel.ring_point_x(240.0) * 0.2 + x * 0.8, wheel.ring_point_y(240.0) * 0.2 + y * 0.8)
+    assert(math.abs(panel.state().hue - 240.0) < 3.0 and panel.state().saturation == 1.0 and foreground_is(workspace, 0.0, 0.0, 1.0) == (panel.state().hue == 240.0))
+    wheel_release(wheel, x, y)
+    wheel.set_hsb(240.0, 1.0, 1.0)
+    panel.state().assign(240.0, 1.0, 1.0)
+    # The triangle: its middle is half saturation, half brightness of the hue.
+    wheel_press(wheel, wheel.field_point_x(0.5, 0.5), wheel.field_point_y(0.5, 0.5))
+    assert(math.abs(panel.state().saturation - 0.5) < 0.01 and math.abs(panel.state().brightness - 0.5) < 0.01 and panel.state().hue == 240.0)
+    assert(foreground_is(workspace, 0.25, 0.25, 0.5))
+    # Dragged to the white corner, then past the black one: the hue and saturation stay.
+    wheel_drag(wheel, wheel.field_point_x(0.0, 1.0), wheel.field_point_y(0.0, 1.0))
+    assert(foreground_is(workspace, 1.0, 1.0, 1.0) and panel.state().hue == 240.0)
+    let saturation = panel.state().saturation
+    let black_x = wheel.field_point_x(0.0, 0.0)
+    let black_y = wheel.field_point_y(0.0, 0.0)
+    wheel_drag(wheel, black_x + (black_x - bounds.width * 0.5) * 0.3, black_y + (black_y - bounds.height * 0.5) * 0.3)
+    assert(foreground_is(workspace, 0.0, 0.0, 0.0) and panel.state().hue == 240.0 and panel.state().saturation == saturation)
+    wheel_release(wheel, black_x, black_y)
+    # A grey or black set elsewhere keeps the hue (the panel refreshes after).
+    panel.state().assign(240.0, 0.8, 0.8)
+    workspace.set_color(0.2, 0.2, 0.2)
+    panel.show()
+    assert(panel.state().hue == 240.0 and panel.state().saturation == 0.0)
+    workspace.set_color(0.0, 0.0, 0.0)
+    panel.show()
+    assert(panel.state().hue == 240.0 and panel.state().saturation == 0.0 and panel.state().brightness == 0.0)
+    # Shift drags a quarter as far: 40 points right moves the aim 10.
+    panel.state().assign(240.0, 1.0, 1.0)
+    panel.show()
+    workspace.set_color(0.0, 0.0, 1.0)
+    panel.choose_mode(1)
+    app.layout(260.0, 560.0)
+    assert(kept == "square rgb")
+    let sx = wheel.field_point_x(0.5, 0.5)
+    let sy = wheel.field_point_y(0.5, 0.5)
+    let span = wheel.field_point_x(1.0, 0.5) - wheel.field_point_x(0.0, 0.5)
+    wheel_press(wheel, sx, sy, shift = true)
+    wheel_drag(wheel, sx + 40.0, sy, shift = true)
+    assert(math.abs(panel.state().saturation - (0.5 + 10.0 / span)) < 0.001 and math.abs(panel.state().brightness - 0.5) < 0.001)
+    wheel_drag(wheel, wheel.field_point_x(1.0, 1.0) + 30.0, wheel.field_point_y(1.0, 1.0) - 30.0)
+    assert(foreground_is(workspace, 0.0, 0.0, 1.0))
+    wheel_release(wheel, sx, sy)
+    # The square's ring: yellow; the arrow keys and the wheel turn the hue.
+    wheel_press(wheel, wheel.ring_point_x(60.0), wheel.ring_point_y(60.0))
+    wheel_release(wheel, wheel.ring_point_x(60.0), wheel.ring_point_y(60.0))
+    assert(foreground_is(workspace, 1.0, 1.0, 0.0))
+    wheel.event(Event(kind = EventKind.key_down, key = Key.right))
+    assert(math.abs(panel.state().hue - 61.0) < 0.01)
+    wheel.event(Event(kind = EventKind.scroll, scroll_y = -1.0, inside = true))
+    assert(math.abs(panel.state().hue - 59.0) < 0.01)
+    # The wheel: hue around, saturation out; brightness on the strip under it.
+    panel.choose_mode(2)
+    app.layout(260.0, 560.0)
+    assert(kept == "wheel rgb" and panel.strip.layout().bounds().width > 200.0)
+    wheel_press(wheel, wheel.ring_point_x(300.0), wheel.ring_point_y(300.0))
+    wheel_release(wheel, wheel.ring_point_x(300.0), wheel.ring_point_y(300.0))
+    assert(math.abs(panel.state().hue - 300.0) < 0.01 and math.abs(panel.state().saturation - 0.5) < 0.01 and foreground_is(workspace, 1.0, 0.5, 1.0))
+    let strip = panel.strip.layout().bounds()
+    panel.strip.event(Event(kind = EventKind.pointer_down, x = strip.width * 0.25, y = 5.0, button = 0, inside = true))
+    panel.strip.event(Event(kind = EventKind.pointer_up, x = strip.width * 0.25, y = 5.0, button = 0, inside = true))
+    assert(math.abs(panel.state().brightness - 0.25) < 0.001 and foreground_is(workspace, 0.25, 0.125, 0.25))
+    # Sliders: HSB and Lab set the color; a Lab grey keeps the hue.
+    panel.choose_mode(3)
+    panel.sliders.choose(1)
+    assert(kept == "sliders hsb")
+    panel.sliders.set_channel(2, 100.0)
+    assert(foreground_is(workspace, 1.0, 0.5, 1.0))
+    # A grey from HSB, then made lighter in Lab: still hue 300.
+    panel.sliders.set_channel(1, 0.0)
+    assert(panel.state().hue == 300.0 and panel.state().saturation == 0.0)
+    panel.sliders.choose(2)
+    panel.sliders.set_channel(0, 70.0)
+    assert(panel.state().hue == 300.0 and panel.state().saturation < 0.01 and panel.state().brightness > 0.6)
+    panel.sliders.choose(3)
+    panel.sliders.set_channel(0, 100.0)
+    assert(foreground_is(workspace, 0.0, 0.0, 0.0) and panel.state().hue == 300.0)
+    let reread = Settings(Settings().serialize())
+    assert(reread.color_mode == "triangle" and reread.color_model == "rgb")
+    app.close()

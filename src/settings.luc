@@ -26,6 +26,9 @@ pub class Settings:
     pub var recent: str = ""
     ## The Swatches panel's colors, in order, as sRGB hex separated by spaces.
     pub var swatches: str = default_swatches
+    ## The Color panel's picker (triangle, square, wheel or sliders) and its sliders' model (rgb, hsb, lab or gray).
+    pub var color_mode: str = "triangle"
+    pub var color_model: str = "rgb"
     ## The Brushes panel's saved presets (brushes_panel.luc's text form).
     pub var brush_presets: str = ""
     ## How much memory each document's undo history may take, in gigabytes.
@@ -47,6 +50,8 @@ pub class Settings:
         self.control_radius = table.number("theme.control_radius", 5.0, 0.0, 16.0)
         self.recent = table.string("colors.recent", "")
         self.swatches = table.string("colors.swatches", default_swatches)
+        self.color_mode = table.string("colors.mode", "triangle")
+        self.color_model = table.string("colors.model", "rgb")
         self.brush_presets = table.string("brushes.presets", "")
         self.undo_memory = table.number("memory.undo", 4.0, 0.25, 256.0)
         self.memory_usage = table.number("memory.usage", 60.0, 25.0, 90.0)
@@ -70,6 +75,8 @@ pub class Settings:
         other.control_radius = self.control_radius
         other.recent = self.recent
         other.swatches = self.swatches
+        other.color_mode = self.color_mode
+        other.color_model = self.color_model
         other.brush_presets = self.brush_presets
         other.undo_memory = self.undo_memory
         other.memory_usage = self.memory_usage
@@ -92,7 +99,7 @@ pub class Settings:
         let grid = "true" if self.grid else "false"
         text = text + f"[view]\nrulers = {rulers}\ngrid = {grid}\n# Rulers and sizes in \"px\", \"mm\" or \"in\".\nunits = \"{self.units}\"\n\n"
         text = text + f"[memory]\n# Gigabytes each document's undo history may hold; the oldest steps go first.\nundo = {self.undo_memory}\n# Percent of the GPU's and the machine's memory tiles may use (25..90).\nusage = {self.memory_usage}\n# A folder on a disk for tiles past the RAM budget; empty for the default.\nscratch = '{self.scratch}'\n\n"
-        text = text + f"[colors]\n# The picker's recent colors, newest first.\nrecent = \"{self.recent}\"\n# The Swatches panel's colors, in order.\nswatches = \"{self.swatches}\"\n\n"
+        text = text + f"[colors]\n# The picker's recent colors, newest first.\nrecent = \"{self.recent}\"\n# The Swatches panel's colors, in order.\nswatches = \"{self.swatches}\"\n# The Color panel's picker (triangle, square, wheel or sliders) and its sliders' model (rgb, hsb, lab or gray).\nmode = \"{self.color_mode}\"\nmodel = \"{self.color_model}\"\n\n"
         text = text + f"[brushes]\n# Brush presets saved in the Brushes panel: name, size, hardness, opacity, flow, spacing, angle, roundness; one per ';'.\npresets = \"{self.brush_presets}\"\n\n"
         text = text + "# Shortcuts by command id; a chord like \"cmd+shift+s\", \"f5\" or \"none\". Unlisted commands keep their defaults.\n[shortcuts]\n"
         for (id, chord) in self.shortcuts:

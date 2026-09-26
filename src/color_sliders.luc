@@ -1,0 +1,96 @@
+## The Color panel's Sliders mode: one slider per channel of the model chosen
+## in its menu (RGB, HSB, Lab or grayscale), each paired with a number field.
+from ui import VStack, Menu, Command, Widget
+from kit import Kit, SliderField
+from color_model import StableHsb, model_ids, model_names, channel_labels, channel_low, channel_high, channel_suffix, channels_of, take_channels
+
+pub class ColorSliders:
+    pub let content: VStack
+    pub let menu: Menu
+    let kit: Kit
+    let commands: list[Command]
+    ## Every model's rows, and the index of each model's first row.
+    let fields: list[SliderField]
+    let rows: list[Widget]
+    let starts: list[int]
+    pub var model: int = 0
+    ## A slider moved: the state holds the new color.
+    pub var changed: func() -> unit!? = none
+    ## The model was chosen in the menu.
+    pub var model_chosen: func() -> unit!? = none
+    var state: StableHsb
+
+    pub func init(self, kit: Kit, model: int) -> unit!:
+        self.kit = kit
+        self.model = model
+        self.state = StableHsb()
+        self.fields = []
+        self.rows = []
+        self.starts = []
+        self.commands = []
+        var index = 0
+        for name in model_names():
+            let chosen = index
+            let command = Command(name, id = f"color_model_{model_ids()[index]}")
+            kit.bind(command, func () -> unit!:
+                self.choose(chosen))
+            self.commands.append(command)
+            self.starts.append(self.fields.length)
+            var channel = 0
+            for label in channel_labels(index):
+                let pair = kit.slider_field(channel_low(index)[channel], channel_high(index)[channel], 0.0, 0, channel_suffix(index)[channel], func (value: float) -> unit!:
+                    discard(value)
+                    self.take())
+                self.fields.append(pair)
+                self.rows.append(kit.dialog_row(label, pair.row, width = 16.0))
+                channel += 1
+            index += 1
+        self.menu = Menu(model_names()[model] + " ▾", self.commands, font = kit.font)
+        self.content = VStack(self.rows, spacing = 6.0)
+        self.choose_rows()
+
+    ## Show `state`'s color in the model's sliders, reporting nothing.
+    pub func show(self, state: StableHsb) -> unit!:
+        self.state = state
+        let values = channels_of(state, self.model)
+        var channel = 0
+        while channel < values.length:
+            self.fields[self.starts[self.model] + channel].set_value(values[channel])
+            channel += 1
+
+    ## Set channel `channel` of the model shown to `value`, as a drag of its slider does.
+    pub func set_channel(self, channel: int, value: float) -> unit!:
+        self.fields[self.starts[self.model] + channel].set_value(value)
+        self.take()
+
+    ## Show `model`'s sliders (as `model_ids`).
+    pub func choose(self, model: int) -> unit!:
+        self.model = model
+        self.choose_rows()
+        self.show(self.state)
+        if let chosen = self.model_chosen:
+            chosen()
+
+    func choose_rows(self) -> unit!:
+        self.menu.set_text(model_names()[self.model] + " ▾")
+        var index = 0
+        for command in self.commands:
+            command.set_checked(index == self.model)
+            index += 1
+        let end = self.starts[self.model + 1] if self.model + 1 < self.starts.length else self.fields.length
+        index = 0
+        for row in self.rows:
+            row.layout().set_visible(index >= self.starts[self.model] and index < end)
+            index += 1
+
+    ## A slider moved: the color from the model's sliders.
+    func take(self) -> unit!:
+        let count = channel_labels(self.model).length
+        var values: list[float] = []
+        var channel = 0
+        while channel < count:
+            values.append(self.fields[self.starts[self.model] + channel].value())
+            channel += 1
+        take_channels(self.state, self.model, values)
+        if let report = self.changed:
+            report()

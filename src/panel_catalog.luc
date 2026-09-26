@@ -151,7 +151,8 @@ pub class PanelCatalog:
     func color_panel(self) -> ColorPanel!:
         if let made = self.color:
             return made
-        let made = ColorPanel(self.workspace, self.kit)
+        let made = ColorPanel(self.workspace, self.kit, self.settings.settings.color_mode, self.settings.settings.color_model)
+        made.saved = self.settings.remember_color_mode
         made.refreshed = self.refresh
         made.open_picker = func (background: bool) -> unit!:
             if let open = self.open_picker:
