@@ -30,6 +30,7 @@ pub class SettingsDialog:
     let pages: list[VStack]
     let width_field: NumberField
     let height_field: NumberField
+    let undo_field: NumberField
     let accent_field: TextField
     let accent_swatch: Swatch
     let radius_field: NumberField
@@ -66,7 +67,12 @@ pub class SettingsDialog:
             self.draft.canvas_width = int(value)))
         self.connections.append(self.height_field.on_change(func (value: float) -> unit!:
             self.draft.canvas_height = int(value)))
-        let general = VStack([self.row("New canvas", HStack([self.width_field, Text("×", font = font, muted = true), self.height_field], spacing = 6.0)), Spacer()], spacing = 8.0)
+        self.undo_field = NumberField(4.0, 0.25, 256.0, 0.25, suffix = " GB", font = font, cells = 8.0)
+        self.undo_field.set_decimals(2)
+        self.connections.append(self.undo_field.on_change(func (value: float) -> unit!:
+            self.draft.undo_memory = value))
+        let general = VStack([self.row("New canvas", HStack([self.width_field, Text("×", font = font, muted = true), self.height_field], spacing = 6.0)),
+                              self.row("Undo memory", self.undo_field), Spacer()], spacing = 8.0)
         # Shortcuts: every command in a table; the field beneath records for the picked row.
         self.table = TableView([TableColumn(title = "Action", weight = 1.0), TableColumn(title = "Shortcut", width = 150.0)], self.cells(), font = font)
         self.table.layout().set_limits(Size(200.0, 190.0), Size(16384.0, 190.0))
@@ -132,6 +138,7 @@ pub class SettingsDialog:
     func show_draft(self) -> unit!:
         self.width_field.set_value(float(self.draft.canvas_width))
         self.height_field.set_value(float(self.draft.canvas_height))
+        self.undo_field.set_value(self.draft.undo_memory)
         self.accent_field.set_text(self.draft.accent)
         self.show_accent()
         self.radius_field.set_value(self.draft.control_radius)
@@ -258,6 +265,7 @@ pub class SettingsDialog:
         self.workspace.show_rulers = self.settings.rulers
         self.workspace.show_grid = self.settings.grid
         self.workspace.units = self.settings.units
+        self.workspace.set_history_limit(int(self.settings.undo_memory * 1073741824.0))
         let look = Look(self.settings.accent, self.settings.control_radius)
         self.workspace.look = look
         var recent: list[str] = []

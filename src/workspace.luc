@@ -123,6 +123,9 @@ pub class Workspace:
     pub let typing: TypeOptions
     var next_name: int = 1
     pub var next_group: int = 1
+    ## How many bytes of tiles each document's undo history may hold beyond the
+    ## document itself (Settings › General › Undo memory).
+    var history_limit: int = 4 * 1024 * 1024 * 1024
 
     pub func init(self, width: int, height: int) -> unit!:
         self.canvas = blank_canvas(width, height)
@@ -139,6 +142,13 @@ pub class Workspace:
 
     pub func touch(self):
         self.revision += 1
+
+    ## Let every open document's undo history hold `limit` bytes of tiles; the
+    ## oldest steps go first when it would hold more.
+    pub func set_history_limit(self, limit: int) -> unit!:
+        self.history_limit = limit
+        for document in self.documents:
+            document.canvas.set_history_limit(limit)
 
     # -- Documents: the live fields are the current document's; switching stashes and restores them.
 
@@ -160,10 +170,11 @@ pub class Workspace:
         document.next_name = self.next_name
 
     ## Make document `index` the live one.
-    func restore(self, index: int):
+    func restore(self, index: int) -> unit!:
         let document = self.documents[index]
         self.current = index
         self.canvas = document.canvas
+        self.canvas.set_history_limit(self.history_limit)
         self.path = document.path
         self.zoom = document.zoom
         self.offset_x = document.offset_x

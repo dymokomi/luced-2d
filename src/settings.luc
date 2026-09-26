@@ -20,6 +20,8 @@ pub class Settings:
     pub var units: str = "px"
     ## The colors the picker committed most recently, newest first, as sRGB hex separated by spaces.
     pub var recent: str = ""
+    ## How much memory each document's undo history may take, in gigabytes.
+    pub var undo_memory: float = 4.0
     pub var shortcuts: map[str, str]
 
     pub func init(self, source: str = "") -> unit!:
@@ -31,6 +33,7 @@ pub class Settings:
         self.accent = table.string("theme.accent", "#e7a03f")
         self.control_radius = table.number("theme.control_radius", 5.0, 0.0, 16.0)
         self.recent = table.string("colors.recent", "")
+        self.undo_memory = table.number("memory.undo", 4.0, 0.25, 256.0)
         self.rulers = table.boolean("view.rulers", true)
         self.grid = table.boolean("view.grid", false)
         self.units = table.string("view.units", "px")
@@ -49,6 +52,7 @@ pub class Settings:
         other.accent = self.accent
         other.control_radius = self.control_radius
         other.recent = self.recent
+        other.undo_memory = self.undo_memory
         other.rulers = self.rulers
         other.grid = self.grid
         other.units = self.units
@@ -66,6 +70,7 @@ pub class Settings:
         let rulers = "true" if self.rulers else "false"
         let grid = "true" if self.grid else "false"
         text = text + f"[view]\nrulers = {rulers}\ngrid = {grid}\n# Rulers and sizes in \"px\", \"mm\" or \"in\".\nunits = \"{self.units}\"\n\n"
+        text = text + f"[memory]\n# Gigabytes each document's undo history may hold; the oldest steps go first.\nundo = {self.undo_memory}\n\n"
         text = text + f"[colors]\n# The picker's recent colors, newest first.\nrecent = \"{self.recent}\"\n\n"
         text = text + "# Shortcuts by command id; a chord like \"cmd+shift+s\", \"f5\" or \"none\". Unlisted commands keep their defaults.\n[shortcuts]\n"
         for (id, chord) in self.shortcuts:
