@@ -14,7 +14,8 @@ from polygon_lasso import PolygonLasso
 from guides import GuideDrag
 from snapping import Snapper
 from adjustments import adjustments
-from settings import Settings
+from settings import Settings, Store
+from settings_panel import SettingsDialog
 from ui import Event, Application
 from layer_effects import EffectRows
 from update_check import newer
@@ -83,6 +84,7 @@ pub func main(arguments: list[str]) -> int!:
     pen_paths()
     aligning()
     dock_layouts(arguments)
+    settings_save_pending(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1382,3 +1384,15 @@ func navigator_boxes() -> unit!:
     # A view off the document shows none of it.
     assert(view_box(placed, 1280.0, 800.0, 1000.0, 600.0, 2.0, 5000.0, 0.0) == none)
 
+## Save takes what a text field shows even when Enter was never pressed.
+func settings_save_pending(arguments: list[str]) -> unit!:
+    let store = Store(arguments[arguments.length - 1])
+    let dialog = SettingsDialog(Workspace(300, 200), Actions(), Font(), store)
+    dialog.open()
+    dialog.scratch_field.set_text("/tmp/luced-scratch-test")
+    dialog.save()
+    assert(store.load().scratch == "/tmp/luced-scratch-test")
+    dialog.open()
+    dialog.scratch_field.set_text("")
+    dialog.save()
+    assert(store.load().scratch == "")

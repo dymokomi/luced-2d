@@ -32,7 +32,7 @@ pub class SettingsDialog:
     let height_field: NumberField
     let undo_field: NumberField
     let usage_field: NumberField
-    let scratch_field: TextField
+    pub let scratch_field: TextField
     let accent_field: TextField
     let accent_swatch: Swatch
     let radius_field: NumberField
@@ -245,6 +245,9 @@ pub class SettingsDialog:
 
     ## Save writes the file and applies the draft as the live settings.
     pub func save(self) -> unit!:
+        # A text field still being typed in has not committed: take what it shows.
+        self.draft.scratch = self.scratch_field.text().trim()
+        self.set_accent(self.accent_field.text())
         self.settings = self.draft.copy()
         self.store.save(self.settings)
         self.dialog.hide()
