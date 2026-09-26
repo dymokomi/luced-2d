@@ -211,6 +211,11 @@ pub class DockLayout:
     ## Window › Reset Layout.
     pub func reset(self) -> unit!:
         self.clear()
+        # A floating viewport goes back into the dock first: the default
+        # arrangement splits the others off beside it.
+        if self.dock.is_floating(self.viewport):
+            self.dock.remove(self.viewport)
+            self.dock.add(self.viewport)
         self.arrange_default()
         self.save()
 

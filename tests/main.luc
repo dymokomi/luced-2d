@@ -1329,6 +1329,11 @@ func dock_layouts(arguments: list[str]) -> unit!:
     let panels = Panels(Workspace(300, 200), Actions(), Font())
     let first = panels.dock.layout_text()
     assert(first == "luce-dock 1\nsplit h 0.76\ngroup 0 viewport\nsplit v 0.55\ngroup 0 layers\ngroup 0 properties\n")
+    # Reset Layout brings a floating viewport back into the dock.
+    let floated = Panels(Workspace(300, 200), Actions(), Font())
+    floated.dock.float(floated.viewport_panel, Rect(10.0, 10.0, 200.0, 150.0))
+    floated.dock_layout.reset()
+    assert(floated.dock.layout_text() == first)
     panels.catalog.open("swatches")
     panels.catalog.open("history")
     let navigator = panels.catalog.panel("navigator") else trap("navigator is a panel")
