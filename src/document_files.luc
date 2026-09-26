@@ -155,6 +155,13 @@ pub class DocumentFiles:
 
     ## The window's close button and Quit: close now when nothing is unsaved;
     ## otherwise ask about each document with changes, then quit.
+    ## File › Exit: ask about each unsaved document, as closing the window does,
+    ## then end the run; a document kept open stops it.
+    pub func quit(self) -> unit!:
+        if self.can_quit():
+            if let app = self.app:
+                app.stop()
+
     pub func can_quit(self) -> bool!:
         if self.workspace.previewing():
             self.workspace.end_preview(false)

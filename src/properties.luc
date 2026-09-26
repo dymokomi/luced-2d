@@ -71,7 +71,7 @@ pub class Properties:
                            kit.property_row("Flags", HStack([self.visible_box, self.clipped_box, self.mask_box], spacing = 10.0)),
                            self.styles_row, self.adjustment_section, Spacer()], spacing = 0.0, padding = 0.0)
         # An adjustment layer's settings can be taller than the pane: it scrolls.
-        self.panel = Panel("Properties", ScrollView(rows), minimum = Size(220.0, 100.0), closable = false)
+        self.panel = Panel("Properties", ScrollView(rows), minimum = Size(220.0, 100.0), id = "properties")
 
     ## Show the selected layer.
     pub func show(self) -> unit!:

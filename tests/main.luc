@@ -29,6 +29,9 @@ import paths
 import files
 from layer_transfer import copy_layers, paste_layers, send_layers
 from input import EventKind, Key
+from ui import Command
+from swatches_panel import swatches_of
+from brushes_panel import saved_brushes
 import math
 import window
 
@@ -71,6 +74,7 @@ pub func main(arguments: list[str]) -> int!:
     on_image_adjustment()
     hue_ranges()
     opens_photos()
+    panel_catalog()
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1126,3 +1130,67 @@ func opens_photos() -> unit!:
     for name in ["IMG_0001.HEIC", "a.heif", "b.dng", "c.CR2", "c.cr3", "d.nef", "e.arw", "f.orf", "g.rw2", "h.pef", "i.raf"]:
         assert(workspace.can_open(name) and workspace.can_place(name))
     assert(not workspace.can_open("notes.txt"))
+
+## Window › a panel, by id.
+func window_command(actions: Actions, id: str) -> Command!:
+    for command in actions.windows:
+        if command.id() == "window_" + id:
+            return command
+    trap("no Window command for " + id)
+
+## The panel catalog: the Window menu opens a panel beside the Layers and
+## Properties column, ticked; again, it closes and comes back as it was; with
+## that column closed a new panel docks right of the viewport; Brush Settings
+## floats. The Swatches and Brushes texts survive their round trips.
+func panel_catalog() -> unit!:
+    let workspace = Workspace(300, 200)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let catalog = panels.catalog
+    assert(catalog.is_open("layers") and catalog.is_open("properties") and not catalog.is_open("swatches"))
+    assert(window_command(actions, "layers").is_checked() and not window_command(actions, "swatches").is_checked())
+    window_command(actions, "swatches").trigger()
+    let swatches = catalog.panel("swatches") else trap("swatches is a panel")
+    assert(catalog.is_open("swatches") and panels.dock.same_group(swatches, panels.properties.panel))
+    assert(window_command(actions, "swatches").is_checked())
+    # Picking an open one again closes it; once more brings the same panel back.
+    window_command(actions, "swatches").trigger()
+    assert(not catalog.is_open("swatches") and not window_command(actions, "swatches").is_checked())
+    window_command(actions, "swatches").trigger()
+    let again = catalog.panel("swatches") else trap("swatches is a panel")
+    assert(again is swatches and catalog.is_open("swatches"))
+    # Opening one already open selects it rather than adding it twice.
+    let count = panels.dock.panel_count()
+    catalog.open("swatches")
+    assert(panels.dock.panel_count() == count)
+    # With Layers and Properties closed, a new panel goes right of the viewport.
+    window_command(actions, "layers").trigger()
+    window_command(actions, "properties").trigger()
+    window_command(actions, "swatches").trigger()
+    assert(not catalog.is_open("layers") and not catalog.is_open("properties"))
+    let groups = panels.dock.group_count()
+    window_command(actions, "navigator").trigger()
+    let navigator = catalog.panel("navigator") else trap("navigator is a panel")
+    assert(catalog.is_open("navigator") and not panels.dock.same_group(navigator, panels.viewport_panel) and panels.dock.group_count() == groups + 1)
+    # The others open and show the document without failing, History included.
+    for id in ["color", "history", "info", "brushes"]:
+        window_command(actions, id).trigger()
+        assert(catalog.is_open(id))
+    actions.add_layer.trigger()
+    panels.refresh()
+    catalog.poll()
+    window_command(actions, "brush_settings").trigger()
+    assert(panels.dock.is_floating(panels.brush.panel))
+    # The texts the panels keep in the settings.
+    assert(swatches_of("#FF0000 nonsense #00ff00") == ["#ff0000", "#00ff00"])
+    let brushes = saved_brushes("Big,120,0.5,1,1,0.25,0,1;broken;Tiny,2,1,0.5,1,0.1,45,0.5")
+    assert(brushes.length == 2 and brushes[0].name == "Big" and brushes[0].diameter == 120.0 and brushes[1].angle == 45.0)
+    assert(saved_brushes(brushes[0].text())[0].hardness == 0.5)
+    let kept = Settings()
+    kept.swatches = "#123456"
+    kept.brush_presets = brushes[0].text()
+    let reread = Settings(kept.serialize())
+    assert(reread.swatches == "#123456" and reread.brush_presets == brushes[0].text())
+    # File › Exit on a changed document asks rather than ending the run.
+    panels.files.quit()
+    panels.close()

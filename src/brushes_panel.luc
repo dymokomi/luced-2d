@@ -1,0 +1,128 @@
+## The Brushes panel, as Photoshop's: the built-in presets and the ones saved
+## here, by name with their size. A click makes that the brush (and picks the
+## Brush tool); "+" saves the brush in hand as a new preset; the bin deletes
+## the selected saved one. Saved presets live in settings.toml.
+from ui import Panel, ListView, ListItem, Shelf, Spacer, Size
+from workspace import Workspace
+from brush import Brush, preset_names, max_brush
+from kit import Kit
+import math
+
+## A saved preset: a name and the settings that make the brush.
+pub class SavedBrush:
+    pub let name: str
+    pub let diameter: float
+    pub let hardness: float
+    pub let opacity: float
+    pub let flow: float
+    pub let spacing: float
+    pub let angle: float
+    pub let roundness: float
+
+    pub func init(self, name: str, diameter: float, hardness: float, opacity: float, flow: float, spacing: float, angle: float, roundness: float):
+        self.name = name
+        self.diameter = diameter
+        self.hardness = hardness
+        self.opacity = opacity
+        self.flow = flow
+        self.spacing = spacing
+        self.angle = angle
+        self.roundness = roundness
+
+    ## Its text form: the fields separated by commas.
+    pub func text(self) -> str:
+        return f"{self.name},{self.diameter},{self.hardness},{self.opacity},{self.flow},{self.spacing},{self.angle},{self.roundness}"
+
+## The presets in the settings' text, one per ';'; malformed ones are left out.
+pub func saved_brushes(text: str) -> list[SavedBrush]:
+    var brushes: list[SavedBrush] = []
+    for item in text.split(";"):
+        let fields = item.split(",")
+        if fields.length != 8 or fields[0].trim() == "":
+            continue
+        var numbers: list[float] = []
+        for field in fields[1..]:
+            let number = float(field.trim()) catch _:
+                break
+            numbers.append(number)
+        if numbers.length == 7:
+            brushes.append(SavedBrush(fields[0].trim(), numbers[0], numbers[1], numbers[2], numbers[3], numbers[4], numbers[5], numbers[6]))
+    return brushes
+
+pub class BrushesPanel:
+    pub let panel: Panel
+    let presets: ListView
+    let workspace: Workspace
+    pub var saved: list[SavedBrush]
+    ## Where the saved presets are kept after a change, as the settings' text.
+    pub var keep: func(str) -> unit!? = none
+    ## A preset picked: the window picks the Brush tool and refreshes.
+    pub var chosen: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit, text: str) -> unit!:
+        self.workspace = workspace
+        self.saved = saved_brushes(text)
+        self.presets = ListView(self.items(), font = kit.font)
+        self.presets.layout().set_flex()
+        kit.keep(self.presets.on_activate(self.pick))
+        let shelf = Shelf([kit.shelf_button("plus", self.save_current), Spacer(), kit.shelf_button("trash", self.delete_selected)])
+        self.panel = Panel("Brushes", self.presets, minimum = Size(200.0, 140.0), footer = shelf, id = "brushes")
+
+    ## The rows: the built-ins by name, then the saved ones with their size.
+    func items(self) -> list[ListItem]:
+        var rows: list[ListItem] = []
+        for name in preset_names():
+            rows.append(ListItem(text = name))
+        for brush in self.saved:
+            rows.append(ListItem(text = f"{brush.name}  ·  {int(brush.diameter)} px"))
+        return rows
+
+    ## Row `index` picked: a built-in keeps the size and strength in hand, as
+    ## the header's preset menu does; a saved one brings its own.
+    func pick(self, index: int) -> unit!:
+        let names = preset_names()
+        if index < 0:
+            return
+        if index < names.length:
+            self.workspace.apply_preset(names[index])
+        elif index - names.length < self.saved.length:
+            let saved = self.saved[index - names.length]
+            let brush = Brush()
+            brush.diameter = math.max(1.0, math.min(max_brush, saved.diameter))
+            brush.hardness = saved.hardness
+            brush.opacity = saved.opacity
+            brush.flow = saved.flow
+            brush.spacing = saved.spacing
+            brush.angle = saved.angle
+            brush.roundness = saved.roundness
+            brush.preset = saved.name
+            self.workspace.brush = brush
+            self.workspace.touch()
+        if let done = self.chosen:
+            done()
+
+    ## "+": the brush in hand as "Brush N".
+    func save_current(self) -> unit!:
+        let b = self.workspace.brush
+        self.saved.append(SavedBrush(f"Brush {self.saved.length + 1}", b.diameter, b.hardness, b.opacity, b.flow, b.spacing, b.angle, b.roundness))
+        self.changed()
+        self.presets.select(preset_names().length + self.saved.length - 1)
+
+    ## The bin: the selected saved preset goes; the built-ins stay.
+    func delete_selected(self) -> unit!:
+        let index = self.presets.selected_index() - preset_names().length
+        if index < 0 or index >= self.saved.length:
+            return
+        discard(self.saved.remove_at(index))
+        self.changed()
+
+    func changed(self) -> unit!:
+        self.presets.set_items(self.items())
+        var texts: list[str] = []
+        for brush in self.saved:
+            texts.append(brush.text())
+        if let save = self.keep:
+            save(texts.join(";"))
+
+    pub func show(self) -> unit!:
+        return

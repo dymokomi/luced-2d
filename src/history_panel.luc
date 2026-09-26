@@ -1,0 +1,62 @@
+## The History panel, as Photoshop's: the document's steps by name, oldest at
+## the top under the opening state, the current one selected, and the steps
+## Redo would bring back below it. Clicking a step undoes or redoes to it.
+from ui import Panel, ListView, ListItem, Size
+from workspace import Workspace
+from kit import Kit
+
+pub class HistoryPanel:
+    pub let panel: Panel
+    let steps: ListView
+    let workspace: Workspace
+    ## What the list shows, to rebuild it only when the steps changed.
+    var shown: str = ""
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.steps = ListView([ListItem(text = "Open")], font = kit.font)
+        self.steps.layout().set_flex()
+        kit.keep(self.steps.on_activate(self.step_to))
+        self.panel = Panel("History", self.steps, minimum = Size(200.0, 120.0), id = "history")
+        self.show()
+
+    ## Rows: the opening state, every undoable step, then the redoable ones.
+    pub func show(self) -> unit!:
+        let canvas = self.workspace.canvas
+        let done = canvas.history_steps()
+        let undone = canvas.future_steps()
+        var names: list[str] = ["Open"]
+        var index = 0
+        while index < done:
+            names.append(canvas.history_step_name(index))
+            index += 1
+        index = 0
+        while index < undone:
+            names.append("   " + canvas.future_step_name(index))
+            index += 1
+        let signature = f"{done}:{canvas.step_serial()}:" + names.join("|")
+        if signature == self.shown:
+            return
+        self.shown = signature
+        var items: list[ListItem] = []
+        for name in names:
+            items.append(ListItem(text = name))
+        self.steps.set_items(items)
+        self.steps.select(done)
+
+    ## Row `index` clicked: undo or redo until it is the current state.
+    func step_to(self, index: int) -> unit!:
+        let canvas = self.workspace.canvas
+        var current = canvas.history_steps()
+        if index < 0 or canvas.previewing():
+            return
+        while index < current and canvas.can_undo():
+            self.workspace.undo()
+            current -= 1
+        while index > current and canvas.can_redo():
+            self.workspace.redo()
+            current += 1
+        if let refresh = self.refreshed:
+            refresh()

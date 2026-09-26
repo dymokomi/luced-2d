@@ -1,0 +1,90 @@
+## The Info panel, as Photoshop's: where the pointer is over the document, in
+## the rulers' units; the color under it (sRGB 0..255 and hex, with its
+## opacity); and the selection's size. It reads the pointer once a frame, and
+## the color only when the pointer moved and nothing is being painted, so it
+## costs one pixel's read a frame at most.
+from ui import Panel, Text, VStack, Spacer, Size
+from workspace import Workspace
+from view import CanvasView
+from kit import Kit
+from units import pixels_per, unit_suffix
+from hex_color import hex_of_linear
+import transfer
+import math
+
+pub class InfoPanel:
+    pub let panel: Panel
+    let position: Text
+    let color: Text
+    let selection: Text
+    let workspace: Workspace
+    let view: CanvasView
+    ## What the texts last showed, to read again only after a change.
+    var last_x: float = -1.0
+    var last_y: float = -1.0
+    var last_revision: int = -1
+
+    pub func init(self, workspace: Workspace, view: CanvasView, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.view = view
+        self.position = Text("X —  Y —", font = kit.font)
+        self.color = Text("R —  G —  B —", font = kit.font)
+        self.selection = Text("No selection", font = kit.font, muted = true)
+        let content = VStack([self.position, self.color, self.selection, Spacer()], spacing = 6.0, padding = 8.0)
+        self.panel = Panel("Info", content, minimum = Size(200.0, 90.0), id = "info")
+
+    ## Once a frame: show what changed since the last.
+    pub func poll(self) -> unit!:
+        let x = self.view.pointer_x
+        let y = self.view.pointer_y
+        let revision = self.workspace.revision
+        if x == self.last_x and y == self.last_y and revision == self.last_revision:
+            return
+        self.last_x = x
+        self.last_y = y
+        self.last_revision = revision
+        self.show_selection()
+        let w = self.workspace
+        let document_x = (x - w.offset_x) / w.zoom
+        let document_y = (y - w.offset_y) / w.zoom
+        let inside = self.view.pointer_inside and document_x >= 0.0 and document_y >= 0.0 and document_x < float(w.width()) and document_y < float(w.height())
+        if not inside:
+            self.position.set_text("X —  Y —")
+            self.color.set_text("R —  G —  B —")
+            return
+        let per = pixels_per(w.units, w.canvas.resolution())
+        let suffix = unit_suffix(w.units)
+        self.position.set_text(f"X {measure(document_x / per, w.units)}{suffix}   Y {measure(document_y / per, w.units)}{suffix}")
+        if w.canvas.painting() or w.canvas.previewing():
+            return
+        w.canvas.pick(int(math.floor(document_x)), int(math.floor(document_y))) catch failure:
+            discard(failure)
+            return
+        let red = w.canvas.picked_red()
+        let green = w.canvas.picked_green()
+        let blue = w.canvas.picked_blue()
+        let alpha = int(math.floor(math.max(0.0, math.min(1.0, w.canvas.picked_alpha())) * 100.0 + 0.5))
+        self.color.set_text(f"R {byte(red)}  G {byte(green)}  B {byte(blue)}   {hex_of_linear(red, green, blue)}   {alpha}%")
+
+    ## The selection's size in the rulers' units, or that there is none.
+    func show_selection(self) -> unit!:
+        let w = self.workspace
+        if not w.canvas.has_selection():
+            self.selection.set_text("No selection")
+            return
+        let per = pixels_per(w.units, w.canvas.resolution())
+        let suffix = unit_suffix(w.units)
+        self.selection.set_text(f"Selection  W {measure(float(w.canvas.selection_width()) / per, w.units)}{suffix}   H {measure(float(w.canvas.selection_height()) / per, w.units)}{suffix}")
+
+    pub func show(self) -> unit!:
+        self.last_revision = -1
+
+## A linear component as its sRGB 0..255.
+func byte(linear: float) -> int:
+    return int(math.floor(transfer.srgb_encode(math.max(0.0, math.min(1.0, linear))) * 255.0 + 0.5))
+
+## A length for display: whole pixels, or two places in mm and inches.
+func measure(value: float, units: str) -> str:
+    if units == "px":
+        return str(int(math.floor(value)))
+    return str(math.round(value * 100.0) / 100.0)

@@ -1,6 +1,7 @@
 ## The window's contents, after Compositor's: the menu bar, a contextual tool
-## header, the dock (the viewport with its tool rail and rulers, Layers,
-## Properties, and Brush Settings when opened) and a status line; the dialogs
+## header, the dock (the viewport with its tool rail and rulers, Layers and
+## Properties, and whatever else the "+" or the Window menu opened —
+## panel_catalog.luc) and a status line; the dialogs
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
@@ -35,6 +36,8 @@ from text_editing import TextEditing
 from script_editor import ScriptEditor
 from tool_rail import ToolRail
 from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
+from panel_catalog import PanelCatalog
+from panel_list import panel_entries
 from canvas import Canvas
 import math
 from units import unit_ids
@@ -68,6 +71,8 @@ pub class Panels:
     pub let dock: DStack
     pub let viewport_panel: Panel
     pub let layers_panel: LayersPanel
+    ## Every panel the "+" and the Window menu open (panel_catalog.luc).
+    pub let catalog: PanelCatalog
     ## The tool rail: its buttons, groups and flyouts (tool_rail.luc).
     pub let rail: ToolRail
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
@@ -198,6 +203,18 @@ pub class Panels:
         self.dock.set_fraction(self.viewport_panel, 0.76)
         self.dock.set_fraction(self.layers_panel.panel, 0.55)
         self.dock.layout().set_flex()
+        self.catalog = PanelCatalog(self.dock, self.viewport_panel, workspace, kit, self.view, self.settings_dialog, self.layers_panel, self.properties, self.brush)
+        self.catalog.refreshed = self.refresh
+        self.catalog.open_picker = self.pick_color
+        self.catalog.brush_chosen = func () -> unit!:
+            self.choose_tool("brush")
+        var window_index = 0
+        for entry in panel_entries():
+            let id = entry.id
+            kit.bind(actions.windows[window_index], func () -> unit!:
+                self.catalog.toggle(id)
+                self.refresh())
+            window_index += 1
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
@@ -217,6 +234,7 @@ pub class Panels:
         kit.bind(actions.export_png, self.files.export_png)
         kit.bind(actions.export_jpeg, self.files.export_jpeg)
         kit.bind(actions.close_document, self.files.close_document)
+        kit.bind(actions.exit_app, self.files.quit)
         kit.bind(actions.next_document, func () -> unit!:
             self.workspace.next_document(1)
             self.refresh())
@@ -663,6 +681,11 @@ pub class Panels:
         if self.dock.contains(self.brush.panel):
             self.brush.show()
         self.properties.show()
+        self.catalog.show_made()
+        var window_index = 0
+        for entry in panel_entries():
+            self.actions.windows[window_index].set_checked(self.catalog.is_open(entry.id))
+            window_index += 1
         let name = workspace.path if workspace.path != "" else "Untitled"
         let percent = int(workspace.zoom * 100.0 + 0.5)
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))

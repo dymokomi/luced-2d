@@ -55,6 +55,7 @@ pub class Luce2D:
             panels.adjust.poll()
             panels.rail.poll()
             panels.color_range.poll()
+            panels.catalog.poll()
             panels.refresh_if_changed()
             if update.poll():
                 panels.status.set_text(update.notice)))

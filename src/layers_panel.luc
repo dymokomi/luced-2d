@@ -62,7 +62,7 @@ pub class LayersPanel:
                            Spacer(), kit.shelf_button("trash", self.command(actions.delete_layer))])
         # The adjustment button's menu: Photoshop's half-filled circle.
         self.footer_menu = ContextMenu(shelf, actions.adjustment_layers, font = font)
-        self.panel = Panel("Layers", content, minimum = Size(220.0, 120.0), closable = false, footer = self.footer_menu)
+        self.panel = Panel("Layers", content, minimum = Size(220.0, 120.0), footer = self.footer_menu, id = "layers")
         self.connect()
 
     ## Wire the layer commands the menu bar and this panel share.

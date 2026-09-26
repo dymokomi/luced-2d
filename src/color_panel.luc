@@ -1,0 +1,99 @@
+## The Color panel, as Photoshop's: the foreground and background colors as
+## the tool rail shows them, and sliders for one of them in sRGB 0..255 with
+## its hex. Clicking a swatch picks which color the sliders edit (a second
+## click on it opens the full picker); every edit sets that color at once.
+from ui import Panel, VStack, HStack, Text, TextField, Spacer, Size, Widget
+from workspace import Workspace
+from kit import Kit, SliderField
+from palette import Palette
+from hex_color import parse_hex, hex_of_srgb, hex_of_linear
+import transfer
+import math
+
+pub class ColorPanel:
+    pub let panel: Panel
+    let workspace: Workspace
+    let kit: Kit
+    let palette: Palette
+    let rows: list[SliderField]
+    let hex_field: TextField
+    let editing: Text
+    ## Whether the sliders edit the background color rather than the foreground.
+    var background: bool = false
+    ## The full color picker for a color, opened by a second click on its swatch.
+    pub var open_picker: func(bool) -> unit!? = none
+    ## After an edit the window refreshes.
+    pub var refreshed: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.palette = Palette(workspace)
+        self.palette.on_pick = self.pick_swatch
+        self.editing = Text("Foreground", font = kit.font, muted = true)
+        self.rows = []
+        var sliders: list[Widget] = []
+        for label in ["R", "G", "B"]:
+            let pair = kit.slider_field(0.0, 255.0, 0.0, 0, "", func (value: float) -> unit!:
+                discard(value)
+                self.take_sliders())
+            self.rows.append(pair)
+            sliders.append(kit.dialog_row(label, pair.row, width = 16.0))
+        self.hex_field = TextField("#000000", font = kit.font, cells = 9.0)
+        kit.keep(self.hex_field.on_commit(self.take_hex))
+        let top = HStack([self.palette, VStack([self.editing, HStack([Text("#", font = kit.font, muted = true), self.hex_field], spacing = 2.0)], spacing = 4.0), Spacer()], spacing = 10.0)
+        let content = VStack([top] + sliders + [Spacer()], spacing = 6.0, padding = 8.0)
+        self.panel = Panel("Color", content, minimum = Size(220.0, 150.0), id = "color")
+        self.show()
+
+    ## A swatch clicked: edit that color here; clicking the one already being
+    ## edited opens the picker on it.
+    func pick_swatch(self, background: bool) -> unit!:
+        if background == self.background:
+            if let open = self.open_picker:
+                open(background)
+            return
+        self.background = background
+        self.show()
+
+    ## The color being edited, as linear components.
+    func current(self) -> list[float]:
+        let w = self.workspace
+        if self.background:
+            return [w.back_red, w.back_green, w.back_blue]
+        return [w.red, w.green, w.blue]
+
+    ## Show the edited color in the sliders and the hex field.
+    pub func show(self) -> unit!:
+        self.editing.set_text("Background" if self.background else "Foreground")
+        let color = self.current()
+        var index = 0
+        for pair in self.rows:
+            let encoded = transfer.srgb_encode(math.max(0.0, math.min(1.0, color[index])))
+            pair.set_value(math.floor(encoded * 255.0 + 0.5))
+            index += 1
+        self.hex_field.set_text(hex_of_linear(color[0], color[1], color[2]))
+        self.palette.layout().invalidate()
+
+    ## A slider moved: the color from all three.
+    func take_sliders(self) -> unit!:
+        let red = self.rows[0].value() / 255.0
+        let green = self.rows[1].value() / 255.0
+        let blue = self.rows[2].value() / 255.0
+        self.set_srgb(red, green, blue)
+        self.hex_field.set_text(hex_of_srgb(red, green, blue))
+
+    ## A hex typed: the color, if it is one ("#" optional).
+    func take_hex(self, text: str) -> unit!:
+        let trimmed = text.trim()
+        if trimmed.length == 0:
+            return
+        let values = parse_hex(trimmed if trimmed[..<1] == "#" else "#" + trimmed) else return
+        self.set_srgb(values[0], values[1], values[2])
+        self.show()
+
+    func set_srgb(self, red: float, green: float, blue: float) -> unit!:
+        self.workspace.set_palette(transfer.srgb_decode(red), transfer.srgb_decode(green), transfer.srgb_decode(blue), self.background)
+        self.palette.layout().invalidate()
+        if let refresh = self.refreshed:
+            refresh()

@@ -66,7 +66,7 @@ pub class BrushSettings:
         for rows in [tip, shape, scattering, texture, color_rows, transfer]:
             sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
         let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = kit.font, open = 0)
-        self.panel = Panel("Brush Settings", VStack([stack, Spacer()], spacing = 0.0, padding = 6.0), minimum = Size(320.0, 240.0))
+        self.panel = Panel("Brush Settings", VStack([stack, Spacer()], spacing = 0.0, padding = 6.0), minimum = Size(320.0, 240.0), id = "brush_settings")
 
     ## One setting: a captioned slider and field, `apply` taking each edit.
     func row(self, label: str, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> Widget!:
