@@ -1,0 +1,118 @@
+## Pictures dropped on the window or imported wait their turn: each opens in
+## a tab of its own, or is placed as a layer of the document it was dropped
+## on (shown or not), once the one before is in. A drop or an Import returns at once, even
+## while another picture is still loading; frames move the queue on (`pump`)
+## and the status bar shows where it is ("Opening 2 of 3… 40%").
+from workspace import Workspace
+from documents import Document
+from canvas import Canvas
+
+## A picture waiting: opened in a tab of its own, or placed on `target`.
+class Waiting:
+    pub let path: str
+    pub let target: Document?
+
+    pub func init(self, path: str, target: Document?) -> unit!:
+        self.path = path
+        self.target = target
+
+pub class OpenQueue:
+    var waiting: list[Waiting]
+    ## Pictures started, and queued in all, since the queue was last empty.
+    var started: int = 0
+    var total: int = 0
+    ## The document the last started picture loads into, and the frames
+    ## since it started: a new tab binds (and starts loading) on its first draw.
+    var active: Document? = none
+    var frames: int = 0
+    ## Numbers the documents places wait for, so they are found again.
+    var next_serial: int = 1
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self) -> unit!:
+        self.waiting = []
+
+    ## Open the picture or document at `path` in its own tab, in turn.
+    pub func open(self, path: str) -> unit!:
+        self.waiting.append(Waiting(path, none))
+        self.total += 1
+
+    ## Place the picture at `path` on the document shown now, centred, in turn.
+    pub func place(self, workspace: Workspace, path: str) -> unit!:
+        let document = workspace.documents[workspace.current]
+        self.number(document)
+        self.waiting.append(Waiting(path, document))
+        self.total += 1
+
+    func number(self, document: Document) -> unit:
+        if document.serial == 0:
+            document.serial = self.next_serial
+            self.next_serial += 1
+
+    ## Whether pictures wait or the last one started is still loading.
+    pub func busy(self) -> bool:
+        return self.waiting.length > 0 or self.active != none
+
+    ## Once a frame: when the picture started last is in, start the next.
+    ## Whether the documents changed.
+    pub func pump(self, workspace: Workspace) -> bool!:
+        if let document = self.active:
+            self.frames += 1
+            let index = index_of(workspace, document)
+            if index >= 0 and (self.frames < 2 or canvas_of(workspace, index).is_opening()):
+                return false
+            self.active = none
+        if self.waiting.length == 0:
+            self.started = 0
+            self.total = 0
+            return false
+        let next = self.waiting[0]
+        self.waiting = self.waiting[1..]
+        self.started += 1
+        if let target = next.target:
+            # Onto the document it was dropped on (gone: dropped too), which
+            # the window may have left for a tab opened since.
+            let index = index_of(workspace, target)
+            if index < 0:
+                return false
+            let shown = workspace.current
+            workspace.switch_document(index)
+            workspace.place_file(next.path, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
+                self.fail(f"Could not place {next.path}: {failure.message}")
+            workspace.switch_document(shown)
+            self.begin(target)
+            return true
+        workspace.open(next.path) catch failure:
+            self.fail(f"Could not open {next.path}: {failure.message}")
+            return true
+        self.begin(workspace.documents[workspace.current])
+        return true
+
+    func begin(self, document: Document) -> unit:
+        self.number(document)
+        self.active = document
+        self.frames = 0
+
+    ## "Opening 2 of 3… 40%" while more than one picture is queued (`percent`
+    ## the one loading); "" otherwise.
+    pub func status(self, percent: int) -> str:
+        if self.total < 2 or self.started == 0:
+            return ""
+        return f"Opening {self.started} of {self.total}… {percent}%"
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+## Where `document` is among the open documents, -1 when it was closed.
+func index_of(workspace: Workspace, document: Document) -> int:
+    var index = 0
+    while index < workspace.documents.length:
+        if workspace.documents[index].serial == document.serial:
+            return index
+        index += 1
+    return -1
+
+## Document `index`'s canvas, the live one read live.
+func canvas_of(workspace: Workspace, index: int) -> Canvas:
+    return workspace.canvas if index == workspace.current else workspace.documents[index].canvas

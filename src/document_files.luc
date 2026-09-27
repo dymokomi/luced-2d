@@ -9,10 +9,13 @@ from workspace import Workspace
 from prompts import Prompts
 from export_dialog import ExportDialog
 from kit import Kit
+from open_queue import OpenQueue
 
 pub class DocumentFiles:
     pub let confirm: ConfirmDialog
     pub let export_dialog: ExportDialog
+    ## Dropped and imported pictures, opened or placed one after another.
+    pub let queue: OpenQueue
     pub var app: Application? = none
     pub var refreshed: func() -> unit!? = none
     ## The tab the confirm dialog is asking about (-1 when it is not), and
@@ -29,6 +32,8 @@ pub class DocumentFiles:
         self.export_dialog = ExportDialog(kit)
         kit.keep(self.confirm.on_choose(self.choose))
         self.export_dialog.chosen = self.export_jpeg_with
+        self.queue = OpenQueue()
+        self.queue.failed = prompts.tell
 
     pub func open_document(self) -> unit!:
         if let app = self.app:
@@ -53,23 +58,30 @@ pub class DocumentFiles:
             return
         if chosen == "":
             return
-        let workspace = self.workspace
         # One layer a picture, in the order chosen, each centred.
+        var files: list[str] = []
         for path in chosen.lines():
-            if path == "":
-                continue
-            workspace.place_file(path, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
-                self.prompts.tell(f"Could not import {path}: {failure.message}")
-                continue
-        self.refresh()
+            if path != "":
+                files.append(path)
+        self.place_files(files)
 
-    ## Files dropped on the canvas: each opens in its own tab.
+    ## Pictures dropped on Layers, or imported: each becomes a layer of this
+    ## document, centred, in turn, the window going on meanwhile.
+    pub func place_files(self, files: list[str]) -> unit!:
+        for path in files:
+            self.queue.place(self.workspace, path)
+        self.pump()
+
+    ## Files dropped on the canvas: each opens in its own tab, in turn.
     pub func open_files(self, files: list[str]) -> unit!:
         for path in files:
-            self.workspace.open(path) catch failure:
-                self.prompts.tell(f"Could not open {path}: {failure.message}")
-                continue
-        self.refresh()
+            self.queue.open(path)
+        self.pump()
+
+    ## Start the next queued picture when the one before is in (every frame).
+    pub func pump(self) -> unit!:
+        if self.queue.pump(self.workspace):
+            self.refresh()
 
     # -- Saving and exporting.
 

@@ -104,7 +104,8 @@ pub class SelectMaskDialog:
         self.pending = false
         if self.open_session:
             self.open_session = false
-            self.workspace.finish_refine(keep, int(self.radius.value()), int(self.smooth.value()), int(self.feather.value()), self.contrast.value(), self.shift.value()) catch failure:
+            # OK returns at once; the selection refines in the background.
+            self.workspace.finish_refine(keep, int(self.radius.value()), int(self.smooth.value()), int(self.feather.value()), self.contrast.value(), self.shift.value(), background = true) catch failure:
                 self.fail(f"Select and Mask: {failure.message}")
         self.refresh()
 

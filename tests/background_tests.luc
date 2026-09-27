@@ -1,0 +1,115 @@
+## Work that goes on while the window does: Select and Mask's OK refining in
+## the background, dropped pictures opening one after another, History
+## following the steps as they are recorded, and Load Selection's Invert.
+from ui import Font
+from workspace import Workspace
+from panels import Panels
+from actions import Actions
+import paths
+
+pub func background_tests(arguments: list[str]) -> unit!:
+    refine_in_background()
+    queued_pictures(arguments[0])
+    history_follows_steps()
+    load_inverted()
+
+## OK returns at once; edits are refused until the selection is in, and then
+## the step is there.
+func refine_in_background() -> unit!:
+    let workspace = Workspace(600, 400)
+    workspace.canvas.bind_headless()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    workspace.canvas.select_rectangle(100, 100, 300, 200, 0)
+    workspace.begin_refine()
+    workspace.finish_refine(true, 0, 5, 40, 0.0, 0.0, background = true)
+    assert(workspace.canvas.refine_keeping() and workspace.canvas.undo_name() != "Select and Mask")
+    panels.refresh()
+    assert(not actions.fill.is_enabled() and not actions.undo.is_enabled())
+    var refused = false
+    workspace.canvas.select_rectangle(0, 0, 10, 10, 0) catch failure:
+        refused = true
+    assert(refused)
+    # Frames move it on, then keep it as one step.
+    var frames = 0
+    while workspace.canvas.refine_keeping() and frames < 1000000:
+        panels.show_opening()
+        frames += 1
+    assert(not workspace.canvas.refine_keeping() and not workspace.canvas.refining() and workspace.canvas.undo_name() == "Select and Mask")
+    # Feathered: the corner is soft now.
+    assert(workspace.canvas.selected_at(100, 100) < 200 and workspace.canvas.selected_at(250, 200) == 255)
+    panels.refresh()
+    assert(actions.fill.is_enabled())
+    panels.close()
+
+## Three pictures dropped at once open one after another, a frame apart at
+## least; the status bar counts them. Pictures dropped on Layers wait for the
+## ones before them too.
+func queued_pictures(folder: str) -> unit!:
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    # Changed, so opening a picture does not replace this tab.
+    workspace.add_layer()
+    var pictures: list[str] = []
+    for name in ["first", "second", "third"]:
+        let path = paths.join(folder, f"queued-{name}.png")
+        workspace.export(path)
+        pictures.append(path)
+    let files = panels.files
+    files.open_files(pictures)
+    assert(workspace.document_count() == 2 and files.queue.busy())
+    assert(files.queue.status(40) == "Opening 1 of 3… 40%")
+    files.pump()
+    assert(workspace.document_count() == 2)
+    files.pump()
+    assert(workspace.document_count() == 3 and files.queue.status(7) == "Opening 2 of 3… 7%")
+    # A drop on Layers while they open waits its turn, on the document it was dropped on.
+    let layers = workspace.layer_count()
+    files.place_files([pictures[0]])
+    assert(workspace.layer_count() == layers)
+    var frames = 0
+    while files.queue.busy() and frames < 100:
+        files.pump()
+        frames += 1
+    assert(not files.queue.busy() and workspace.document_count() == 4 and files.queue.status(0) == "")
+    workspace.switch_document(2)
+    assert(workspace.layer_count() == layers + 1)
+    panels.close()
+
+## A step recorded without the window refreshing shows in History the next frame.
+func history_follows_steps() -> unit!:
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    panels.catalog.open("history")
+    let history = panels.catalog.history else trap("History is open")
+    let rows = history.rows
+    # Straight to the canvas: nothing bumps the workspace's revision.
+    workspace.canvas.select_rectangle(4, 4, 20, 20, 0)
+    panels.catalog.poll()
+    assert(history.rows == rows + 1)
+    workspace.canvas.undo()
+    panels.catalog.poll()
+    assert(history.rows == rows + 1)
+    panels.close()
+
+## Load Selection with Invert loads what the channel leaves out.
+func load_inverted() -> unit!:
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    workspace.canvas.select_rectangle(0, 0, 32, 48, 0)
+    discard(workspace.canvas.save_selection_channel("Alpha 1"))
+    workspace.canvas.deselect()
+    let dialog = panels.load_selection
+    dialog.open()
+    dialog.invert_box.set_checked(true)
+    dialog.apply()
+    assert(workspace.canvas.undo_name() == "Load Selection" and workspace.canvas.selected_at(10, 10) == 0 and workspace.canvas.selected_at(50, 10) == 255)
+    # It opens unchecked again.
+    dialog.open()
+    assert(not dialog.invert_box.is_checked())
+    dialog.apply()
+    assert(workspace.canvas.selected_at(10, 10) == 255 and workspace.canvas.selected_at(50, 10) == 0)
+    panels.close()

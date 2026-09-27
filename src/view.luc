@@ -586,9 +586,9 @@ pub class CanvasView: Widget:
             return
         if event.button != 0:
             return
-        # While the picture opens the view pans and zooms; edits wait for it
-        # (the status bar says how far it has come).
-        if workspace.canvas.is_opening() and tool != "zoom":
+        # While the picture opens (or the selection refines) the view pans and
+        # zooms; edits wait for it (the status bar says how far it has come).
+        if (workspace.canvas.is_opening() or workspace.canvas.refine_keeping()) and tool != "zoom":
             return
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)

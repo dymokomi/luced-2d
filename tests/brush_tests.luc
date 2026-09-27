@@ -202,8 +202,11 @@ func panel_library(directory: str) -> unit!:
     let panel = BrushesPanel(workspace, kit, panels.brush, directory)
     let built_in = panel.saved.length
     workspace.brush = sample_brush()
+    let shown = workspace.revision
     panel.save_new()
     assert(panel.saved.length == built_in + 1 and load_library(panel.library).length == built_in + 1)
+    # The new brush is the one in hand, and the header shows it (the window refreshes).
+    assert(workspace.brush.preset == f"Brush {built_in + 1}" and workspace.revision != shown)
     let row = panel.rows.selected
     panel.duplicate()
     assert(panel.saved.length == built_in + 2 and panel.saved[panel.saved.length - 1].name.ends_with(" copy"))

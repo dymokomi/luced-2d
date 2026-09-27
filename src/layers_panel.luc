@@ -38,7 +38,6 @@ pub class LayersPanel:
         let font = kit.font
         self.layer_list = LayerList(workspace, font)
         self.layer_list.layout().set_flex()
-        self.layer_list.on_place_files = self.place_files
         self.layer_list.on_rename = self.begin_rename
         self.layer_list.on_changed = self.refresh
         self.layer_list.on_open_style = self.style
@@ -167,15 +166,6 @@ pub class LayersPanel:
     func style(self) -> unit!:
         if let open = self.open_style:
             open()
-
-    ## Pictures dropped on the list: each becomes a layer, centred.
-    func place_files(self, files: list[str]) -> unit!:
-        let workspace = self.workspace
-        for path in files:
-            workspace.place_file(path, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
-                self.fail(f"Could not place {path}: {failure.message}")
-                continue
-        self.refresh()
 
     # -- Doing and saying.
 

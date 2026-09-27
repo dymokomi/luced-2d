@@ -1,7 +1,8 @@
 ## Select › Save Selection… and Load Selection…, as Photoshop 2018's: the
 ## selection kept as a named alpha channel, and a channel brought back as
-## the selection — new, added, subtracted or intersected. Each one step.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command, TextField
+## the selection — new, added, subtracted or intersected, or inverted first.
+## Each one step.
+from ui import Text, HStack, Spacer, Dialog, Menu, Command, TextField, Checkbox
 from interop import Connection
 from workspace import Workspace
 from kit import Kit
@@ -56,6 +57,8 @@ pub class LoadSelectionDialog:
     pub let dialog: Dialog
     let channel_menu: Menu
     let operation_menu: Menu
+    ## Invert: the channel's unselected part is loaded, as Photoshop's.
+    pub let invert_box: Checkbox
     let workspace: Workspace
     let kit: Kit
     ## The choices while it is open: an alpha channel and a selection mode.
@@ -83,8 +86,9 @@ pub class LoadSelectionDialog:
             operations.append(command)
             index += 1
         self.operation_menu = Menu("New Selection ▾", operations, font = font)
+        self.invert_box = Checkbox("Invert", font = font)
         self.dialog = Dialog([Text("Load Selection", font = font), kit.dialog_row("Channel", self.channel_menu, 90.0),
-                              kit.dialog_row("Operation", self.operation_menu, 90.0),
+                              self.invert_box, kit.dialog_row("Operation", self.operation_menu, 90.0),
                               HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("OK", self.apply)], spacing = 8.0)], width = 400.0, spacing = 10.0)
         kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
@@ -109,6 +113,7 @@ pub class LoadSelectionDialog:
         self.channel_menu.set_actions(choices)
         self.choose_channel(0)
         self.choose_operation(0)
+        self.invert_box.set_checked(false)
         self.dialog.open()
 
     func choose_channel(self, index: int) -> unit!:
@@ -125,7 +130,7 @@ pub class LoadSelectionDialog:
     ## OK: carry it out.
     pub func apply(self) -> unit!:
         self.dialog.hide()
-        load_selection(self.workspace, self.channel, self.operation) catch failure:
+        load_selection(self.workspace, self.channel, self.operation, self.invert_box.is_checked()) catch failure:
             if let failed = self.failed:
                 failed(f"Load Selection: {failure.message}")
             return

@@ -41,10 +41,11 @@ pub func save_selection(workspace: Workspace, name: str) -> int!:
     workspace.touch()
     return index
 
-## Select › Load Selection: alpha channel `index` combined into the selection
-## by `mode` (0 new, 1 add, 2 subtract, 3 intersect).
-pub func load_selection(workspace: Workspace, index: int, mode: int) -> unit!:
-    workspace.canvas.load_channel(index, mode)
+## Select › Load Selection: alpha channel `index` (its unselected part with
+## `invert`) combined into the selection by `mode` (0 new, 1 add, 2 subtract,
+## 3 intersect).
+pub func load_selection(workspace: Workspace, index: int, mode: int, invert: bool = false) -> unit!:
+    workspace.canvas.load_channel(index, mode, invert)
     workspace.touch()
 
 ## The panel's New Channel: an alpha channel selecting nothing; its index.

@@ -136,6 +136,8 @@ pub class Panels:
         self.layers_panel = LayersPanel(workspace, actions, kit)
         self.layers = self.layers_panel.layer_list
         self.layers.on_drop_outside = self.layers_dropped
+        # Pictures dropped on the list become layers, one after another.
+        self.layers.on_place_files = self.files.place_files
         self.layers_panel.refreshed = self.refresh
         self.layers_panel.failed = self.prompts.tell
         self.status = Text("", font = font)
@@ -801,24 +803,34 @@ pub class Panels:
         self.view.layout().invalidate()
         self.layers.layout().invalidate()
 
-    ## Once a frame, while the document's picture opens: how far it has come,
-    ## in the status bar and on its tab, and its thumbnail filling in; once it
-    ## is in, the panels as usual (the edits it held back are offered again).
+    ## Once a frame, while the document's picture opens (or Select and Mask's
+    ## OK refines the selection): how far it has come, in the status bar and on
+    ## its tab, and its thumbnail filling in; once it is in, the panels as
+    ## usual (the edits it held back are offered again). Queued drops start
+    ## one after another.
     pub func show_opening(self) -> unit!:
         let workspace = self.workspace
         workspace.continue_opening()
+        self.files.pump()
         let canvas = workspace.canvas
-        if not canvas.is_opening():
+        canvas.continue_refine() catch failure:
+            self.prompts.tell(f"Select and Mask: {failure.message}")
+        let refining = canvas.refine_keeping()
+        if not canvas.is_opening() and not refining:
             if self.shown_opening != -1:
                 self.shown_opening = -1
                 self.refresh()
             return
-        let percent = canvas.opening_percent()
-        if percent == self.shown_opening:
+        let percent = canvas.refine_percent() if refining else canvas.opening_percent()
+        # The queue's place counts too, so the status changes when the next picture starts.
+        let queued = self.files.queue.status(percent)
+        let shown = percent + 1000 * queued.length
+        if shown == self.shown_opening:
             return
-        self.shown_opening = percent
+        self.shown_opening = shown
         let name = workspace.path if workspace.path != "" else "Untitled"
-        self.status.set_text(f"Opening… {percent}%  |  edits wait until the picture is in  |  {workspace.width()} × {workspace.height()} px  |  {name}")
+        let doing = f"Refining… {percent}%  |  edits wait until the selection is in" if refining else (queued if queued != "" else f"Opening… {percent}%") + "  |  edits wait until the picture is in"
+        self.status.set_text(f"{doing}  |  {workspace.width()} × {workspace.height()} px  |  {name}")
         self.tabs.layout().invalidate()
         self.layers.layout().invalidate()
 
@@ -849,7 +861,7 @@ pub class Panels:
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
         self.zoom_field.set_value(float(percent))
         self.status.set_text(f"{workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
-        if workspace.canvas.is_opening():
+        if workspace.canvas.is_opening() or workspace.canvas.refine_keeping():
             # The next frame puts the progress back.
             self.shown_opening = -2
         self.layers_panel.show()

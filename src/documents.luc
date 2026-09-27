@@ -16,6 +16,8 @@ pub class Document:
     pub var fitted: bool = false
     ## The number the next new layer's name takes ("Layer 2").
     pub var next_name: int = 1
+    ## A number the open queue finds it by again (0 until it needs one).
+    pub var serial: int = 0
 
     pub func init(self, canvas: Canvas, path: str) -> unit!:
         self.canvas = canvas

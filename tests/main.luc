@@ -39,6 +39,7 @@ from vectors import active_element, next_path_name
 from node_view import NodeView
 from free_transform import begin_free_transform
 from brush_tests import brush_tests
+from background_tests import background_tests
 from brush_dynamics import mapped
 from brush_mask import BrushMask
 from brush_library import brush_text
@@ -107,6 +108,7 @@ pub func main(arguments: list[str]) -> int!:
     node_editor(arguments)
     color_panel_modes()
     brush_tests(arguments)
+    background_tests(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -176,9 +178,9 @@ func contents() -> unit!:
     assert(workspace.crop_box == none)
     # Brush Settings opens floating, once; docked, it stays where it was put.
     panels.open_brush()
-    assert(panels.dock.is_floating(panels.brush.panel) and panels.dock.panel_count() == 4)
+    assert(panels.dock.is_floating(panels.brush.panel) and panels.dock.panel_count() == 6)
     panels.open_brush()
-    assert(panels.dock.panel_count() == 4)
+    assert(panels.dock.panel_count() == 6)
     panels.dock.move(panels.brush.panel, panels.properties.panel)
     panels.open_brush()
     assert(not panels.dock.is_floating(panels.brush.panel) and panels.dock.same_group(panels.brush.panel, panels.properties.panel))
@@ -1430,7 +1432,8 @@ func dock_layouts(arguments: list[str]) -> unit!:
         assert(parse_layout(broken) == none)
     let panels = Panels(Workspace(300, 200), Actions(), Font())
     let first = panels.dock.layout_text()
-    assert(first == "luce-dock 1\nsplit h 0.76\ngroup 0 viewport\nsplit v 0.55\ngroup 0 layers\ngroup 0 properties\n")
+    # Channels and Vector are tabs beside Layers, which shows, as Photoshop groups Layers, Channels and Paths.
+    assert(first == "luce-dock 1\nsplit h 0.76\ngroup 0 viewport\nsplit v 0.55\ngroup 0 layers channels vector\ngroup 0 properties\n")
     # Reset Layout brings a floating viewport back into the dock.
     let floated = Panels(Workspace(300, 200), Actions(), Font())
     floated.dock.float(floated.viewport_panel, Rect(10.0, 10.0, 200.0, 150.0))
@@ -1645,7 +1648,12 @@ func selecting_and_masking() -> unit!:
     view.draw(second.target())
     second.close()
     assert(workspace.canvas.refine_preview_level() == 0)
+    # OK refines in the background; frames keep it once it is in.
     dialog.apply()
+    var frames = 0
+    while workspace.canvas.refine_keeping() and frames < 1000000:
+        panels.show_opening()
+        frames += 1
     assert(not workspace.canvas.refining() and workspace.canvas.undo_name() == "Select and Mask" and workspace.canvas.selected_at(98, 100) > 0)
     workspace.undo()
     assert(workspace.canvas.selected_at(98, 100) == 0)
@@ -1820,6 +1828,10 @@ func alpha_channel_panel(arguments: list[str]) -> unit!:
     panels.load_selection.apply()
     assert(canvas.selected_at(50, 50) == 255 and canvas.selected_at(200, 150) == 0 and canvas.undo_name() == "Load Selection")
     # Window › Channels: the composite rows, then the alpha channel.
+    # Open from the start, a tab beside Layers; Window › Channels closes it and brings it back.
+    assert(panels.catalog.is_open("channels"))
+    window_command(actions, "channels").trigger()
+    assert(not panels.catalog.is_open("channels"))
     window_command(actions, "channels").trigger()
     let channels = panels.catalog.channels else trap("the Channels panel is made")
     assert(panels.catalog.is_open("channels"))
@@ -1906,6 +1918,10 @@ func vector_panel(arguments: list[str]) -> unit!:
     commands.apply(parse_line("@l2d add_vector\tellipse\t50\t30\t60\t40") else trap("line"))
     assert(workspace.selected == layer and canvas.element_count(layer) == 2 and canvas.element_name(layer, 1) == "Ellipse" and active_element(workspace) == 1)
     # Window › Vector: the ellipse's row on top, the rectangle's below it.
+    # Open from the start, a tab beside Layers; Window › Vector closes it and brings it back.
+    assert(panels.catalog.is_open("vector"))
+    window_command(actions, "vector").trigger()
+    assert(not panels.catalog.is_open("vector"))
     window_command(actions, "vector").trigger()
     let vector = panels.catalog.vector else trap("the Vector panel is made")
     assert(panels.catalog.is_open("vector"))

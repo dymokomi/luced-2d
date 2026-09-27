@@ -117,10 +117,13 @@ pub class BrushesPanel:
     ## "+": the brush in hand saved as a new brush, "Brush N".
     pub func save_new(self) -> unit!:
         self.add(self.workspace.brush.copy(), f"Brush {self.saved.length + 1}")
-        # The brush in hand is that saved brush now.
+        # The brush in hand is that saved brush now: the header's preset menu names it.
         if let saved = self.saved_at(self.rows.selected):
             self.workspace.brush.preset = saved.name
             self.workspace.brush.folder = saved.folder
+            self.workspace.touch()
+            if let done = self.chosen:
+                done()
 
     ## Keep `brush` in the library as `name`, and pick its row.
     pub func add(self, brush: Brush, name: str) -> unit!:

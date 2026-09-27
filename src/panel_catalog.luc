@@ -300,8 +300,12 @@ pub class PanelCatalog:
             if self.dock.contains(made.panel):
                 made.show()
 
-    ## Once a frame, for the panels that follow the pointer.
+    ## Once a frame, for the panels that follow the pointer, and History,
+    ## which follows the steps as they are recorded.
     pub func poll(self) -> unit!:
         if let made = self.info:
+            if self.dock.contains(made.panel):
+                made.poll()
+        if let made = self.history:
             if self.dock.contains(made.panel):
                 made.poll()

@@ -269,12 +269,15 @@ pub class Workspace:
         return f"{title}  {canvas.opening_percent()}%" if canvas.is_opening() else title
 
     ## Pictures opening in tabs not on screen take in what has decoded (the
-    ## one on screen does as it draws), so every tab keeps loading.
+    ## one on screen does as it draws), so every tab keeps loading; a
+    ## selection refining for Select and Mask's OK there is kept when in.
     pub func continue_opening(self) -> unit!:
         var index = 0
         while index < self.documents.length:
             if index != self.current and self.documents[index].canvas.is_opening():
                 self.documents[index].canvas.continue_opening()
+            if index != self.current and self.documents[index].canvas.refine_keeping():
+                self.documents[index].canvas.continue_refine()
             index += 1
 
     ## Whether document `index` has unsaved work, the live one read live.
@@ -559,8 +562,11 @@ pub class Workspace:
         self.canvas.preview_refine(radius, smooth, feather, contrast, shift)
         self.touch()
 
-    pub func finish_refine(self, keep: bool, radius: int, smooth: int, feather: int, contrast: float, shift: float) -> unit!:
-        self.canvas.end_refine(keep, radius, smooth, feather, contrast, shift)
+    ## With `background` (the dialog's OK) it returns at once: the selection
+    ## refines on the previews' thread, frames show how far, and the step is
+    ## recorded when it is in (the panels' `show_opening`).
+    pub func finish_refine(self, keep: bool, radius: int, smooth: int, feather: int, contrast: float, shift: float, background: bool = false) -> unit!:
+        self.canvas.end_refine(keep, radius, smooth, feather, contrast, shift, background)
         self.touch()
 
     ## 0 marching ants, 1 overlay, 2 on black, 3 on white.

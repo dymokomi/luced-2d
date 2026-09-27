@@ -191,13 +191,20 @@ pub class DockLayout:
         for entry in panel_entries():
             self.ids.append(entry.id)
 
-    ## The default arrangement: Layers right of the viewport, Properties below it.
+    ## The default arrangement: Layers right of the viewport with Channels and
+    ## Vector as tabs beside it (as Photoshop groups Layers, Channels and
+    ## Paths), Properties below them.
     pub func arrange_default(self) -> unit!:
         let layers = self.catalog.panel("layers") else return
+        let channels = self.catalog.panel("channels") else return
+        let vector = self.catalog.panel("vector") else return
         let properties = self.catalog.panel("properties") else return
-        self.catalog.show("layers")
-        self.catalog.show("properties")
+        for id in ["layers", "channels", "vector", "properties"]:
+            self.catalog.show(id)
         self.dock.add(layers, self.viewport, DockPosition.right)
+        self.dock.add(channels, layers, DockPosition.tab)
+        self.dock.add(vector, layers, DockPosition.tab)
+        self.dock.select(layers)
         self.dock.add(properties, layers, DockPosition.bottom)
         self.dock.set_fraction(self.viewport, 0.76)
         self.dock.set_fraction(layers, 0.55)

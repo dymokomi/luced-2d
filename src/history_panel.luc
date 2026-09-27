@@ -1,6 +1,8 @@
 ## The History panel, as Photoshop's: the document's steps by name, oldest at
 ## the top under the opening state, the current one selected, and the steps
 ## Redo would bring back below it. Clicking a step undoes or redoes to it.
+## A step shows the frame it is recorded in (`poll`), not when the window next
+## refreshes: a smudge's step is kept frames after the stroke ends.
 from ui import Panel, ListView, ListItem, Size
 from workspace import Workspace
 from kit import Kit
@@ -9,8 +11,14 @@ pub class HistoryPanel:
     pub let panel: Panel
     let steps: ListView
     let workspace: Workspace
-    ## What the list shows, to rebuild it only when the steps changed.
+    ## What the list shows, to rebuild it only when the steps changed, and
+    ## its rows (the opening state and every step).
     var shown: str = ""
+    pub var rows: int = 1
+    ## The history's counts as last shown, looked at every frame.
+    var seen_steps: int = -1
+    var seen_future: int = -1
+    var seen_serial: int = -1
     pub var refreshed: func() -> unit!? = none
     pub var failed: func(str) -> unit!? = none
 
@@ -22,11 +30,20 @@ pub class HistoryPanel:
         self.panel = Panel("History", self.steps, minimum = Size(200.0, 120.0), id = "history")
         self.show()
 
+    ## Once a frame: show a step recorded (or undone) since the list was made.
+    pub func poll(self) -> unit!:
+        let canvas = self.workspace.canvas
+        if canvas.history_steps() != self.seen_steps or canvas.future_steps() != self.seen_future or canvas.step_serial() != self.seen_serial:
+            self.show()
+
     ## Rows: the opening state, every undoable step, then the redoable ones.
     pub func show(self) -> unit!:
         let canvas = self.workspace.canvas
         let done = canvas.history_steps()
         let undone = canvas.future_steps()
+        self.seen_steps = done
+        self.seen_future = undone
+        self.seen_serial = canvas.step_serial()
         var names: list[str] = ["Open"]
         var index = 0
         while index < done:
@@ -40,6 +57,7 @@ pub class HistoryPanel:
         if signature == self.shown:
             return
         self.shown = signature
+        self.rows = names.length
         var items: list[ListItem] = []
         for name in names:
             items.append(ListItem(text = name))

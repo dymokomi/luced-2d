@@ -318,8 +318,9 @@ pub class Actions:
     ## Enable what the document's state allows.
     pub func update(self, workspace: Workspace) -> unit!:
         let canvas = workspace.canvas
-        # A picture still opening takes no edits yet, as a preview does not.
-        let previewing = canvas.previewing() or canvas.is_opening()
+        # A picture still opening takes no edits yet, as a preview does not;
+        # nor while Select and Mask's OK refines the selection.
+        let previewing = canvas.previewing() or canvas.is_opening() or canvas.refine_keeping()
         let selection = canvas.has_selection()
         let layers = workspace.layer_count()
         self.undo.set_enabled(canvas.can_undo() and not previewing)
