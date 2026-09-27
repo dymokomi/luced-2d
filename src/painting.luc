@@ -1,0 +1,137 @@
+## Painting on the selected layer with the tool in hand: brush strokes (and
+## the retouching tools, which paint through the same stroke), fills, and the
+## Gradient tool's gradient, placed live with movable ends until kept.
+from live import Live
+from tool_state import ToolState
+from colors import Colors
+from layer_picking import LayerPicking
+from brush_dynamics import PenSample
+from gradient_edit import GradientEdit
+
+pub class Painting:
+    let live: Live
+    let tools: ToolState
+    let colors: Colors
+    let layers: LayerPicking
+    ## A gradient placed and still live, its ends movable (`begin_gradient`).
+    pub var gradient: GradientEdit? = none
+
+    pub func init(self, live: Live, tools: ToolState, colors: Colors, layers: LayerPicking):
+        self.live = live
+        self.tools = tools
+        self.colors = colors
+        self.layers = layers
+
+    # -- Strokes.
+
+    ## Start a stroke on the selected layer at a document point with `pen`
+    ## (none from a script: a full press). A hidden layer takes no paint. The
+    ## pen's eraser end erases with the brush or pencil, as Photoshop's does.
+    pub func begin_stroke(self, x: float, y: float, pen: PenSample? = none) -> unit!:
+        let canvas = self.live.canvas
+        if not canvas.layer_visible(self.layers.selected):
+            return
+        let tools = self.tools
+        let sample = pen else PenSample()
+        let flipped = sample.eraser and (tools.tool == "brush" or tools.tool == "pencil")
+        tools.brush.apply(canvas, self.colors.red, self.colors.green, self.colors.blue, tools.erasing or flipped)
+        tools.brush.apply_images(canvas)
+        canvas.set_retouch(tools.retouch_kind())
+        canvas.set_clone_options(tools.clone_aligned, tools.clone_all)
+        canvas.set_brush_aliased(tools.tool == "pencil")
+        canvas.set_tone(tools.tone_range, tools.tone_exposure)
+        canvas.set_smudge_spacing(tools.smudge_spacing)
+        canvas.begin_stroke(self.layers.selected_id(), x, y, sample.pressure if sample.has_pressure else 1.0, sample.azimuth, sample.altitude,
+                            sample.rotation, sample.tangential, sample.time)
+        self.live.touch()
+
+    ## Continue the stroke in progress, if any, to a document point with `pen`.
+    pub func extend_stroke(self, x: float, y: float, pen: PenSample? = none) -> unit!:
+        if self.live.canvas.painting():
+            let sample = pen else PenSample()
+            self.live.canvas.extend_stroke(x, y, sample.pressure if sample.has_pressure else 1.0, sample.azimuth, sample.altitude,
+                                           sample.rotation, sample.tangential, sample.time)
+            self.live.touch()
+
+    ## Esc mid-stroke: end the stroke and take back what it painted.
+    pub func cancel_stroke(self) -> unit!:
+        if self.live.canvas.painting():
+            self.live.canvas.end_stroke()
+            self.live.canvas.undo()
+            self.live.touch()
+
+    ## End the stroke in progress, keeping what it painted.
+    pub func end_stroke(self) -> unit!:
+        if self.live.canvas.painting():
+            self.live.canvas.end_stroke()
+            self.live.touch()
+
+    ## Alt-click with the Clone Stamp: where it copies from.
+    pub func set_clone_source(self, x: float, y: float):
+        self.live.canvas.set_clone_source(x, y)
+        self.live.touch()
+
+    # -- Fills.
+
+    ## Fill the selection on the selected layer with the foreground (or
+    ## background) color at the brush's opacity, or `erase` it.
+    pub func fill_selection(self, erase: bool, background: bool = false) -> unit!:
+        let b = self.tools.brush
+        let colors = self.colors
+        if background:
+            self.live.canvas.set_brush(b.diameter, b.hardness, b.opacity, 1.0, colors.back_red, colors.back_green, colors.back_blue, false)
+        else:
+            self.live.canvas.set_brush(b.diameter, b.hardness, b.opacity, 1.0, colors.red, colors.green, colors.blue, false)
+        self.live.canvas.fill(self.layers.selected_id(), erase)
+        self.live.touch()
+
+    ## A gradient on the selected layer (or its mask, when editing it) from the
+    ## foreground color at one document point to the background color at
+    ## another, within the selection; kept at once.
+    pub func fill_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let colors = self.gradient_colors()
+        self.live.canvas.fill_gradient(self.layers.selected_id(), x0, y0, x1, y1, colors[0], colors[1], colors[2], colors[3], colors[4], colors[5], colors[6], colors[7], self.tools.gradient_radial)
+        self.live.touch()
+
+    ## From the foreground to the background, or to the foreground faded out;
+    ## reversed on request. Eight numbers: the two colors' RGBA.
+    func gradient_colors(self) -> list[float]:
+        let opacity = self.tools.brush.opacity
+        let c = self.colors
+        var first = [c.red, c.green, c.blue, opacity]
+        var second = [c.red, c.green, c.blue, 0.0] if self.tools.gradient_transparent else [c.back_red, c.back_green, c.back_blue, opacity]
+        if self.tools.gradient_reverse:
+            let swap = first
+            first = second
+            second = swap
+        return first + second
+
+    # -- The live gradient.
+
+    ## Place a gradient live from (`x0`, `y0`) to (`x1`, `y1`): shown at once,
+    ## its ends movable, until `finish_gradient`. Another under way is kept first.
+    pub func begin_gradient(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        self.finish_gradient(true)
+        let canvas = self.live.canvas
+        if canvas.previewing():
+            return
+        canvas.begin_preview(self.layers.selected_id(), canvas.editing_mask())
+        self.gradient = GradientEdit(x0, y0, x1, y1)
+        self.follow_gradient()
+
+    ## Draw the live gradient again when its ends, colors or options changed.
+    pub func follow_gradient(self) -> unit!:
+        let edit = self.gradient else return
+        let colors = self.gradient_colors()
+        if not edit.changed(f"{colors},{self.tools.gradient_radial}"):
+            return
+        self.live.canvas.preview_gradient(edit.x0, edit.y0, edit.x1, edit.y1, colors[0], colors[1], colors[2], colors[3], colors[4], colors[5], colors[6], colors[7], self.tools.gradient_radial)
+        self.live.touch()
+
+    ## Keep the live gradient as one undo step (Enter, Apply) or drop it (Esc, Cancel).
+    pub func finish_gradient(self, keep: bool) -> unit!:
+        if self.gradient == none:
+            return
+        self.gradient = none
+        self.live.canvas.end_preview(keep)
+        self.live.touch()

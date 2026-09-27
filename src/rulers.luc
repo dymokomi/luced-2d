@@ -47,8 +47,8 @@ pub class Ruler: Widget:
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.tab_strip())
         let length = size.width if self.horizontal else size.height
         # The document's origin along this ruler, and points per unit.
-        let start = (workspace.offset_x if self.horizontal else workspace.offset_y)
-        let per_unit = workspace.pixels_per_unit() * workspace.zoom
+        let start = (workspace.viewport.offset_x if self.horizontal else workspace.viewport.offset_y)
+        let per_unit = workspace.viewport.pixels_per_unit() * workspace.viewport.zoom
         let step = major_step(per_unit)
         let major = step * per_unit
         let minor = major / 10.0 if major / 10.0 >= 4.0 else (major / 5.0 if major / 5.0 >= 4.0 else major / 2.0)
@@ -93,7 +93,7 @@ pub class Ruler: Widget:
     ## from the left one; let go back on the ruler, it makes none.
     pub func event(self, event: Event) -> unit!:
         let guides = self.view.guides
-        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside and self.workspace.show_guides:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside and self.workspace.viewport.show_guides:
             guides.begin_new(self.workspace, not self.horizontal)
         elif event.kind == EventKind.pointer_moved and guides.active:
             # The pointer in the view's own points, and so in document pixels.
@@ -102,7 +102,7 @@ pub class Ruler: Widget:
             let x = event.x + mine.x - view.x
             let y = event.y + mine.y - view.y
             let workspace = self.workspace
-            guides.drag((x - workspace.offset_x) / workspace.zoom, (y - workspace.offset_y) / workspace.zoom, x < 0.0 or y < 0.0)
+            guides.drag((x - workspace.viewport.offset_x) / workspace.viewport.zoom, (y - workspace.viewport.offset_y) / workspace.viewport.zoom, x < 0.0 or y < 0.0)
             self.view.layout().invalidate()
         elif event.kind == EventKind.pointer_up and guides.active:
             guides.finish(self.workspace)

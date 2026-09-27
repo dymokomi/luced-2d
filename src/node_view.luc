@@ -76,7 +76,7 @@ pub class NodeView: Widget:
             state.frame_all(size.width, size.height)
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.grey(34.0))
         self.draw_grid(painter, size.width, size.height)
-        if state.graph.layer < 0 or not self.workspace.canvas.layer_shaped(self.workspace.selected):
+        if state.graph.layer < 0 or not self.workspace.canvas.layer_shaped(self.workspace.layers.selected):
             painter.text("Select a vector layer · Layer › New Vector Layer", 16.0, 16.0, theme.text_muted(), self.font)
             painter.close()
             return

@@ -27,7 +27,7 @@ pub class WarpControls:
         self.style_menu = Menu("Custom ▾", commands, font = kit.font)
         self.bend_field = NumberField(50.0, -100.0, 100.0, 1.0, suffix = "%", font = kit.font, cells = 7.0)
         kit.keep(self.bend_field.on_change(func (value: float) -> unit!:
-            if let warp = self.workspace.mesh_warp:
+            if let warp = self.workspace.transforms.mesh_warp:
                 if warp.style >= 0:
                     warp.set_style(warp.style, value / 100.0)
                 else:
@@ -37,13 +37,13 @@ pub class WarpControls:
 
     ## The style and bend now.
     pub func show(self) -> unit!:
-        let warp = self.workspace.mesh_warp else return
+        let warp = self.workspace.transforms.mesh_warp else return
         self.style_menu.set_text((warp_styles()[warp.style] if warp.style >= 0 else "Custom") + " ▾")
         self.bend_field.set_value(warp.bend * 100.0)
 
     ## Custom (-1) leaves the points as they are; a style sets them.
     func choose(self, style: int) -> unit!:
-        let warp = self.workspace.mesh_warp else return
+        let warp = self.workspace.transforms.mesh_warp else return
         if style < 0:
             warp.style = -1
         else:

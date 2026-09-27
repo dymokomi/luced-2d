@@ -67,22 +67,22 @@ pub func apply_node(workspace: Workspace, names: NodeNames, action: str, fields:
     elif action == "set_node_color":
         let node = names.find(field(fields, 0))
         let slot = slot_of(workspace, kinds, node, field(fields, 1), true)
-        workspace.as_one("Node Setting", func () -> unit!:
+        workspace.edits.as_one("Node Setting", func () -> unit!:
             var channel = 0
             while channel < 3:
                 set_node_value(workspace, node, slot + channel, transfer.srgb_decode(decimal(fields, 2 + channel)))
                 channel += 1)
     elif action == "delete_node":
-        workspace.canvas.delete_graph_node(workspace.selected_id(), names.find(field(fields, 0)))
+        workspace.canvas.delete_graph_node(workspace.layers.selected_id(), names.find(field(fields, 0)))
         workspace.touch()
 
 ## The kind of node `id` on the selected layer.
 func kind_of(workspace: Workspace, kinds: list[KindInfo], id: int) -> KindInfo!:
     let canvas = workspace.canvas
     var place = 0
-    while place < canvas.graph_node_count(workspace.selected):
-        if int(canvas.graph_node_value(workspace.selected, place, 0)) == id:
-            return kinds[int(canvas.graph_node_value(workspace.selected, place, 1))]
+    while place < canvas.graph_node_count(workspace.layers.selected):
+        if int(canvas.graph_node_value(workspace.layers.selected, place, 0)) == id:
+            return kinds[int(canvas.graph_node_value(workspace.layers.selected, place, 1))]
         place += 1
     error(ui.invalid, f"the graph has no node {id}")
 

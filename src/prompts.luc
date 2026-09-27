@@ -44,27 +44,27 @@ pub class Prompts:
             return
         let workspace = self.workspace
         if mode == "open":
-            workspace.open(trimmed) catch failure:
+            workspace.documents.open(trimmed) catch failure:
                 self.reject(text, f"Could not open: {failure.message}")
                 return
         elif mode == "rename":
             if trimmed == "":
                 return
-            workspace.rename(trimmed) catch failure:
+            workspace.edits.rename(trimmed) catch failure:
                 self.reject(text, f"Could not rename: {failure.message}")
                 return
         elif mode == "save":
             if trimmed == "":
                 self.reject(text, "Enter a file name with an extension")
                 return
-            workspace.save(trimmed) catch failure:
+            workspace.documents.save(trimmed) catch failure:
                 self.reject(text, f"Could not save: {failure.message}")
                 return
         elif mode == "export":
             if trimmed == "":
                 self.reject(text, "Enter a file name ending .png or .jpg")
                 return
-            workspace.export(trimmed, self.export_quality, self.export_matte) catch failure:
+            workspace.documents.export(trimmed, self.export_quality, self.export_matte) catch failure:
                 self.reject(text, f"Could not export: {failure.message}")
                 return
         elif mode == "border" or mode == "smooth":
@@ -76,11 +76,11 @@ pub class Prompts:
                 self.reject(text, f"Enter a whole number: 1..{most}")
                 return
             if mode == "border":
-                workspace.border_selection(amount) catch failure:
+                workspace.selection.border_selection(amount) catch failure:
                     self.reject(text, f"Could not make the border: {failure.message}")
                     return
             else:
-                workspace.smooth_selection(amount) catch failure:
+                workspace.selection.smooth_selection(amount) catch failure:
                     self.reject(text, f"Could not smooth: {failure.message}")
                     return
         elif mode == "expand" or mode == "contract" or mode == "feather":
@@ -91,7 +91,7 @@ pub class Prompts:
                 self.reject(text, "Enter a whole number: 1..512")
                 return
             let pixels = amount if mode == "expand" else (-amount if mode == "contract" else 0)
-            workspace.adjust_selection(pixels, amount if mode == "feather" else 0) catch failure:
+            workspace.selection.adjust_selection(pixels, amount if mode == "feather" else 0) catch failure:
                 self.reject(text, f"Could not adjust: {failure.message}")
                 return
         self.cancel()

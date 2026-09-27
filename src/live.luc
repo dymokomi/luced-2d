@@ -1,0 +1,18 @@
+## The document on screen, as the workspace's parts see it: its canvas and
+## file, which a document switch replaces, and the revision every change bumps
+## so views know to redraw. The parts hold this rather than the workspace, so
+## none of them imports it.
+from canvas import Canvas
+
+pub class Live:
+    pub var canvas: Canvas
+    ## Where the document is saved ("" until it is).
+    pub var path: str = ""
+    pub var revision: int = 0
+
+    pub func init(self, canvas: Canvas):
+        self.canvas = canvas
+
+    ## Mark a change: whatever shows the document draws again.
+    pub func touch(self):
+        self.revision += 1

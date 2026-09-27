@@ -280,7 +280,7 @@ pub class AdjustmentControls:
             canvas.measure_histogram_below(self.below) catch _:
                 return false
         else:
-            canvas.measure_histogram(self.workspace.selected_id()) catch _:
+            canvas.measure_histogram(self.workspace.layers.selected_id()) catch _:
                 return false
         return true
 
@@ -313,17 +313,17 @@ pub class AdjustmentControls:
     ## Wait for a click on the image: Hue/Saturation then shows the range of
     ## the color there (Reds, Yellows … Magentas; a grey keeps Master).
     func arm_range(self) -> unit!:
-        self.workspace.sample_for = func (color: list[float]) -> unit!:
+        self.workspace.eyedroppers.sample_for = func (color: list[float]) -> unit!:
             self.show_page(hue_kind, range_of(color))
 
     ## On Image, as Photoshop's targeted adjustment: a press on the canvas
     ## shows the range of the color there, and dragging right or left raises
     ## or lowers that range's saturation — its hue with Cmd (Ctrl) held.
     pub func toggle_on_image(self) -> unit!:
-        if self.workspace.drag_for != none:
-            self.workspace.drag_for = none
+        if self.workspace.eyedroppers.drag_for != none:
+            self.workspace.eyedroppers.drag_for = none
             return
-        self.workspace.drag_for = func (color: list[float], moved: float, hue: bool, first: bool) -> unit!:
+        self.workspace.eyedroppers.drag_for = func (color: list[float], moved: float, hue: bool, first: bool) -> unit!:
             let slot = 0 if hue else 1
             if first:
                 self.show_page(hue_kind, range_of(color))
@@ -334,13 +334,13 @@ pub class AdjustmentControls:
 
     ## Off: the canvas's drags are its tools' again.
     pub func end_on_image(self) -> unit!:
-        self.workspace.drag_for = none
+        self.workspace.eyedroppers.drag_for = none
         if let box = self.on_image:
             box.set_checked(false)
 
     ## Wait for a click on the image: 0 sets the black point, 1 the gray, 2 the white.
     func arm_dropper(self, point: int) -> unit!:
-        self.workspace.sample_for = func (color: list[float]) -> unit!:
+        self.workspace.eyedroppers.sample_for = func (color: list[float]) -> unit!:
             self.set_point(point, color)
 
     ## Levels from a sampled color (sRGB 0..1): its channels become each

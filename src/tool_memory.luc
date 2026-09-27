@@ -26,44 +26,44 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     let table = Table(source) catch failure:
         discard(failure)
         return
-    let tool = words(table, "tool.current", workspace.tool)
+    let tool = words(table, "tool.current", workspace.tools.tool)
     for known in tools():
         if known.id == tool:
-            workspace.tool = tool
+            workspace.tools.tool = tool
     # The brush in hand, whole, from its folder beside the options.
     if boolean(table, "brush.kept", false):
         restore_brush(workspace, table, paths.directory(path))
-    let selecting = workspace.selecting
+    let selecting = workspace.tools.selecting
     selecting.mode = int(number(table, "selection.mode", float(selecting.mode), 0.0, 3.0))
     selecting.feather = int(number(table, "selection.feather", float(selecting.feather), 0.0, 250.0))
     selecting.antialias = boolean(table, "selection.antialias", selecting.antialias)
     selecting.sample = int(number(table, "selection.sample", float(selecting.sample), 1.0, 5.0))
     selecting.all_layers = boolean(table, "selection.all_layers", selecting.all_layers)
-    workspace.tolerance = number(table, "selection.tolerance", workspace.tolerance, 0.0, 255.0)
-    workspace.contiguous = boolean(table, "selection.contiguous", workspace.contiguous)
-    let typing = workspace.typing
+    workspace.tools.tolerance = number(table, "selection.tolerance", workspace.tools.tolerance, 0.0, 255.0)
+    workspace.tools.contiguous = boolean(table, "selection.contiguous", workspace.tools.contiguous)
+    let typing = workspace.tools.typing
     typing.family = words(table, "type.family", typing.family)
     typing.style = words(table, "type.style", typing.style)
     typing.size = number(table, "type.size", typing.size, 1.0, 1296.0)
     typing.alignment = int(number(table, "type.alignment", float(typing.alignment), 0.0, 2.0))
-    workspace.gradient_radial = boolean(table, "gradient.radial", workspace.gradient_radial)
-    workspace.gradient_reverse = boolean(table, "gradient.reverse", workspace.gradient_reverse)
-    workspace.gradient_transparent = boolean(table, "gradient.transparent", workspace.gradient_transparent)
-    workspace.clone_aligned = boolean(table, "clone.aligned", workspace.clone_aligned)
-    workspace.clone_all = boolean(table, "clone.all_layers", workspace.clone_all)
-    workspace.smear_mode = int(number(table, "smear.mode", float(workspace.smear_mode), 0.0, 2.0))
-    workspace.tone_range = int(number(table, "tone.range", float(workspace.tone_range), 0.0, 2.0))
-    workspace.tone_exposure = number(table, "tone.exposure", workspace.tone_exposure, 0.01, 1.0)
-    workspace.auto_select = boolean(table, "move.auto_select", workspace.auto_select)
-    workspace.transform_sampling = int(number(table, "transform.sampling", float(workspace.transform_sampling), 0.0, 2.0))
-    workspace.lock_transform_ratio = boolean(table, "transform.lock_ratio", workspace.lock_transform_ratio)
-    workspace.crop_ratio = number(table, "crop.ratio", workspace.crop_ratio, 0.0, 100.0)
-    workspace.shape_weight = number(table, "shape.weight", workspace.shape_weight, 1.0, 1000.0)
-    workspace.shape_sides = int(number(table, "shape.sides", float(workspace.shape_sides), 3.0, 64.0))
-    workspace.shape_fill = boolean(table, "shape.fill", workspace.shape_fill)
-    workspace.shape_stroke = boolean(table, "shape.stroke", workspace.shape_stroke)
-    workspace.shape_stroke_width = number(table, "shape.stroke_width", workspace.shape_stroke_width, 0.5, 500.0)
-    workspace.shape_radius = number(table, "shape.radius", workspace.shape_radius, 0.0, 1000.0)
+    workspace.tools.gradient_radial = boolean(table, "gradient.radial", workspace.tools.gradient_radial)
+    workspace.tools.gradient_reverse = boolean(table, "gradient.reverse", workspace.tools.gradient_reverse)
+    workspace.tools.gradient_transparent = boolean(table, "gradient.transparent", workspace.tools.gradient_transparent)
+    workspace.tools.clone_aligned = boolean(table, "clone.aligned", workspace.tools.clone_aligned)
+    workspace.tools.clone_all = boolean(table, "clone.all_layers", workspace.tools.clone_all)
+    workspace.tools.smear_mode = int(number(table, "smear.mode", float(workspace.tools.smear_mode), 0.0, 2.0))
+    workspace.tools.tone_range = int(number(table, "tone.range", float(workspace.tools.tone_range), 0.0, 2.0))
+    workspace.tools.tone_exposure = number(table, "tone.exposure", workspace.tools.tone_exposure, 0.01, 1.0)
+    workspace.tools.auto_select = boolean(table, "move.auto_select", workspace.tools.auto_select)
+    workspace.transforms.transform_sampling = int(number(table, "transform.sampling", float(workspace.transforms.transform_sampling), 0.0, 2.0))
+    workspace.transforms.lock_transform_ratio = boolean(table, "transform.lock_ratio", workspace.transforms.lock_transform_ratio)
+    workspace.image.crop_ratio = number(table, "crop.ratio", workspace.image.crop_ratio, 0.0, 100.0)
+    workspace.tools.shape_weight = number(table, "shape.weight", workspace.tools.shape_weight, 1.0, 1000.0)
+    workspace.tools.shape_sides = int(number(table, "shape.sides", float(workspace.tools.shape_sides), 3.0, 64.0))
+    workspace.tools.shape_fill = boolean(table, "shape.fill", workspace.tools.shape_fill)
+    workspace.tools.shape_stroke = boolean(table, "shape.stroke", workspace.tools.shape_stroke)
+    workspace.tools.shape_stroke_width = number(table, "shape.stroke_width", workspace.tools.shape_stroke_width, 0.5, 500.0)
+    workspace.tools.shape_radius = number(table, "shape.radius", workspace.tools.shape_radius, 0.0, 1000.0)
 
 ## The brush kept in `directory`'s brush folder as the brush in hand; one
 ## that does not read keeps the brush there is.
@@ -73,11 +73,11 @@ func restore_brush(workspace: Workspace, table: Table, directory: str) -> unit!:
         return
     saved.brush.preset = words(table, "brush.preset", saved.name)
     saved.brush.folder = words(table, "brush.folder", "")
-    workspace.brush = saved.brush
+    workspace.tools.brush = saved.brush
 
 ## Keep the workspace's options at `path`.
 pub func remember_tools(workspace: Workspace, path: str) -> unit!:
-    let brush = workspace.brush
+    let brush = workspace.tools.brush
     save_brush(paths.directory(path), SavedBrush(brush.preset, brush_folder, brush))
     files.write_text(path, serialize_tools(workspace))
 
@@ -87,22 +87,22 @@ let brush_folder: str = "brush-in-hand"
 
 ## The options file's text.
 pub func serialize_tools(workspace: Workspace) -> str:
-    let brush = workspace.brush
-    let selecting = workspace.selecting
-    let typing = workspace.typing
+    let brush = workspace.tools.brush
+    let selecting = workspace.tools.selecting
+    let typing = workspace.tools.typing
     var text = "# luced-2d's tool options, kept when the window closes.\n\n"
-    text = text + f"[tool]\ncurrent = \"{workspace.tool}\"\n\n"
+    text = text + f"[tool]\ncurrent = \"{workspace.tools.tool}\"\n\n"
     text = text + f"[brush]\n# The brush in hand is kept whole in {brush_folder}/; the library brush it came from, if any.\nkept = true\npreset = {quoted(brush.preset)}\nfolder = {quoted(brush.folder)}\n\n"
     text = text + f"[selection]\nmode = {selecting.mode}\nfeather = {selecting.feather}\nantialias = {flag(selecting.antialias)}\nsample = {selecting.sample}\n"
-    text = text + f"all_layers = {flag(selecting.all_layers)}\ntolerance = {workspace.tolerance}\ncontiguous = {flag(workspace.contiguous)}\n\n"
+    text = text + f"all_layers = {flag(selecting.all_layers)}\ntolerance = {workspace.tools.tolerance}\ncontiguous = {flag(workspace.tools.contiguous)}\n\n"
     text = text + f"[type]\nfamily = \"{typing.family}\"\nstyle = \"{typing.style}\"\nsize = {typing.size}\nalignment = {typing.alignment}\n\n"
-    text = text + f"[gradient]\nradial = {flag(workspace.gradient_radial)}\nreverse = {flag(workspace.gradient_reverse)}\ntransparent = {flag(workspace.gradient_transparent)}\n\n"
-    text = text + f"[clone]\naligned = {flag(workspace.clone_aligned)}\nall_layers = {flag(workspace.clone_all)}\n\n"
-    text = text + f"[smear]\nmode = {workspace.smear_mode}\n\n[tone]\nrange = {workspace.tone_range}\nexposure = {workspace.tone_exposure}\n\n"
-    text = text + f"[move]\nauto_select = {flag(workspace.auto_select)}\n\n"
-    text = text + f"[transform]\nsampling = {workspace.transform_sampling}\nlock_ratio = {flag(workspace.lock_transform_ratio)}\n\n"
-    text = text + f"[crop]\nratio = {workspace.crop_ratio}\n\n"
-    text = text + f"[shape]\nweight = {workspace.shape_weight}\nsides = {workspace.shape_sides}\nfill = {flag(workspace.shape_fill)}\nstroke = {flag(workspace.shape_stroke)}\nstroke_width = {workspace.shape_stroke_width}\nradius = {workspace.shape_radius}\n"
+    text = text + f"[gradient]\nradial = {flag(workspace.tools.gradient_radial)}\nreverse = {flag(workspace.tools.gradient_reverse)}\ntransparent = {flag(workspace.tools.gradient_transparent)}\n\n"
+    text = text + f"[clone]\naligned = {flag(workspace.tools.clone_aligned)}\nall_layers = {flag(workspace.tools.clone_all)}\n\n"
+    text = text + f"[smear]\nmode = {workspace.tools.smear_mode}\n\n[tone]\nrange = {workspace.tools.tone_range}\nexposure = {workspace.tools.tone_exposure}\n\n"
+    text = text + f"[move]\nauto_select = {flag(workspace.tools.auto_select)}\n\n"
+    text = text + f"[transform]\nsampling = {workspace.transforms.transform_sampling}\nlock_ratio = {flag(workspace.transforms.lock_transform_ratio)}\n\n"
+    text = text + f"[crop]\nratio = {workspace.image.crop_ratio}\n\n"
+    text = text + f"[shape]\nweight = {workspace.tools.shape_weight}\nsides = {workspace.tools.shape_sides}\nfill = {flag(workspace.tools.shape_fill)}\nstroke = {flag(workspace.tools.shape_stroke)}\nstroke_width = {workspace.tools.shape_stroke_width}\nradius = {workspace.tools.shape_radius}\n"
     return text
 
 ## A number the table holds within `minimum`..`maximum`, else `fallback`.

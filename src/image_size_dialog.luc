@@ -53,8 +53,8 @@ pub class ImageSizeDialog:
         let workspace = self.workspace
         let resolution = workspace.canvas.resolution()
         self.resolution_field.set_value(resolution)
-        self.sizes.reset(workspace.width(), workspace.height(), resolution)
-        self.now_text.set_text(f"Now: {workspace.width()} × {workspace.height()} px at {int(resolution + 0.5)} px/in")
+        self.sizes.reset(workspace.canvas.width(), workspace.canvas.height(), resolution)
+        self.now_text.set_text(f"Now: {workspace.canvas.width()} × {workspace.canvas.height()} px at {int(resolution + 0.5)} px/in")
         self.dialog.open()
 
     func choose_smooth(self, smooth: bool) -> unit!:
@@ -74,12 +74,12 @@ pub class ImageSizeDialog:
         self.dialog.hide()
         let workspace = self.workspace
         let resolution = self.resolution_field.value()
-        let resample = self.resample_box.is_checked() and (width != workspace.width() or height != workspace.height())
+        let resample = self.resample_box.is_checked() and (width != workspace.canvas.width() or height != workspace.canvas.height())
         let smooth = self.smooth
-        workspace.as_one("Image Size", func () -> unit!:
+        workspace.edits.as_one("Image Size", func () -> unit!:
             workspace.canvas.set_resolution(resolution)
             if resample:
-                workspace.resize_image(width, height, smooth)) catch failure:
+                workspace.image.resize_image(width, height, smooth)) catch failure:
             if let failed = self.failed:
                 failed(f"Image Size: {failure.message}")
             return

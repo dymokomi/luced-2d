@@ -90,13 +90,13 @@ pub class Shift:
 pub func pieces(workspace: Workspace) -> list[Piece]!:
     var found: list[Piece] = []
     var index = 0
-    while index < workspace.layer_count():
-        if workspace.is_selected(index) and not under_selected(workspace, index):
+    while index < workspace.canvas.layer_count():
+        if workspace.layers.is_selected(index) and not under_selected(workspace, index):
             var ids: list[int] = []
             if workspace.canvas.layer_is_group(index):
                 let group = workspace.canvas.layer_id(index)
                 var at = 0
-                while at < workspace.layer_count():
+                while at < workspace.canvas.layer_count():
                     if not workspace.canvas.layer_is_group(at) and inside(workspace, at, group):
                         ids.append(workspace.canvas.layer_id(at))
                     at += 1
@@ -111,10 +111,10 @@ pub func pieces(workspace: Workspace) -> list[Piece]!:
 func under_selected(workspace: Workspace, index: int) -> bool!:
     var parent = workspace.canvas.layer_parent(index)
     while parent != 0:
-        let holder = workspace.index_of(parent)
+        let holder = workspace.layers.index_of(parent)
         if holder < 0:
             return false
-        if workspace.is_selected(holder):
+        if workspace.layers.is_selected(holder):
             return true
         parent = workspace.canvas.layer_parent(holder)
     return false
@@ -125,7 +125,7 @@ func inside(workspace: Workspace, index: int, group: int) -> bool!:
     while parent != 0:
         if parent == group:
             return true
-        let holder = workspace.index_of(parent)
+        let holder = workspace.layers.index_of(parent)
         if holder < 0:
             return false
         parent = workspace.canvas.layer_parent(holder)
@@ -154,7 +154,7 @@ pub func target_of(workspace: Workspace, found: list[Piece]) -> Box!:
         return Box(float(canvas.selection_left()), float(canvas.selection_top()),
                    float(canvas.selection_left() + canvas.selection_width()), float(canvas.selection_top() + canvas.selection_height()))
     if found.length == 1:
-        return Box(0.0, 0.0, float(workspace.width()), float(workspace.height()))
+        return Box(0.0, 0.0, float(workspace.canvas.width()), float(workspace.canvas.height()))
     let all = Box(found[0].box.left, found[0].box.top, found[0].box.right, found[0].box.bottom)
     for piece in found:
         all.grow(piece.box)
@@ -233,7 +233,7 @@ pub func align_layers(workspace: Workspace, mode: str) -> bool!:
             any = true
     if not any:
         return false
-    workspace.as_one(align_title(mode), func () -> unit!:
+    workspace.edits.as_one(align_title(mode), func () -> unit!:
         for index in 0..<found.length:
             let shift = moves[index]
             if shift.dx == 0 and shift.dy == 0:

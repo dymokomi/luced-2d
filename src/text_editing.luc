@@ -55,8 +55,8 @@ pub class TextEditing:
         self.start = workspace.canvas.step_serial()
         workspace.canvas.begin_edit("Add Text")
         self.grouping = true
-        workspace.add_layer()
-        self.id = workspace.selected_id()
+        workspace.edits.add_layer()
+        self.id = workspace.layers.selected_id()
         # Named by its words when committed; until then, plainly a text layer.
         workspace.canvas.rename_layer(self.id, "Text")
         self.created = true
@@ -70,13 +70,13 @@ pub class TextEditing:
     pub func begin_existing(self, index: int) -> unit!:
         self.finish_any()
         let canvas = self.workspace.canvas
-        self.workspace.select(index)
+        self.workspace.layers.select(index)
         self.id = canvas.layer_id(index)
         self.created = false
         self.x = canvas.layer_type_value(index, 4)
         self.y = canvas.layer_type_value(index, 5)
         self.box_width = canvas.layer_type_value(index, 6)
-        self.workspace.typing.take(canvas, index)
+        self.workspace.tools.typing.take(canvas, index)
         # This edit is its own step, even after typing into the same layer before.
         canvas.separate_next_step()
         self.start = canvas.step_serial()
@@ -108,11 +108,11 @@ pub class TextEditing:
             self.set_words(self.editor.text())
             return
         let workspace = self.workspace
-        let index = workspace.selected
-        if index < 0 or index >= workspace.layer_count() or not workspace.canvas.layer_typed(index):
+        let index = workspace.layers.selected
+        if index < 0 or index >= workspace.canvas.layer_count() or not workspace.canvas.layer_typed(index):
             return
         let canvas = workspace.canvas
-        let options = workspace.typing
+        let options = workspace.tools.typing
         workspace.canvas.set_type(canvas.layer_id(index), canvas.layer_text(index), options.family, options.style, options.size,
                                   canvas.layer_type_value(index, 1), canvas.layer_type_value(index, 2), canvas.layer_type_value(index, 3),
                                   canvas.layer_type_value(index, 4), canvas.layer_type_value(index, 5), canvas.layer_type_value(index, 6),
@@ -122,8 +122,8 @@ pub class TextEditing:
 
     func set_words(self, text: str) -> unit!:
         let workspace = self.workspace
-        let options = workspace.typing
-        workspace.canvas.set_type(self.id, text, options.family, options.style, options.size, workspace.red, workspace.green, workspace.blue,
+        let options = workspace.tools.typing
+        workspace.canvas.set_type(self.id, text, options.family, options.style, options.size, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
                                   self.x, self.y, self.box_width, options.alignment, options.tracking, options.leading)
         workspace.touch()
         self.refresh()
@@ -140,12 +140,12 @@ pub class TextEditing:
         let text = self.editor.text()
         self.close()
         let workspace = self.workspace
-        let index = workspace.index_of(id)
+        let index = workspace.layers.index_of(id)
         if index < 0 or not self.created:
             return
         if text.trim() == "":
             workspace.canvas.remove_layer(id)
-            workspace.select(0 if workspace.layer_count() > 0 else 0)
+            workspace.layers.select(0 if workspace.canvas.layer_count() > 0 else 0)
         else:
             workspace.canvas.rename_layer(id, layer_name_of(text))
         workspace.touch()

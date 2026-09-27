@@ -170,7 +170,7 @@ pub class LayerList: Widget:
         var row = 0
         for index in shown_rows(workspace):
             let top = tops[row]
-            let selected = workspace.is_selected(index)
+            let selected = workspace.layers.is_selected(index)
             let group = canvas.layer_is_group(index)
             let clipped = canvas.layer_clipped(index)
             let masked = canvas.layer_masked(index)
@@ -182,7 +182,7 @@ pub class LayerList: Widget:
             # The eye.
             draw_icon(target, "visible" if visible else "hidden", Rect(6.0, top + (self.row_height - 16.0) * 0.5, 16.0, 16.0), ink)
             var x = self.thumb_left(index)
-            let aspect = float(workspace.width()) / float(workspace.height())
+            let aspect = float(workspace.canvas.width()) / float(workspace.canvas.height())
             let adjustment = canvas.layer_adjustment(index)
             if group:
                 # A group: its folder, open or shut, where a layer has its thumbnail.
@@ -205,7 +205,7 @@ pub class LayerList: Widget:
                 let ty = top + (self.row_height - th) * 0.5
                 painter.rectangle(Rect(x, ty, tw, th), theme.checker_light())
                 canvas.draw_layer(target, index, Rect(x, ty, tw, th), false)
-                if index == workspace.selected and not canvas.editing_mask():
+                if index == workspace.layers.selected and not canvas.editing_mask():
                     self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), self.workspace.look.accent)
                 if canvas.layer_shaped(index):
                     # A vector layer: the pen's badge on the thumbnail's corner.
@@ -235,21 +235,21 @@ pub class LayerList: Widget:
                     let cross = Color(0.85, 0.1, 0.08)
                     painter.line(Point(x, my), Point(x + mw, my + mh), 2.0, cross)
                     painter.line(Point(x + mw, my), Point(x, my + mh), 2.0, cross)
-                if index == workspace.selected and canvas.editing_mask():
+                if index == workspace.layers.selected and canvas.editing_mask():
                     self.frame(painter, Rect(x - 2.0, my - 2.0, mw + 4.0, mh + 4.0), self.workspace.look.accent)
                 x += mask_thumb + 8.0
             let name = canvas.layer_name(index)
             painter.text(name, x, top + 10.0, ink, self.font)
             let opacity = int(canvas.layer_opacity(index) * 100.0 + 0.5)
-            var subtitle = f"{workspace.blend_name(index)} · {opacity}%"
+            var subtitle = f"{workspace.edits.blend_name(index)} · {opacity}%"
             if group:
                 subtitle = f"Group · {opacity}%"
             elif adjustment >= 0:
                 subtitle = f"Adjustment · {opacity}%"
             elif clipped:
-                subtitle = f"Clipped · {workspace.blend_name(index)} · {opacity}%"
+                subtitle = f"Clipped · {workspace.edits.blend_name(index)} · {opacity}%"
             elif canvas.layer_shaped(index):
-                subtitle = f"Vector · {workspace.blend_name(index)} · {opacity}%"
+                subtitle = f"Vector · {workspace.edits.blend_name(index)} · {opacity}%"
             painter.text(subtitle, x, top + 30.0, soft, self.font)
             self.draw_effects(painter, target, index, top + self.row_height, size.width)
             painter.rectangle(Rect(0.0, tops[row + 1] - 1.0, size.width, 1.0), theme.border())
@@ -316,12 +316,12 @@ pub class LayerList: Widget:
         let how = drop_inside if into else (drop_above if slot < rows.length else drop_below)
         let target = canvas.layer_id(self.row_of(y) if into else (rows[slot] if slot < rows.length else rows[rows.length - 1]))
         let dragged = canvas.layer_id(self.drag_index)
-        workspace.as_one("Duplicate Layer" if copy else "Move Layer", func () -> unit!:
+        workspace.edits.as_one("Duplicate Layer" if copy else "Move Layer", func () -> unit!:
             var id = dragged
             if copy:
                 duplicate_selected(workspace)
-                id = workspace.selected_id()
-            drop_layer(workspace, id, workspace.index_of(target), how))
+                id = workspace.layers.selected_id()
+            drop_layer(workspace, id, workspace.layers.index_of(target), how))
 
     ## The dragged files that can become layers.
     pub func event(self, event: Event) -> unit!:
@@ -332,10 +332,10 @@ pub class LayerList: Widget:
                 changed()
             return
         if event.kind == EventKind.drag_entered:
-            self.box.set_drop_accepted(dropped_paths(self.box, self.workspace.can_place).length > 0)
+            self.box.set_drop_accepted(dropped_paths(self.box, self.workspace.documents.can_place).length > 0)
             return
         if event.kind == EventKind.drop:
-            let files = dropped_paths(self.box, self.workspace.can_place)
+            let files = dropped_paths(self.box, self.workspace.documents.can_place)
             if let place = self.on_place_files:
                 place(files)
             return
@@ -417,7 +417,7 @@ pub class LayerList: Widget:
         let canvas = self.workspace.canvas
         if canvas.layer_is_group(upper):
             return false
-        self.workspace.as_one("Clipping Mask", func () -> unit!:
+        self.workspace.edits.as_one("Clipping Mask", func () -> unit!:
             canvas.set_clipped(canvas.layer_id(upper), not canvas.layer_clipped(upper)))
         self.workspace.touch()
         return true
@@ -427,7 +427,7 @@ pub class LayerList: Widget:
     ## drag (with Alt) copies it to another layer.
     func press_effect(self, index: int, kind: int, event: Event) -> unit!:
         let workspace = self.workspace
-        workspace.select(index)
+        workspace.layers.select(index)
         if event.x < 28.0:
             self.effects.toggle(workspace, index, kind)
             return
@@ -478,9 +478,9 @@ pub class LayerList: Widget:
             canvas.enable_mask(canvas.layer_id(index), not canvas.layer_mask_enabled(index))
             workspace.touch()
         elif command:
-            workspace.toggle_picked(index)
+            workspace.layers.toggle_picked(index)
         elif event.shift:
-            workspace.pick_range(index)
+            workspace.layers.pick_range(index)
         else:
             # A second press on the name soon after the first renames it.
             let now = time.now() // 1000000
@@ -492,7 +492,7 @@ pub class LayerList: Widget:
                 if let rename = self.on_rename:
                     rename(index, self.name_left(index), self.row_top(index) + 6.0)
                 return
-            workspace.select(index)
+            workspace.layers.select(index)
             self.drag_index = index
             self.drag_y = event.y
             self.drag_started = false

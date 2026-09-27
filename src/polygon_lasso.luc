@@ -30,7 +30,7 @@ pub class PolygonLasso:
         self.last_click = now
         if not self.active:
             self.active = true
-            self.mode = workspace.selecting.mode_for(shift, alt)
+            self.mode = workspace.tools.selecting.mode_for(shift, alt)
             self.xs = [x]
             self.ys = [y]
             self.pointer_x = x
@@ -73,7 +73,7 @@ pub class PolygonLasso:
         while index < xs.length:
             canvas.add_point(xs[index], ys[index])
             index += 1
-        workspace.selecting.apply(canvas, false)
+        workspace.tools.selecting.apply(canvas, false)
         canvas.select_polygon(self.mode)
         workspace.touch()
 

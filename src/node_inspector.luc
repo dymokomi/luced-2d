@@ -117,7 +117,7 @@ pub class NodeInspector: Widget:
         if info.kind == 5 and param.slot == 14:
             # A Path node names the element it takes.
             let element = int(value)
-            let index = self.workspace.selected
+            let index = self.workspace.layers.selected
             if element >= 0 and element < self.workspace.canvas.element_count(index):
                 painter.text(self.workspace.canvas.element_name(index, element), area.x + 40.0, top + 6.0, theme.text_muted(), self.font)
 
@@ -187,7 +187,7 @@ pub class NodeInspector: Widget:
             let color = linear_of_hex(hex) else return
             let workspace = self.workspace
             self.attempt(func () -> unit!:
-                workspace.as_one("Node Setting", func () -> unit!:
+                workspace.edits.as_one("Node Setting", func () -> unit!:
                     set_node_value(workspace, id, param.slot, color[0])
                     set_node_value(workspace, id, param.slot + 1, color[1])
                     set_node_value(workspace, id, param.slot + 2, color[2]))))

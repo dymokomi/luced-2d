@@ -66,7 +66,7 @@ pub class ChannelList: Widget:
 
     ## The thumbnail's box in row `row`: the document's shape within the square.
     func thumb_rect(self, row: int) -> Rect!:
-        let aspect = float(self.workspace.width()) / float(self.workspace.height())
+        let aspect = float(self.workspace.canvas.width()) / float(self.workspace.canvas.height())
         var width = self.thumb
         var height = self.thumb
         if aspect > 1.0:

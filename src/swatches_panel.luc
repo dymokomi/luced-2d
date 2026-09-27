@@ -30,7 +30,7 @@ pub class SwatchesPanel:
 
     ## "+": the foreground color becomes the last swatch, unless it is one already.
     func add_foreground(self) -> unit!:
-        let hex = hex_of_linear(self.workspace.red, self.workspace.green, self.workspace.blue)
+        let hex = hex_of_linear(self.workspace.colors.red, self.workspace.colors.green, self.workspace.colors.blue)
         if hex in self.grid.colors:
             return
         self.grid.colors.append(hex)
@@ -117,6 +117,6 @@ class SwatchGrid: Widget:
             discard(self.colors.remove_at(index))
         else:
             let linear = linear_of_hex(self.colors[index]) else return
-            self.workspace.set_palette(linear[0], linear[1], linear[2], event.alt)
+            self.workspace.colors.set_palette(linear[0], linear[1], linear[2], event.alt)
         if let changed = self.on_changed:
             changed()

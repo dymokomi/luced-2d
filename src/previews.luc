@@ -1,0 +1,99 @@
+## Adjustments and filters on the selected layer: shown live in a canvas
+## preview until kept or dropped, or applied at once; adjustment layers; and
+## the layer's style. The engine's numbers are staged before each.
+from live import Live
+from layer_picking import LayerPicking
+from layer_commands import LayerCommands
+
+pub class Previews:
+    let live: Live
+    let layers: LayerPicking
+    let edits: LayerCommands
+
+    pub func init(self, live: Live, layers: LayerPicking, edits: LayerCommands):
+        self.live = live
+        self.layers = layers
+        self.edits = edits
+
+    ## Start showing edits live on the selected layer — on its mask while that
+    ## is being edited; `end_preview` keeps or drops them.
+    pub func begin_preview(self) -> unit!:
+        let canvas = self.live.canvas
+        canvas.begin_preview(self.layers.selected_id(), canvas.editing_mask() and canvas.layer_masked(self.layers.selected))
+
+    pub func previewing(self) -> bool:
+        return self.live.canvas.previewing()
+
+    pub func end_preview(self, keep: bool) -> unit!:
+        self.live.canvas.end_preview(keep)
+        self.live.touch()
+
+    ## Preview adjustment `kind` (as `adjust`) with the engine's `numbers`.
+    pub func preview_adjust(self, kind: int, numbers: list[float]) -> unit!:
+        self.stage(numbers)
+        self.live.canvas.preview_adjust(kind)
+        self.live.touch()
+
+    ## Preview Add Noise: grain of deviation `amount` (0..1), `seed` fixing it.
+    pub func preview_noise(self, amount: float, monochrome: bool, seed: int, uniform: bool = false) -> unit!:
+        self.live.canvas.preview_noise(amount, monochrome, seed, uniform)
+
+    ## Show luce-image's filter `filter` with settings `a`, `b` and `c` (see
+    ## `Canvas.filter_layer`) on the previewed layer.
+    pub func preview_filter(self, filter: int, a: float, b: float, c: float) -> unit!:
+        self.live.canvas.preview_filter(filter, a, b, c)
+        self.live.touch()
+
+    ## Preview a Gaussian blur of `radius` pixels.
+    pub func preview_blur(self, radius: float) -> unit!:
+        self.live.canvas.preview_blur(radius)
+        self.live.touch()
+
+    ## Apply adjustment `kind` to the selected layer's pixels at once, with the
+    ## engine's `numbers` (the rest 0; adjust.frag lists them). Kinds are
+    ## luce-image's: 0 brightness/contrast, 1 hue/saturation/lightness,
+    ## 2 invert, 3 levels, 4 desaturate, 5 threshold, 6 posterize, 7 curves,
+    ## 8 exposure, 9 black & white, 10 color balance, 11 gradient map.
+    pub func adjust(self, kind: int, numbers: list[float]) -> unit!:
+        self.stage(numbers)
+        self.live.canvas.adjust_layer(self.layers.selected_id(), kind)
+        self.live.touch()
+
+    ## A Gaussian blur of `radius` pixels on the selected layer at once.
+    pub func blur(self, radius: float) -> unit!:
+        self.live.canvas.blur_layer(self.layers.selected_id(), radius)
+        self.live.touch()
+
+    ## A new adjustment layer of `kind` named `name`, with the engine's
+    ## `numbers`, just above the selected layer and selected; its id.
+    pub func add_adjustment_layer(self, kind: int, name: str, numbers: list[float]) -> int!:
+        self.stage(numbers)
+        let id = self.live.canvas.add_adjustment_layer(name, kind)
+        self.edits.place_above_selected(id)
+        return id
+
+    ## Adjustment layer `id`'s settings, live.
+    pub func update_adjustment_layer(self, id: int, numbers: list[float]) -> unit!:
+        self.stage(numbers)
+        self.live.canvas.update_adjustment_layer(id)
+        self.live.touch()
+
+    ## The engine's `numbers` staged for the next adjustment, the rest 0.
+    func stage(self, numbers: list[float]) -> unit!:
+        let canvas = self.live.canvas
+        canvas.clear_adjustments()
+        var index = 0
+        for number in numbers:
+            canvas.set_adjustment(index, number)
+            index += 1
+
+    # -- Layer styles.
+
+    ## Set one style setting of the selected layer, by field (see Canvas.style_value).
+    pub func set_style_value(self, field: int, value: float) -> unit!:
+        self.live.canvas.set_style_value(self.layers.selected_id(), field, value)
+        self.live.touch()
+
+    ## One style setting of the selected layer (see Canvas.style_value).
+    pub func style_value(self, field: int) -> float!:
+        return self.live.canvas.style_value(self.layers.selected, field)

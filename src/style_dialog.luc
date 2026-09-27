@@ -121,12 +121,12 @@ pub class StyleDialog:
     pub func open(self) -> unit!:
         if not self.kit.may_open(self.dialog):
             return
-        if self.workspace.previewing():
-            self.workspace.end_preview(false)
+        if self.workspace.previews.previewing():
+            self.workspace.previews.end_preview(false)
         self.before = []
         var field = 0
         while field < style_fields:
-            self.before.append(self.workspace.style_value(field))
+            self.before.append(self.workspace.previews.style_value(field))
             field += 1
         self.show()
         self.dialog.open()
@@ -135,19 +135,19 @@ pub class StyleDialog:
     ## The controls as the layer's style is now.
     func show(self) -> unit!:
         for slider in self.sliders:
-            slider.pair.set_value(self.workspace.style_value(slider.field) / slider.scale)
+            slider.pair.set_value(self.workspace.previews.style_value(slider.field) / slider.scale)
         for effect in self.effects:
-            effect.box.set_checked(self.workspace.style_value(effect.on_field) != 0.0)
-            effect.swatch.color = Color(self.workspace.style_value(effect.color_field), self.workspace.style_value(effect.color_field + 1),
-                                        self.workspace.style_value(effect.color_field + 2))
+            effect.box.set_checked(self.workspace.previews.style_value(effect.on_field) != 0.0)
+            effect.swatch.color = Color(self.workspace.previews.style_value(effect.color_field), self.workspace.previews.style_value(effect.color_field + 1),
+                                        self.workspace.previews.style_value(effect.color_field + 2))
             effect.swatch.layout().invalidate()
         # The shadow's offsets as the angle the light comes from and a distance.
-        let dx = self.workspace.style_value(1)
-        let dy = self.workspace.style_value(2)
+        let dx = self.workspace.previews.style_value(1)
+        let dy = self.workspace.previews.style_value(2)
         self.shadow_distance.set_value(math.hypot(dx, dy))
         if dx != 0.0 or dy != 0.0:
             self.shadow_angle.set_value(math.round(math.atan2(dy, -dx) * 180.0 / math.pi))
-        let position = int(self.workspace.style_value(20))
+        let position = int(self.workspace.previews.style_value(20))
         self.position_menu.set_text(["Outside ▾", "Center ▾", "Inside ▾"][position])
 
     ## The shadow falls away from the light: at the angle's opposite, `distance` away.
@@ -159,7 +159,7 @@ pub class StyleDialog:
 
     ## One field of the selected layer's style, live.
     func set_field(self, field: int, value: float) -> unit!:
-        self.workspace.set_style_value(field, value)
+        self.workspace.previews.set_style_value(field, value)
         if field == 20:
             self.show()
         if let changed = self.changed:
@@ -169,7 +169,7 @@ pub class StyleDialog:
     func edit_color(self, index: int) -> unit!:
         let effect = self.effects[index]
         let first = effect.color_field
-        let hex = hex_of_linear(self.workspace.style_value(first), self.workspace.style_value(first + 1), self.workspace.style_value(first + 2))
+        let hex = hex_of_linear(self.workspace.previews.style_value(first), self.workspace.previews.style_value(first + 1), self.workspace.previews.style_value(first + 2))
         if let pick = self.pick_color:
             pick(effect.name + " Color", hex, func (chosen: str) -> unit!:
                 self.take_color(index, chosen))
@@ -191,7 +191,7 @@ pub class StyleDialog:
         if self.before.length == style_fields:
             var field = 0
             for value in self.before:
-                self.workspace.set_style_value(field, value)
+                self.workspace.previews.set_style_value(field, value)
                 field += 1
         self.dialog.hide()
         self.refresh()

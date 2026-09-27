@@ -86,7 +86,7 @@ pub class DocumentSettings:
         self.profile_menu.set_text(self.profile + " ▾")
         self.resolution_field.set_value(canvas.resolution())
         self.gamma.set_checked(canvas.linear_blend())
-        self.choose_units(self.workspace.units)
+        self.choose_units(self.workspace.viewport.units)
         self.dialog.open()
 
     ## Show the size in `units`, converting what the fields hold.
@@ -101,8 +101,8 @@ pub class DocumentSettings:
             field.set_step(step)
         self.width_field.set_range(1.0 / per_unit, 65536.0 / per_unit)
         self.height_field.set_range(1.0 / per_unit, 65536.0 / per_unit)
-        self.width_field.set_value(float(self.workspace.width()) / per_unit)
-        self.height_field.set_value(float(self.workspace.height()) / per_unit)
+        self.width_field.set_value(float(self.workspace.canvas.width()) / per_unit)
+        self.height_field.set_value(float(self.workspace.canvas.height()) / per_unit)
         let suffix = unit_suffix(units)
         self.width_field.set_suffix(suffix)
         self.height_field.set_suffix(suffix)
@@ -119,18 +119,18 @@ pub class DocumentSettings:
         canvas.set_resolution(self.resolution_field.value())
         canvas.set_profile(self.profile)
         if self.gamma.is_checked() != canvas.linear_blend():
-            self.workspace.set_linear_blend(self.gamma.is_checked())
+            self.workspace.image.set_linear_blend(self.gamma.is_checked())
         let per_unit = self.pixels_per_unit()
         let width = int(math.floor(self.width_field.value() * per_unit + 0.5))
         let height = int(math.floor(self.height_field.value() * per_unit + 0.5))
-        let old_width = self.workspace.width()
-        let old_height = self.workspace.height()
+        let old_width = self.workspace.canvas.width()
+        let old_height = self.workspace.canvas.height()
         if width != old_width or height != old_height:
             if self.resample.is_checked():
-                self.workspace.resize_image(width, height)
+                self.workspace.image.resize_image(width, height)
             else:
-                self.workspace.resize_canvas(width, height, (width - old_width) // 2, (height - old_height) // 2)
-        self.workspace.units = self.units
+                self.workspace.image.resize_canvas(width, height, (width - old_width) // 2, (height - old_height) // 2)
+        self.workspace.viewport.units = self.units
         self.workspace.touch()
         self.dialog.hide()
         if let done = self.applied:

@@ -39,7 +39,7 @@ pub class OpenQueue:
 
     ## Place the picture at `path` on the document shown now, centred, in turn.
     pub func place(self, workspace: Workspace, path: str) -> unit!:
-        let document = workspace.documents[workspace.current]
+        let document = workspace.documents.records[workspace.documents.current]
         self.number(document)
         self.waiting.append(Waiting(path, document))
         self.total += 1
@@ -75,17 +75,17 @@ pub class OpenQueue:
             let index = index_of(workspace, target)
             if index < 0:
                 return false
-            let shown = workspace.current
-            workspace.switch_document(index)
-            workspace.place_file(next.path, float(workspace.width()) * 0.5, float(workspace.height()) * 0.5) catch failure:
+            let shown = workspace.documents.current
+            workspace.documents.switch_to(index)
+            workspace.documents.place_file(next.path, float(workspace.canvas.width()) * 0.5, float(workspace.canvas.height()) * 0.5) catch failure:
                 self.fail(f"Could not place {next.path}: {failure.message}")
-            workspace.switch_document(shown)
+            workspace.documents.switch_to(shown)
             self.begin(target)
             return true
-        workspace.open(next.path) catch failure:
+        workspace.documents.open(next.path) catch failure:
             self.fail(f"Could not open {next.path}: {failure.message}")
             return true
-        self.begin(workspace.documents[workspace.current])
+        self.begin(workspace.documents.records[workspace.documents.current])
         return true
 
     func begin(self, document: Document) -> unit:
@@ -107,12 +107,12 @@ pub class OpenQueue:
 ## Where `document` is among the open documents, -1 when it was closed.
 func index_of(workspace: Workspace, document: Document) -> int:
     var index = 0
-    while index < workspace.documents.length:
-        if workspace.documents[index].serial == document.serial:
+    while index < workspace.documents.records.length:
+        if workspace.documents.records[index].serial == document.serial:
             return index
         index += 1
     return -1
 
 ## Document `index`'s canvas, the live one read live.
 func canvas_of(workspace: Workspace, index: int) -> Canvas:
-    return workspace.canvas if index == workspace.current else workspace.documents[index].canvas
+    return workspace.canvas if index == workspace.documents.current else workspace.documents.records[index].canvas

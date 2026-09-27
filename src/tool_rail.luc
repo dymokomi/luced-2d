@@ -85,7 +85,7 @@ pub class ToolRail:
 
     ## The active tool marked, and each group showing its last-chosen tool.
     pub func show(self, workspace: Workspace) -> unit!:
-        let active = workspace.tool
+        let active = workspace.tools.tool
         let active_group = group_of(active)
         self.quick.set_style(ButtonStyle.selected if workspace.canvas.quick_mask() else ButtonStyle.sunken)
         for slot in self.slots:

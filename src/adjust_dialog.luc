@@ -70,7 +70,7 @@ pub class AdjustDialog:
         if not self.kit.may_open(self.dialog):
             return
         self.close_preview(false)
-        self.workspace.begin_preview() catch failure:
+        self.workspace.previews.begin_preview() catch failure:
             self.fail(f"Cannot adjust: {failure.message}")
             return
         self.kind = kind
@@ -96,8 +96,8 @@ pub class AdjustDialog:
 
     func close_preview(self, keep: bool) -> unit!:
         self.controls.end_on_image()
-        if self.kind >= 0 and self.workspace.previewing():
-            self.workspace.end_preview(keep)
+        if self.kind >= 0 and self.workspace.previews.previewing():
+            self.workspace.previews.end_preview(keep)
         self.kind = -1
 
     pub func close(self, keep: bool) -> unit!:
@@ -144,7 +144,7 @@ pub class AdjustDialog:
     pub func preview(self) -> unit!:
         self.pending = false
         let kind = self.kind
-        if kind < 0 or not self.workspace.previewing():
+        if kind < 0 or not self.workspace.previews.previewing():
             return
         if not self.showing:
             self.workspace.canvas.show_preview_original()
@@ -154,14 +154,14 @@ pub class AdjustDialog:
             return
         let values = self.controls.values(kind)
         if kind == blur_kind:
-            self.workspace.preview_blur(values[0])
+            self.workspace.previews.preview_blur(values[0])
         elif kind == noise_kind:
-            self.workspace.preview_noise(self.controls.numbers(kind)[0], values[1] != 0.0, self.seed, values[2] != 0.0)
+            self.workspace.previews.preview_noise(self.controls.numbers(kind)[0], values[1] != 0.0, self.seed, values[2] != 0.0)
         elif kind >= first_filter_kind:
             let numbers = self.controls.numbers(kind) + [0.0, 0.0]
-            self.workspace.preview_filter(kind - first_filter_kind, numbers[0], numbers[1], numbers[2])
+            self.workspace.previews.preview_filter(kind - first_filter_kind, numbers[0], numbers[1], numbers[2])
         else:
-            self.workspace.preview_adjust(kind, self.controls.numbers(kind))
+            self.workspace.previews.preview_adjust(kind, self.controls.numbers(kind))
         if let changed = self.changed:
             changed()
 

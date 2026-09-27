@@ -11,14 +11,14 @@ from workspace import Workspace
 ## The selected layers to copy, bottom to top, leaving out any a selected
 ## group already holds.
 func outermost_selected(workspace: Workspace) -> list[int]!:
-    let chosen = workspace.selected_ids()
+    let chosen = workspace.layers.selected_ids()
     var kept: list[int] = []
     for id in chosen:
         var inside = false
-        var parent = workspace.canvas.layer_parent(workspace.index_of(id))
+        var parent = workspace.canvas.layer_parent(workspace.layers.index_of(id))
         while parent != 0 and not inside:
             inside = parent in chosen
-            parent = workspace.canvas.layer_parent(workspace.index_of(parent))
+            parent = workspace.canvas.layer_parent(workspace.layers.index_of(parent))
         if not inside:
             kept.append(id)
     return kept
@@ -34,13 +34,13 @@ func copy_selected(workspace: Workspace, quietly: bool) -> unit!:
 ## Cutting deletes the layers after, as one step.
 pub func copy_layers(workspace: Workspace, cut: bool) -> unit!:
     copy_selected(workspace, false)
-    let index = workspace.selected
+    let index = workspace.layers.selected
     let canvas = workspace.canvas
     if not canvas.layer_is_group(index) and canvas.layer_adjustment(index) < 0:
-        canvas.copy_selection(workspace.selected_id(), false, false)
+        canvas.copy_selection(workspace.layers.selected_id(), false, false)
     if cut:
-        workspace.as_one("Cut Layers", func () -> unit!:
-            workspace.delete_layer())
+        workspace.edits.as_one("Cut Layers", func () -> unit!:
+            workspace.edits.delete_layer())
 
 ## Whether Paste takes copied layers rather than an image.
 pub func layers_to_paste() -> bool!:
@@ -51,20 +51,20 @@ pub func layers_to_paste() -> bool!:
 ## `in_place`, else centred.
 pub func paste_layers(workspace: Workspace, in_place: bool) -> unit!:
     let canvas = workspace.canvas
-    let parent = canvas.layer_parent(workspace.selected)
-    let position = canvas.layer_position(workspace.selected)
+    let parent = canvas.layer_parent(workspace.layers.selected)
+    let position = canvas.layer_position(workspace.layers.selected)
     let top = canvas.paste_layers(parent, position + 1, in_place)
-    workspace.picked = []
-    workspace.select_id(top)
+    workspace.layers.picked = []
+    workspace.layers.select_id(top)
 
 ## The selected layers dragged onto document `index`'s tab: copied there
 ## above its selected layer, which becomes the one shown.
 pub func send_layers(workspace: Workspace, index: int) -> unit!:
-    if index == workspace.current:
+    if index == workspace.documents.current:
         return
     copy_selected(workspace, true)
     let source = workspace.canvas
-    workspace.switch_document(index)
+    workspace.documents.switch_to(index)
     if not workspace.canvas.is_bound():
         workspace.canvas.bind_beside(source)
     paste_layers(workspace, false)

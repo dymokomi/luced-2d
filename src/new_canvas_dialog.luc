@@ -35,8 +35,8 @@ pub class NewCanvasDialog:
     pub func open(self) -> unit!:
         if not self.kit.may_open(self.dialog):
             return
-        self.width_field.set_value(float(self.workspace.width()))
-        self.height_field.set_value(float(self.workspace.height()))
+        self.width_field.set_value(float(self.workspace.canvas.width()))
+        self.height_field.set_value(float(self.workspace.canvas.height()))
         self.resolution_field.set_value(self.workspace.canvas.resolution())
         self.from_clipboard()
         self.dialog.open()
@@ -55,7 +55,7 @@ pub class NewCanvasDialog:
 
     func create(self) -> unit!:
         self.dialog.hide()
-        self.workspace.create(int(self.width_field.value() + 0.5), int(self.height_field.value() + 0.5))
+        self.workspace.documents.create(int(self.width_field.value() + 0.5), int(self.height_field.value() + 0.5))
         self.workspace.canvas.set_resolution(self.resolution_field.value())
         if let done = self.created:
             done()

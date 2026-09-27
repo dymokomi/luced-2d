@@ -72,7 +72,7 @@ pub class LayersPanel:
         let actions = self.actions
         let workspace = self.workspace
         let kit = self.kit
-        kit.bind(actions.add_layer, self.attempting("New Layer", workspace.add_layer))
+        kit.bind(actions.add_layer, self.attempting("New Layer", workspace.edits.add_layer))
         kit.bind(actions.add_vector_layer, self.attempting("New Vector Layer", func () -> unit!:
             new_vector_layer(self.workspace)))
         kit.bind(actions.duplicate_layer, self.attempting("Duplicate", func () -> unit!:
@@ -80,9 +80,9 @@ pub class LayersPanel:
         kit.bind(actions.merge_down, self.attempting("Merge", func () -> unit!:
             if can_merge(self.workspace):
                 merge(self.workspace)))
-        kit.bind(actions.delete_layer, self.attempting("Delete", workspace.delete_layer))
+        kit.bind(actions.delete_layer, self.attempting("Delete", workspace.edits.delete_layer))
         kit.bind(actions.rename_layer, func () -> unit!:
-            let index = self.workspace.selected
+            let index = self.workspace.layers.selected
             self.begin_rename(index, self.layer_list.name_left(index), self.layer_list.row_top(index) + 6.0))
         kit.bind(actions.group_layers, self.attempting("Group Layers", func () -> unit!:
             group_selected(self.workspace)))
@@ -90,15 +90,15 @@ pub class LayersPanel:
             ungroup(self.workspace)))
         kit.bind(actions.move_out_of_folder, self.attempting("Move Out of Folder", func () -> unit!:
             move_out_of_folder(self.workspace)))
-        kit.bind(actions.toggle_clipped, self.attempting("Clipping Mask", workspace.toggle_clipped))
+        kit.bind(actions.toggle_clipped, self.attempting("Clipping Mask", workspace.edits.toggle_clipped))
 
     ## The menu's titles and states for the selection now, as Compositor's.
     pub func fit_titles(self) -> unit!:
         let actions = self.actions
         let workspace = self.workspace
         let canvas = workspace.canvas
-        let index = workspace.selected
-        let several = workspace.selected_ids().length > 1
+        let index = workspace.layers.selected
+        let several = workspace.layers.selected_ids().length > 1
         let masked = canvas.layer_masked(index)
         actions.delete_layer.set_text("Delete Selected Layers" if several else "Delete Layer")
         actions.rename_layer.set_enabled(not several)
@@ -114,12 +114,12 @@ pub class LayersPanel:
         actions.toggle_mask_link.set_text("Link Mask" if masked and not canvas.layer_mask_linked(index) else "Unlink Mask")
         actions.toggle_mask_link.set_enabled(masked)
         actions.copy_mask.set_enabled(masked)
-        actions.paste_mask.set_enabled(workspace.mask_source_present())
+        actions.paste_mask.set_enabled(workspace.edits.mask_source_present())
         actions.toggle_visibility.set_text("Show Layer" if not canvas.layer_visible(index) else "Hide Layer")
 
     ## The panel as the document is now.
     pub func show(self) -> unit!:
-        self.panel.set_text(f"Layers · {self.workspace.layer_count()}")
+        self.panel.set_text(f"Layers · {self.workspace.canvas.layer_count()}")
         self.fit_titles()
         self.layer_list.layout().invalidate()
 
@@ -140,7 +140,7 @@ pub class LayersPanel:
         self.renaming = 0
         self.rename_field.layout().set_visible(false)
         let trimmed = name.trim()
-        let index = self.workspace.index_of(id)
+        let index = self.workspace.layers.index_of(id)
         if id == 0 or index < 0 or trimmed == "" or trimmed == self.workspace.canvas.layer_name(index):
             return
         self.attempt("Rename", func () -> unit!:

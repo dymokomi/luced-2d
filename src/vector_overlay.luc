@@ -31,10 +31,10 @@ pub class VectorOverlay:
         if points < 2:
             return
         var box: TransformBox? = none
-        if let session = workspace.transform:
+        if let session = workspace.transforms.transform:
             if session.element == element:
                 box = session.box
-        let zoom = workspace.zoom
+        let zoom = workspace.viewport.zoom
         var previous = Point(0.0, 0.0)
         var point = 0
         while point < points:
@@ -44,7 +44,7 @@ pub class VectorOverlay:
                 let bx = through.map_x(x, y)
                 y = through.map_y(x, y)
                 x = bx
-            let next = Point(x * zoom + workspace.offset_x, y * zoom + workspace.offset_y)
+            let next = Point(x * zoom + workspace.viewport.offset_x, y * zoom + workspace.viewport.offset_y)
             if point > 0 and not self.outline.starts_run(point):
                 painter.line(previous, next, 3.0, backing)
                 painter.line(previous, next, 1.0, ink)
@@ -52,10 +52,10 @@ pub class VectorOverlay:
             point += 1
 
     func refresh(self, workspace: Workspace, element: int) -> unit!:
-        let layer = workspace.selected_id()
-        if self.revision == workspace.revision and self.layer == layer and self.element == element:
+        let layer = workspace.layers.selected_id()
+        if self.revision == workspace.live.revision and self.layer == layer and self.element == element:
             return
-        self.outline = element_outline(workspace.canvas, workspace.selected, element)
-        self.revision = workspace.revision
+        self.outline = element_outline(workspace.canvas, workspace.layers.selected, element)
+        self.revision = workspace.live.revision
         self.layer = layer
         self.element = element

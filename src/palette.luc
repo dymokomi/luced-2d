@@ -41,8 +41,8 @@ pub class Palette: Widget:
         let painter = Painter(target)
         let workspace = self.workspace
         let ink = theme.text_muted()
-        self.draw_swatch(painter, Rect(self.offset, self.offset, self.swatch, self.swatch), Color(workspace.back_red, workspace.back_green, workspace.back_blue))
-        self.draw_swatch(painter, Rect(0.0, 0.0, self.swatch, self.swatch), Color(workspace.red, workspace.green, workspace.blue))
+        self.draw_swatch(painter, Rect(self.offset, self.offset, self.swatch, self.swatch), Color(workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue))
+        self.draw_swatch(painter, Rect(0.0, 0.0, self.swatch, self.swatch), Color(workspace.colors.red, workspace.colors.green, workspace.colors.blue))
         # The swap arrow, top right: a diagonal with a head at each end.
         let ax = self.swatch + 2.0
         let ay = 0.0
@@ -63,9 +63,9 @@ pub class Palette: Widget:
             return
         let workspace = self.workspace
         if event.x >= self.swatch + 1.0 and event.y < self.offset:
-            workspace.swap_colors()
+            workspace.colors.swap_colors()
         elif event.x < self.offset and event.y >= self.swatch + 1.0:
-            workspace.reset_colors()
+            workspace.colors.reset_colors()
         elif event.x < self.swatch and event.y < self.swatch:
             if let pick = self.on_pick:
                 pick(false)

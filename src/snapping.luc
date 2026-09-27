@@ -23,16 +23,16 @@ pub class Snapper:
     ## Gather the targets for a gesture: `skip` are the layers being dragged,
     ## which do not pull on themselves; `layers` whether other layers pull.
     pub func gather(self, workspace: Workspace, skip: list[int], layers: bool) -> unit!:
-        self.enabled = workspace.snap
+        self.enabled = workspace.viewport.snap
         self.xs = []
         self.ys = []
-        self.reach = 8.0 / workspace.zoom
-        self.grid = workspace.grid_major() / float(workspace.grid_divisions()) if workspace.show_grid else 0.0
+        self.reach = 8.0 / workspace.viewport.zoom
+        self.grid = workspace.viewport.grid_major() / float(workspace.viewport.grid_divisions()) if workspace.viewport.show_grid else 0.0
         if not self.enabled:
             return
         let canvas = workspace.canvas
-        let width = float(workspace.width())
-        let height = float(workspace.height())
+        let width = float(workspace.canvas.width())
+        let height = float(workspace.canvas.height())
         self.xs = [0.0, width * 0.5, width]
         self.ys = [0.0, height * 0.5, height]
         var guide = 0
@@ -45,7 +45,7 @@ pub class Snapper:
         if not layers or not canvas.is_bound():
             return
         # The other visible layers' painted boxes; a few dozen at most, as each is read back.
-        var index = workspace.layer_count() - 1
+        var index = workspace.canvas.layer_count() - 1
         var measured = 0
         while index >= 0 and measured < 32:
             let id = canvas.layer_id(index)

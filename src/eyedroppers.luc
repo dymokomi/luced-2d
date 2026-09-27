@@ -1,0 +1,96 @@
+## What a click or drag on the canvas samples: the Eyedropper tool into the
+## palette, and the eyedroppers dialogs arm (Levels' points, Color Range and
+## Replace Color's samples, Hue/Saturation's on-image drag). Each samples the
+## image as it was, not the edit being previewed.
+from live import Live
+from colors import Colors
+import math
+import transfer
+
+pub class Eyedroppers:
+    let live: Live
+    let colors: Colors
+    ## A dialog's eyedropper waiting for a click on the canvas (Levels' black,
+    ## gray or white point): given the color there, sRGB-encoded 0..1.
+    pub var sample_for: func(list[float]) -> unit!? = none
+    ## Color Range's eyedropper, armed while its dialog is up: every click on
+    ## the canvas hands it the color there (sRGB) and 0 to sample anew, 1 to
+    ## add (Shift) or 2 to subtract (Alt).
+    pub var range_sample_for: func(list[float], int) -> unit!? = none
+    ## Hue/Saturation's on-image adjustment, while armed: a drag on the canvas
+    ## hands it the color under the press (sRGB), how far the pointer has moved
+    ## across (points), whether it changes hue (Cmd or Ctrl held) rather than
+    ## saturation, and whether the drag has just begun.
+    pub var drag_for: func(list[float], float, bool, bool) -> unit!? = none
+    var drag_color: list[float]
+
+    pub func init(self, live: Live, colors: Colors):
+        self.live = live
+        self.colors = colors
+        self.drag_color = [0.0, 0.0, 0.0]
+
+    ## Whether a dialog's eyedropper or on-image drag has the canvas.
+    pub func armed(self) -> bool:
+        return self.drag_for != none or self.sample_for != none or self.range_sample_for != none
+
+    ## Hand the color at a document point to the waiting eyedropper, once; the
+    ## image as it was, not the edit being previewed. False when none waits.
+    pub func sample_to(self, x: float, y: float) -> bool!:
+        let waiting = self.sample_for else return false
+        self.sample_for = none
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if not self.inside(px, py):
+            return true
+        waiting(self.color_at(px, py))
+        self.live.touch()
+        return true
+
+    ## Hand the color at a document point to Color Range's eyedropper; false
+    ## when it is not armed.
+    pub func range_sample_to(self, x: float, y: float, adding: bool, subtracting: bool) -> bool!:
+        let waiting = self.range_sample_for else return false
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if not self.inside(px, py):
+            return true
+        waiting(self.color_at(px, py), 2 if subtracting else (1 if adding else 0))
+        self.live.touch()
+        return true
+
+    ## A drag on the canvas for the on-image adjustment: begun at document
+    ## point (`x`, `y`), moved `moved` points across since.
+    pub func adjust_drag(self, x: float, y: float, moved: float, hue: bool, first: bool) -> unit!:
+        let adjusting = self.drag_for else return
+        if first:
+            let canvas = self.live.canvas
+            let px = int(math.clamp(math.floor(x), 0.0, float(canvas.width() - 1)))
+            let py = int(math.clamp(math.floor(y), 0.0, float(canvas.height() - 1)))
+            self.drag_color = self.color_at(px, py)
+        adjusting(self.drag_color, moved, hue, first)
+        self.live.touch()
+
+    ## The eyedropper: the flattened color under a document point becomes the
+    ## foreground color (the background one while the picker samples for it).
+    pub func pick(self, x: float, y: float) -> unit!:
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if not self.inside(px, py):
+            return
+        let canvas = self.live.canvas
+        canvas.pick(px, py)
+        if canvas.picked_alpha() > 0.0:
+            let colors = self.colors
+            colors.set_palette(canvas.picked_red(), canvas.picked_green(), canvas.picked_blue(), colors.sampling and colors.sampling_background)
+
+    ## The color (sRGB) at a document pixel of the image as it was, not the
+    ## edit being previewed.
+    func color_at(self, px: int, py: int) -> list[float]!:
+        let canvas = self.live.canvas
+        if canvas.previewing():
+            canvas.show_preview_original()
+        canvas.pick(px, py)
+        return [transfer.srgb_encode(canvas.picked_red()), transfer.srgb_encode(canvas.picked_green()), transfer.srgb_encode(canvas.picked_blue())]
+
+    func inside(self, px: int, py: int) -> bool:
+        return px >= 0 and py >= 0 and px < self.live.canvas.width() and py < self.live.canvas.height()

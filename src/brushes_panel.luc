@@ -66,7 +66,7 @@ pub class BrushesPanel:
         # The row of the library brush in hand, as the last run left it.
         var index = 0
         for saved in self.saved:
-            if saved.folder != "" and saved.folder == workspace.brush.folder:
+            if saved.folder != "" and saved.folder == workspace.tools.brush.folder:
                 self.rows.selected = preset_names().length + index
             index += 1
 
@@ -102,13 +102,13 @@ pub class BrushesPanel:
         if row < 0:
             return
         if row < names.length:
-            self.workspace.apply_preset(names[row])
+            self.workspace.tools.apply_preset(names[row])
         elif let saved = self.saved_at(row):
             let brush = saved.brush.copy()
             brush.diameter = math.max(1.0, math.min(max_brush, brush.diameter))
             brush.preset = saved.name
             brush.folder = saved.folder
-            self.workspace.brush = brush
+            self.workspace.tools.brush = brush
             self.workspace.touch()
         self.settings.show()
         if let done = self.chosen:
@@ -116,11 +116,11 @@ pub class BrushesPanel:
 
     ## "+": the brush in hand saved as a new brush, "Brush N".
     pub func save_new(self) -> unit!:
-        self.add(self.workspace.brush.copy(), f"Brush {self.saved.length + 1}")
+        self.add(self.workspace.tools.brush.copy(), f"Brush {self.saved.length + 1}")
         # The brush in hand is that saved brush now: the header's preset menu names it.
         if let saved = self.saved_at(self.rows.selected):
-            self.workspace.brush.preset = saved.name
-            self.workspace.brush.folder = saved.folder
+            self.workspace.tools.brush.preset = saved.name
+            self.workspace.tools.brush.folder = saved.folder
             self.workspace.touch()
             if let done = self.chosen:
                 done()
@@ -145,7 +145,7 @@ pub class BrushesPanel:
             self.save_new()
             return
         let saved = found else return
-        let kept = SavedBrush(saved.name, saved.folder, self.workspace.brush.copy())
+        let kept = SavedBrush(saved.name, saved.folder, self.workspace.tools.brush.copy())
         save_brush(self.library, kept) catch failure:
             self.fail(f"Could not save the brush: {failure.message}")
             return
@@ -161,7 +161,7 @@ pub class BrushesPanel:
             self.add(saved.brush.copy(), saved.name + " copy")
         elif row < preset_names().length:
             let name = preset_names()[row]
-            self.add(preset(name, self.workspace.brush.diameter, self.workspace.brush.opacity), name + " copy")
+            self.add(preset(name, self.workspace.tools.brush.diameter, self.workspace.tools.brush.opacity), name + " copy")
 
     ## Rename the picked saved brush, typed where its name is.
     pub func rename_selected(self) -> unit!:
@@ -218,9 +218,9 @@ pub class BrushesPanel:
             self.fail(f"Could not delete the brush: {failure.message}")
             return
         discard(self.saved.remove_at(row - preset_names().length))
-        if self.workspace.brush.folder == saved.folder:
-            self.workspace.brush.folder = ""
-            self.workspace.brush.preset = "(unsaved)"
+        if self.workspace.tools.brush.folder == saved.folder:
+            self.workspace.tools.brush.folder = ""
+            self.workspace.tools.brush.preset = "(unsaved)"
             self.workspace.touch()
         self.rows.selected = -1
         self.show()
@@ -256,7 +256,7 @@ pub class BrushesPanel:
     pub func export_choice(self) -> SavedBrush:
         if let saved = self.saved_at(self.rows.selected):
             return saved
-        return SavedBrush(self.workspace.brush.preset, "", self.workspace.brush)
+        return SavedBrush(self.workspace.tools.brush.preset, "", self.workspace.tools.brush)
 
     func fail(self, message: str) -> unit!:
         if let failed = self.failed:

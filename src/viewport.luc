@@ -1,0 +1,100 @@
+## How the document is viewed: the zoom and pan (in view points: a document
+## pixel at (x, y) shows at x · zoom + offset_x), whether the first fit is
+## done, and the view aids — rulers, the grid, guides and snapping — with the
+## unit rulers and sizes are shown in.
+from live import Live
+from units import pixels_per
+import math
+
+pub class Viewport:
+    let live: Live
+    pub var zoom: float = 1.0
+    pub var offset_x: float = 0.0
+    pub var offset_y: float = 0.0
+    ## Whether the view has had its first fit; the view fits a document that has not.
+    pub var fitted: bool = false
+    ## The view aids: rulers, the grid, and the unit rulers and sizes are shown in
+    ## ("px", "mm" or "in"; physical units use the document's resolution).
+    pub var show_rulers: bool = true
+    pub var show_grid: bool = false
+    ## Guides show, what is dragged snaps, and guides stay put when locked.
+    pub var show_guides: bool = true
+    pub var snap: bool = true
+    pub var lock_guides: bool = false
+    pub var units: str = "px"
+
+    pub func init(self, live: Live):
+        self.live = live
+
+    # -- Units and the grid.
+
+    ## Document pixels per one of the current unit.
+    pub func pixels_per_unit(self) -> float:
+        return pixels_per(self.units, self.live.canvas.resolution())
+
+    ## The grid's major spacing in document pixels: every 64 px, 10 mm or 1 inch.
+    pub func grid_major(self) -> float:
+        if self.units == "mm":
+            return 10.0 * self.pixels_per_unit()
+        if self.units == "in":
+            return self.pixels_per_unit()
+        return 64.0
+
+    ## How many parts each major grid square is cut into.
+    pub func grid_divisions(self) -> int:
+        return 10 if self.units == "mm" else 8
+
+    # -- Zoom and pan.
+
+    ## Zoom in (`direction` 1) or out (-1) to the next of Photoshop's steps
+    ## (… 50%, 66.7%, 100%, 200% … 3200%) about the view point (`x`, `y`).
+    pub func zoom_step(self, direction: int, x: float, y: float):
+        let steps = [0.03125, 0.0625, 0.0833, 0.125, 0.1667, 0.25, 0.3333, 0.5, 0.6667, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 12.0, 16.0, 24.0, 32.0]
+        var target = self.zoom
+        if direction > 0:
+            target = steps[steps.length - 1]
+            for step in steps:
+                if step > self.zoom * 1.001:
+                    target = step
+                    break
+        else:
+            target = steps[0]
+            for step in steps:
+                if step < self.zoom * 0.999:
+                    target = step
+        self.zoom_about(target / self.zoom, x, y)
+
+    ## Zoom about a point of the view, keeping the document pixel under it still.
+    pub func zoom_about(self, factor: float, x: float, y: float):
+        let next = math.max(1.0 / 64.0, math.min(64.0, self.zoom * factor))
+        let applied = next / self.zoom
+        self.offset_x = x - (x - self.offset_x) * applied
+        self.offset_y = y - (y - self.offset_y) * applied
+        self.zoom = next
+        self.live.touch()
+
+    pub func pan(self, dx: float, dy: float):
+        self.offset_x += dx
+        self.offset_y += dy
+        self.live.touch()
+
+    ## Fit the document into a `width` by `height` view with a margin.
+    pub func fit(self, width: float, height: float):
+        let margin = 40.0
+        let available_x = math.max(1.0, width - margin * 2.0)
+        let available_y = math.max(1.0, height - margin * 2.0)
+        let canvas = self.live.canvas
+        self.zoom = math.max(1.0 / 64.0, math.min(64.0, math.min(available_x / float(canvas.width()), available_y / float(canvas.height()))))
+        self.center_in(width, height)
+        self.fitted = true
+        self.live.touch()
+
+    ## 100%, centred in a `width` by `height` view.
+    pub func actual_size(self, width: float, height: float):
+        self.zoom = 1.0
+        self.center_in(width, height)
+        self.live.touch()
+
+    func center_in(self, width: float, height: float):
+        self.offset_x = math.floor((width - float(self.live.canvas.width()) * self.zoom) * 0.5)
+        self.offset_y = math.floor((height - float(self.live.canvas.height()) * self.zoom) * 0.5)

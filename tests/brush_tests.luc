@@ -86,14 +86,14 @@ func pen_strokes() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     panels.choose_tool("brush")
-    workspace.set_color(1.0, 0.0, 0.0)
-    workspace.brush = preset("Hard Round", 20.0, 1.0)
-    workspace.brush.dynamics[0].minimum = 0.0
+    workspace.colors.set_color(1.0, 0.0, 0.0)
+    workspace.tools.brush = preset("Hard Round", 20.0, 1.0)
+    workspace.tools.brush.dynamics[0].minimum = 0.0
     # A light press across the top, a full one across the bottom.
     stroke(view, 10.0, 20.0, 110.0, 20.0, PointerKind.pen, 0.2)
     stroke(view, 10.0, 60.0, 110.0, 60.0, PointerKind.pen, 1.0)
@@ -130,12 +130,12 @@ func sampled_tips() -> unit!:
     # first press on the pad makes that the brush's tip, then paints on it.
     let pad = panels.brush.tip_editor.pad
     panels.brush.show()
-    assert(workspace.brush.tip == none and pad.mask != none and not pad.owned)
+    assert(workspace.tools.brush.tip == none and pad.mask != none and not pad.owned)
     pad.event(Event(kind = EventKind.pointer_down, x = 10.0, y = 10.0, button = 0, inside = true))
     pad.event(Event(kind = EventKind.pointer_up, x = 10.0, y = 10.0, button = 0, inside = true))
-    let started = workspace.brush.tip else trap("a tip from the round one")
+    let started = workspace.tools.brush.tip else trap("a tip from the round one")
     assert(pad.owned and not started.is_empty())
-    workspace.set_color(0.0, 0.0, 1.0)
+    workspace.colors.set_color(0.0, 0.0, 1.0)
     # A tip that paints only its left half.
     let tip = BrushMask.create(32, 32)
     tip.clear(1.0)
@@ -143,11 +143,11 @@ func sampled_tips() -> unit!:
     while y < 32.0:
         tip.line(24.0, y, 32.0, y, 8.0, 1.0, 0.0)
         y += 2.0
-    workspace.brush = preset("Hard Round", 30.0, 1.0)
-    workspace.brush.dynamics = no_mappings()
-    workspace.brush.tip = tip
-    workspace.begin_stroke(50.0, 30.0)
-    workspace.end_stroke()
+    workspace.tools.brush = preset("Hard Round", 30.0, 1.0)
+    workspace.tools.brush.dynamics = no_mappings()
+    workspace.tools.brush.tip = tip
+    workspace.painting.begin_stroke(50.0, 30.0)
+    workspace.painting.end_stroke()
     assert(alpha_at(workspace, 40, 30) > 0.99 and alpha_at(workspace, 60, 30) < 0.01)
     # Define Brush: the selected pixels of the picture, dark painting.
     workspace.canvas.select_rectangle(35, 15, 30, 30)
@@ -156,7 +156,7 @@ func sampled_tips() -> unit!:
     # The tip editor's image goes on the brush at once; Clear takes it off.
     let settings = panels.brush
     settings.tip_editor.use(defined)
-    assert(workspace.brush.tip != none)
+    assert(workspace.tools.brush.tip != none)
     settings.show()
     panels.close()
 
@@ -201,12 +201,12 @@ func panel_library(directory: str) -> unit!:
     let kit = Kit(Font())
     let panel = BrushesPanel(workspace, kit, panels.brush, directory)
     let built_in = panel.saved.length
-    workspace.brush = sample_brush()
-    let shown = workspace.revision
+    workspace.tools.brush = sample_brush()
+    let shown = workspace.live.revision
     panel.save_new()
     assert(panel.saved.length == built_in + 1 and load_library(panel.library).length == built_in + 1)
     # The new brush is the one in hand, and the header shows it (the window refreshes).
-    assert(workspace.brush.preset == f"Brush {built_in + 1}" and workspace.revision != shown)
+    assert(workspace.tools.brush.preset == f"Brush {built_in + 1}" and workspace.live.revision != shown)
     let row = panel.rows.selected
     panel.duplicate()
     assert(panel.saved.length == built_in + 2 and panel.saved[panel.saved.length - 1].name.ends_with(" copy"))
@@ -217,8 +217,8 @@ func panel_library(directory: str) -> unit!:
     assert("Renamed" in names)
     # Picking the saved brush gives a copy: painting settings do not touch the library.
     panel.pick(row)
-    assert(workspace.brush.diameter == 48.0 and workspace.brush.preset == "Renamed")
-    workspace.brush.diameter = 5.0
+    assert(workspace.tools.brush.diameter == 48.0 and workspace.tools.brush.preset == "Renamed")
+    workspace.tools.brush.diameter = 5.0
     assert(panel.saved[row - panel.rows.first_saved].brush.diameter == 48.0)
     # Save writes the brush in hand over the picked one.
     panel.rows.selected = row
@@ -231,10 +231,10 @@ func panel_library(directory: str) -> unit!:
     assert(panel.confirm.is_open() and panel.saved.length == built_in + 2)
     panel.remove(row)
     assert(panel.saved.length == built_in + 1 and load_library(panel.library).length == built_in + 1)
-    assert(workspace.brush.folder == "" and workspace.brush.preset == "(unsaved)")
+    assert(workspace.tools.brush.folder == "" and workspace.tools.brush.preset == "(unsaved)")
     # A built-in picked keeps the size in hand.
     panel.pick(1)
-    assert(workspace.brush.preset == "Soft Round" and workspace.brush.diameter == 5.0)
+    assert(workspace.tools.brush.preset == "Soft Round" and workspace.tools.brush.diameter == 5.0)
     kit.close()
     panels.close()
 

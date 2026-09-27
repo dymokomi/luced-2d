@@ -1,0 +1,240 @@
+## Edits to the layer stack, each on the selected layer (or every selected
+## one): new, delete, reorder, duplicate and merge; copy and paste; the
+## appearance (visibility, opacity, blend, clipping); masks; and moves.
+from canvas import Canvas
+from live import Live
+from layer_picking import LayerPicking
+import math
+import ui
+
+pub class LayerCommands:
+    let live: Live
+    let layers: LayerPicking
+    ## The number the next new layer's name takes ("Layer 2"), and the next group's.
+    pub var next_name: int = 1
+    pub var next_group: int = 1
+    ## The layer whose mask Copy Mask took, 0 for none.
+    pub var mask_source: int = 0
+
+    pub func init(self, live: Live, layers: LayerPicking):
+        self.live = live
+        self.layers = layers
+
+    ## Make `change` one undo step named `name`, however many changes it makes.
+    pub func as_one(self, name: str, change: func() -> unit!) -> unit!:
+        self.live.canvas.begin_edit(name)
+        change() catch failure:
+            self.live.canvas.end_edit()
+            error(failure.code, failure.message)
+        self.live.canvas.end_edit()
+
+    ## A new empty layer just above the selected one, in its group, selected.
+    pub func add_layer(self) -> unit!:
+        self.next_name += 1
+        self.as_one("New Layer", func () -> unit!:
+            self.place_above_selected(self.live.canvas.add_layer(f"Layer {self.next_name}")))
+
+    ## Put the new layer `id` just above the selected layer, in the same group,
+    ## and select it — or, above a group, just above the whole group.
+    pub func place_above_selected(self, id: int) -> unit!:
+        let canvas = self.live.canvas
+        let selected = self.layers.selected
+        let created = self.layers.index_of(id)
+        if selected != created and selected < canvas.layer_count():
+            let parent = canvas.layer_parent(selected)
+            let position = canvas.layer_position(selected)
+            canvas.move_into(id, parent, position + 1)
+        self.layers.select_id(id)
+
+    ## Delete every selected layer (a group with all it holds), keeping one.
+    pub func delete_layer(self) -> unit!:
+        let canvas = self.live.canvas
+        let at = self.layers.selected
+        for id in self.layers.selected_ids():
+            let index = self.layers.index_of(id)
+            # One layer always stays; a group going takes its layers, so check each time.
+            if index >= 0 and canvas.layer_count() > 1:
+                canvas.remove_layer(id)
+        self.layers.picked = []
+        self.layers.selected = at if at < canvas.layer_count() else canvas.layer_count() - 1
+        self.live.touch()
+
+    ## Take layer `id` away (a group with all it holds), keeping a selection.
+    pub func remove_layer_id(self, id: int) -> unit!:
+        let canvas = self.live.canvas
+        canvas.remove_layer(id)
+        self.layers.picked = []
+        if self.layers.selected >= canvas.layer_count():
+            self.layers.selected = canvas.layer_count() - 1
+        self.live.touch()
+
+    ## Move the selected layer one place up among its group's layers (negative:
+    ## down); a group goes with everything in it.
+    pub func reorder(self, step: int) -> unit!:
+        let id = self.layers.selected_id()
+        self.live.canvas.reorder_layer(id, step)
+        self.layers.selected = self.layers.index_of(id)
+        self.live.touch()
+
+    pub func duplicate(self) -> unit!:
+        let canvas = self.live.canvas
+        let name = canvas.layer_name(self.layers.selected) + " copy"
+        let copy = canvas.duplicate_layer(self.layers.selected_id(), name)
+        self.layers.select_id(copy)
+
+    pub func merge_down(self) -> unit!:
+        if self.layers.selected == 0:
+            return
+        let below = self.live.canvas.layer_id(self.layers.selected - 1)
+        self.live.canvas.merge_down(self.layers.selected_id())
+        self.layers.select_id(below)
+
+    ## Rename the selected layer.
+    pub func rename(self, name: str) -> unit!:
+        self.live.canvas.rename_layer(self.layers.selected_id(), name)
+        self.live.touch()
+
+    # -- The clipboard.
+
+    ## Copy the selected layer's selected pixels (all of them without a
+    ## selection) to the system clipboard, or the whole picture's with
+    ## `merged`; with `cut` they leave the layer.
+    pub func copy_selection(self, merged: bool, cut: bool) -> unit!:
+        self.live.canvas.copy_selection(self.layers.selected_id(), merged, cut)
+        self.live.touch()
+
+    ## The clipboard's image on a new layer just above the selected one, centred
+    ## on a document point, and selected.
+    pub func paste(self, x: float, y: float) -> unit!:
+        let canvas = self.live.canvas
+        let parent = canvas.layer_parent(self.layers.selected)
+        let position = canvas.layer_position(self.layers.selected)
+        self.as_one("Paste", func () -> unit!:
+            let id = canvas.paste(int(x), int(y))
+            canvas.move_into(id, parent, position + 1)
+            self.layers.select_id(id))
+
+    ## The clipboard's image where it was copied from, above the selected layer.
+    pub func paste_in_place(self) -> unit!:
+        let canvas = self.live.canvas
+        let parent = canvas.layer_parent(self.layers.selected)
+        let position = canvas.layer_position(self.layers.selected)
+        self.as_one("Paste in Place", func () -> unit!:
+            let id = canvas.paste_in_place()
+            canvas.move_into(id, parent, position + 1)
+            self.layers.select_id(id))
+
+    ## Layer via Copy (via Cut with `cut`): a new layer of the selected pixels, selected.
+    pub func layer_via_copy(self, cut: bool) -> unit!:
+        let id = self.live.canvas.layer_via_copy(self.layers.selected_id(), cut)
+        self.layers.select_id(id)
+
+    # -- Appearance.
+
+    ## The blend mode's name of the layer at stack index `index`.
+    pub func blend_name(self, index: int) -> str!:
+        return Canvas.blend_mode_name(self.live.canvas.layer_blend(index))
+
+    ## Set the selected layer's visibility, opacity and blend mode together, as
+    ## the canvas takes them.
+    func set_appearance(self, visible: bool, opacity: float, blend: int) -> unit!:
+        self.live.canvas.set_layer(self.layers.selected_id(), visible, math.max(0.0, math.min(1.0, opacity)), blend)
+        self.live.touch()
+
+    pub func toggle_visibility(self) -> unit!:
+        let canvas = self.live.canvas
+        let at = self.layers.selected
+        self.set_appearance(not canvas.layer_visible(at), canvas.layer_opacity(at), canvas.layer_blend(at))
+
+    pub func set_opacity(self, opacity: float) -> unit!:
+        let canvas = self.live.canvas
+        let at = self.layers.selected
+        self.set_appearance(canvas.layer_visible(at), opacity, canvas.layer_blend(at))
+
+    pub func set_blend(self, mode: int) -> unit!:
+        let canvas = self.live.canvas
+        let at = self.layers.selected
+        self.set_appearance(canvas.layer_visible(at), canvas.layer_opacity(at), mode)
+
+    ## Step the selected layer's blend mode `step` places through Photoshop's list, wrapping.
+    pub func cycle_blend(self, step: int) -> unit!:
+        let count = Canvas.blend_mode_count()
+        self.set_blend((self.live.canvas.layer_blend(self.layers.selected) + step % count + count) % count)
+
+    pub func toggle_clipped(self) -> unit!:
+        let canvas = self.live.canvas
+        canvas.set_clipped(self.layers.selected_id(), not canvas.layer_clipped(self.layers.selected))
+        self.live.touch()
+
+    # -- Masks.
+
+    ## Add a mask — revealing the selection when there is one, as Photoshop's
+    ## button does, else everything; `hide` hides everything instead — or
+    ## remove the mask the layer has. A new mask is what painting targets
+    ## next, as in Photoshop.
+    pub func toggle_mask(self, hide: bool = false) -> unit!:
+        let canvas = self.live.canvas
+        if canvas.layer_masked(self.layers.selected):
+            canvas.set_mask(self.layers.selected_id(), false)
+            canvas.edit_mask(false)
+        else:
+            canvas.set_mask(self.layers.selected_id(), true, 1 if hide else (2 if canvas.has_selection() else 0))
+            canvas.edit_mask(true)
+        self.live.touch()
+
+    ## Link the selected layer's mask to its pixels, or unlink it (it stays put
+    ## when they move).
+    pub func toggle_mask_link(self) -> unit!:
+        let canvas = self.live.canvas
+        canvas.link_mask(self.layers.selected_id(), not canvas.layer_mask_linked(self.layers.selected))
+        self.live.touch()
+
+    ## Remember the selected layer's mask for Paste Mask.
+    pub func copy_mask(self) -> unit!:
+        if not self.live.canvas.layer_masked(self.layers.selected):
+            error(ui.invalid, "the layer has no mask to copy")
+        self.mask_source = self.layers.selected_id()
+
+    ## Give the selected layer a copy of the mask Copy Mask remembered.
+    pub func paste_mask(self) -> unit!:
+        if not self.mask_source_present():
+            error(ui.invalid, "copy a layer's mask first")
+        self.live.canvas.copy_mask(self.mask_source, self.layers.selected_id())
+        self.live.canvas.edit_mask(true)
+        self.live.touch()
+
+    ## Whether the layer Copy Mask remembered is still here with its mask.
+    pub func mask_source_present(self) -> bool!:
+        let index = self.layers.index_of(self.mask_source)
+        return self.mask_source != 0 and index >= 0 and self.live.canvas.layer_masked(index)
+
+    ## Keep the selected layer's mask but stop it hiding anything, or bring it back.
+    pub func toggle_mask_enabled(self) -> unit!:
+        let canvas = self.live.canvas
+        if canvas.layer_masked(self.layers.selected):
+            canvas.enable_mask(self.layers.selected_id(), not canvas.layer_mask_enabled(self.layers.selected))
+            self.live.touch()
+
+    ## The selected layer's transparency becomes the selection.
+    pub func load_transparency(self) -> unit!:
+        self.live.canvas.select_from_layer(self.layers.selected_id(), false, 0)
+        self.live.touch()
+
+    ## \: paint on the selected layer's mask, or back on its pixels.
+    pub func toggle_mask_editing(self) -> unit!:
+        let canvas = self.live.canvas
+        canvas.edit_mask(canvas.layer_masked(self.layers.selected) and not canvas.editing_mask())
+        self.live.touch()
+
+    # -- Moving.
+
+    ## Move every selected layer by whole pixels, as one undo step; a group
+    ## moves what it holds.
+    pub func move_layer(self, dx: int, dy: int) -> unit!:
+        var first = true
+        for id in self.layers.moving_ids():
+            if not first:
+                self.live.canvas.join_next_edit()
+            self.live.canvas.move_layer(id, dx, dy)
+            first = false
+        self.live.touch()

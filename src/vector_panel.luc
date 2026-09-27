@@ -116,7 +116,7 @@ pub class VectorPanel:
 
     func begin_rename(self, element: int, x: float, y: float) -> unit!:
         self.renaming = element
-        self.rename_field.set_text(self.workspace.canvas.element_name(self.workspace.selected, element))
+        self.rename_field.set_text(self.workspace.canvas.element_name(self.workspace.layers.selected, element))
         let field_box = self.rename_field.layout()
         field_box.set_popup_point(x - 4.0, y)
         field_box.set_visible(true)
@@ -128,7 +128,7 @@ pub class VectorPanel:
         self.rename_field.layout().set_visible(false)
         let trimmed = name.trim()
         let workspace = self.workspace
-        if element < 0 or element >= element_count(workspace) or trimmed == "" or trimmed == workspace.canvas.element_name(workspace.selected, element):
+        if element < 0 or element >= element_count(workspace) or trimmed == "" or trimmed == workspace.canvas.element_name(workspace.layers.selected, element):
             return
         self.attempt("Rename Vector", func () -> unit!:
             rename_element(workspace, element, trimmed))

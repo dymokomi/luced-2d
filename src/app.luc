@@ -38,7 +38,7 @@ pub class Luce2D:
         # The tool options as the last run left them, the tool in hand with them.
         restore_tools(workspace, tools_path())
         let panels = Panels(workspace, actions, font, store)
-        panels.choose_tool(workspace.tool)
+        panels.choose_tool(workspace.tools.tool)
         # The panels as the last run left them.
         panels.dock_layout.restore(layout_path())
         let app = Application(panels.body, title = "luced-2d", width = 1400, height = 900, theme = theme.editor_theme(workspace.look))
@@ -91,7 +91,7 @@ pub class Luce2D:
         # Luce's `main` gets the arguments without the program: each is a file to open.
         for argument in arguments:
             if argument.length > 0 and argument != "--smoke":
-                self.workspace.open(argument)
+                self.workspace.documents.open(argument)
                 self.panels.refresh()
         self.app.run(frame_limit = 3 if "--smoke" in arguments else 0)
 

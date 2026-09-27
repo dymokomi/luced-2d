@@ -114,37 +114,37 @@ pub func main(arguments: list[str]) -> int!:
 
 func layers() -> unit!:
     let workspace = Workspace(640, 480)
-    assert(workspace.width() == 640 and workspace.height() == 480 and workspace.layer_count() == 1)
-    workspace.add_layer()
-    workspace.add_layer()
-    assert(workspace.layer_count() == 3 and workspace.selected == 2)
-    workspace.toggle_visibility()
+    assert(workspace.canvas.width() == 640 and workspace.canvas.height() == 480 and workspace.canvas.layer_count() == 1)
+    workspace.edits.add_layer()
+    workspace.edits.add_layer()
+    assert(workspace.canvas.layer_count() == 3 and workspace.layers.selected == 2)
+    workspace.edits.toggle_visibility()
     assert(not workspace.canvas.layer_visible(2))
-    workspace.set_opacity(0.25)
+    workspace.edits.set_opacity(0.25)
     assert(workspace.canvas.layer_opacity(2) == 0.25)
-    workspace.select(0)
-    workspace.delete_layer()
-    assert(workspace.layer_count() == 2 and workspace.selected == 0)
-    workspace.create(32, 16)
-    assert(workspace.width() == 32 and workspace.layer_count() == 1 and workspace.path == "")
+    workspace.layers.select(0)
+    workspace.edits.delete_layer()
+    assert(workspace.canvas.layer_count() == 2 and workspace.layers.selected == 0)
+    workspace.documents.create(32, 16)
+    assert(workspace.canvas.width() == 32 and workspace.canvas.layer_count() == 1 and workspace.live.path == "")
 
 func viewing() -> unit!:
     let workspace = Workspace(200, 100)
-    workspace.fit(1000.0, 600.0)
-    assert(workspace.zoom == 4.6 and workspace.offset_x == 40.0 and workspace.offset_y == 70.0)
-    workspace.zoom_about(2.0, 40.0, 70.0)
-    assert(workspace.zoom == 9.2 and workspace.offset_x == 40.0 and workspace.offset_y == 70.0)
+    workspace.viewport.fit(1000.0, 600.0)
+    assert(workspace.viewport.zoom == 4.6 and workspace.viewport.offset_x == 40.0 and workspace.viewport.offset_y == 70.0)
+    workspace.viewport.zoom_about(2.0, 40.0, 70.0)
+    assert(workspace.viewport.zoom == 9.2 and workspace.viewport.offset_x == 40.0 and workspace.viewport.offset_y == 70.0)
     # Zooming and panning keep the first fit done, so the view does not fit again over them.
-    assert(workspace.fitted)
-    workspace.pan(5.0, 5.0)
-    assert(workspace.fitted and workspace.zoom == 9.2)
-    workspace.pan(-5.0, -5.0)
-    workspace.zoom_about(0.5, 0.0, 0.0)
-    assert(workspace.zoom == 4.6 and workspace.offset_x == 20.0 and workspace.offset_y == 35.0)
-    workspace.pan(5.0, -5.0)
-    assert(workspace.offset_x == 25.0 and workspace.offset_y == 30.0)
-    workspace.actual_size(1000.0, 600.0)
-    assert(workspace.zoom == 1.0 and workspace.offset_x == 400.0 and workspace.offset_y == 250.0)
+    assert(workspace.viewport.fitted)
+    workspace.viewport.pan(5.0, 5.0)
+    assert(workspace.viewport.fitted and workspace.viewport.zoom == 9.2)
+    workspace.viewport.pan(-5.0, -5.0)
+    workspace.viewport.zoom_about(0.5, 0.0, 0.0)
+    assert(workspace.viewport.zoom == 4.6 and workspace.viewport.offset_x == 20.0 and workspace.viewport.offset_y == 35.0)
+    workspace.viewport.pan(5.0, -5.0)
+    assert(workspace.viewport.offset_x == 25.0 and workspace.viewport.offset_y == 30.0)
+    workspace.viewport.actual_size(1000.0, 600.0)
+    assert(workspace.viewport.zoom == 1.0 and workspace.viewport.offset_x == 400.0 and workspace.viewport.offset_y == 250.0)
     let view = CanvasView(workspace)
     view.layout().set_size(1000.0, 600.0)
     let frame = Frame(window.Size(1000.0, 600.0, 1000.0, 600.0, 1.0))
@@ -158,24 +158,24 @@ func contents() -> unit!:
     let actions = Actions()
     let panels = Panels(workspace, actions, font)
     actions.add_layer.trigger()
-    assert(workspace.layer_count() == 2)
+    assert(workspace.canvas.layer_count() == 2)
     panels.select_layer(0)
-    assert(workspace.selected == 0)
+    assert(workspace.layers.selected == 0)
     actions.zoom_in.trigger()
-    assert(workspace.zoom == 2.0)
+    assert(workspace.viewport.zoom == 2.0)
     assert(not actions.undo.is_enabled() and not actions.crop.is_enabled())
     actions.select_all.trigger()
     assert(actions.crop.is_enabled())
     actions.tools[10].trigger()
-    assert(workspace.tool == "brush")
+    assert(workspace.tools.tool == "brush")
     actions.tools[5].trigger()
-    assert(workspace.tool == "wand")
+    assert(workspace.tools.tool == "wand")
     # The Crop tool's box starts around the whole canvas and goes with the tool.
     actions.tools[6].trigger()
-    let crop = workspace.crop_box else trap("the crop tool shows its box")
-    assert(workspace.tool == "crop" and crop.width() == 300 and crop.height() == 200)
+    let crop = workspace.image.crop_box else trap("the crop tool shows its box")
+    assert(workspace.tools.tool == "crop" and crop.width() == 300 and crop.height() == 200)
     actions.tools[5].trigger()
-    assert(workspace.crop_box == none)
+    assert(workspace.image.crop_box == none)
     # Brush Settings opens floating, once; docked, it stays where it was put.
     panels.open_brush()
     assert(panels.dock.is_floating(panels.brush.panel) and panels.dock.panel_count() == 6)
@@ -244,34 +244,34 @@ func tool_gestures() -> unit!:
     let workspace = Workspace(300, 200)
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     # Z down picks the zoom tool (its shortcut); a drag right 100 points doubles.
     panels.choose_tool("zoom")
     press(view, 100.0, 100.0)
     drag_to(view, 200.0, 100.0)
     release(view, 200.0, 100.0)
-    assert(math.abs(workspace.zoom - 2.0) < 0.001)
+    assert(math.abs(workspace.viewport.zoom - 2.0) < 0.001)
     view.event(Event(kind = EventKind.key_up, key = Key.z))
-    assert(workspace.tool == "brush")
+    assert(workspace.tools.tool == "brush")
     # A tap of Z keeps the zoom tool; a click zooms in a step (200% to 300%), alt-click out.
     panels.choose_tool("zoom")
     view.event(Event(kind = EventKind.key_up, key = Key.z))
-    assert(workspace.tool == "zoom")
+    assert(workspace.tools.tool == "zoom")
     press(view, 50.0, 50.0)
     release(view, 50.0, 50.0)
-    assert(math.abs(workspace.zoom - 3.0) < 0.001)
+    assert(math.abs(workspace.viewport.zoom - 3.0) < 0.001)
     press(view, 50.0, 50.0, alt = true)
     release(view, 50.0, 50.0, alt = true)
-    assert(math.abs(workspace.zoom - 2.0) < 0.001)
+    assert(math.abs(workspace.viewport.zoom - 2.0) < 0.001)
     # Another key let go does not spring back.
     view.event(Event(kind = EventKind.key_up, key = Key.b))
-    assert(workspace.tool == "zoom")
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    assert(workspace.tools.tool == "zoom")
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     # Shift pressed mid-drag squares the marquee to its longer side.
     panels.choose_tool("marquee")
     press(view, 10.0, 10.0)
@@ -317,37 +317,37 @@ func tool_gestures() -> unit!:
     # digit starts afresh: with the move tool, 3 is the layer's 30%.
     panels.choose_tool("brush")
     view.event(Event(kind = EventKind.key_down, key = Key.digit_4))
-    assert(math.abs(workspace.brush.opacity - 0.4) < 0.001)
+    assert(math.abs(workspace.tools.brush.opacity - 0.4) < 0.001)
     view.event(Event(kind = EventKind.key_down, key = Key.digit_5))
-    assert(math.abs(workspace.brush.opacity - 0.45) < 0.001)
+    assert(math.abs(workspace.tools.brush.opacity - 0.45) < 0.001)
     panels.choose_tool("move")
     view.event(Event(kind = EventKind.key_down, key = Key.digit_3))
-    assert(math.abs(workspace.canvas.layer_opacity(workspace.selected) - 0.3) < 0.001)
+    assert(math.abs(workspace.canvas.layer_opacity(workspace.layers.selected) - 0.3) < 0.001)
     # The Move tool's Auto-Select checkbox in the header toggles the setting.
-    assert(not workspace.auto_select)
+    assert(not workspace.tools.auto_select)
     panels.header.auto_select_box.event(Event(kind = EventKind.key_down, key = Key.space))
-    assert(workspace.auto_select)
+    assert(workspace.tools.auto_select)
     panels.header.auto_select_box.event(Event(kind = EventKind.key_down, key = Key.space))
-    assert(not workspace.auto_select)
+    assert(not workspace.tools.auto_select)
     # Shift ] and Shift [ step the hardness; ] and [ always change the size, even at one pixel.
-    workspace.brush.hardness = 0.5
+    workspace.tools.brush.hardness = 0.5
     panels.actions.harder.trigger()
-    assert(math.abs(workspace.brush.hardness - 0.75) < 0.001)
+    assert(math.abs(workspace.tools.brush.hardness - 0.75) < 0.001)
     panels.actions.softer.trigger()
     panels.actions.softer.trigger()
     panels.actions.softer.trigger()
-    assert(workspace.brush.hardness == 0.0)
-    workspace.brush.diameter = 1.0
+    assert(workspace.tools.brush.hardness == 0.0)
+    workspace.tools.brush.diameter = 1.0
     panels.actions.bigger.trigger()
-    assert(workspace.brush.diameter == 2.0)
+    assert(workspace.tools.brush.diameter == 2.0)
     panels.actions.smaller.trigger()
-    assert(workspace.brush.diameter == 1.0)
+    assert(workspace.tools.brush.diameter == 1.0)
     # Shift + and Shift - step the layer's blend mode, wrapping.
     panels.actions.next_blend.trigger()
-    assert(workspace.canvas.layer_blend(workspace.selected) == 1)
+    assert(workspace.canvas.layer_blend(workspace.layers.selected) == 1)
     panels.actions.previous_blend.trigger()
     panels.actions.previous_blend.trigger()
-    assert(workspace.canvas.layer_blend(workspace.selected) == Canvas.blend_mode_count() - 1)
+    assert(workspace.canvas.layer_blend(workspace.layers.selected) == Canvas.blend_mode_count() - 1)
     panels.close()
 
 func near(a: float, b: float) -> bool:
@@ -421,25 +421,25 @@ func boxes() -> unit!:
 ## takes one out, Shift-click takes a run, a plain select keeps one.
 func picking() -> unit!:
     let workspace = Workspace(64, 64)
-    workspace.add_layer()
-    workspace.add_layer()
-    workspace.add_layer()
-    assert(workspace.layer_count() == 4 and workspace.selected == 3)
-    workspace.toggle_picked(1)
-    assert(workspace.selected == 1 and workspace.is_selected(3) and workspace.is_selected(1) and not workspace.is_selected(2))
-    let ids = workspace.selected_ids()
+    workspace.edits.add_layer()
+    workspace.edits.add_layer()
+    workspace.edits.add_layer()
+    assert(workspace.canvas.layer_count() == 4 and workspace.layers.selected == 3)
+    workspace.layers.toggle_picked(1)
+    assert(workspace.layers.selected == 1 and workspace.layers.is_selected(3) and workspace.layers.is_selected(1) and not workspace.layers.is_selected(2))
+    let ids = workspace.layers.selected_ids()
     assert(ids.length == 2 and ids[0] == workspace.canvas.layer_id(1) and ids[1] == workspace.canvas.layer_id(3))
     # Cmd-click again takes it out; the one the tools act on stays.
-    workspace.toggle_picked(3)
-    assert(not workspace.is_selected(3) and workspace.selected_ids().length == 1)
-    workspace.pick_range(3)
-    assert(workspace.selected == 3 and workspace.selected_ids().length == 3 and not workspace.is_selected(0))
-    workspace.select(0)
-    assert(workspace.selected_ids().length == 1)
+    workspace.layers.toggle_picked(3)
+    assert(not workspace.layers.is_selected(3) and workspace.layers.selected_ids().length == 1)
+    workspace.layers.pick_range(3)
+    assert(workspace.layers.selected == 3 and workspace.layers.selected_ids().length == 3 and not workspace.layers.is_selected(0))
+    workspace.layers.select(0)
+    assert(workspace.layers.selected_ids().length == 1)
     # Deleting several at once keeps the rest.
-    workspace.pick_range(2)
-    workspace.delete_layer()
-    assert(workspace.layer_count() == 1)
+    workspace.layers.pick_range(2)
+    workspace.edits.delete_layer()
+    assert(workspace.canvas.layer_count() == 1)
 
 ## The adjustments' table: every kind at its engine number, its values laid
 ## out page by page then toggles, and the engine's numbers read back as shown.
@@ -462,18 +462,18 @@ func adjustment_table() -> unit!:
 func retouch_tools() -> unit!:
     let workspace = Workspace(64, 64)
     workspace.choose_tool("brush")
-    assert(workspace.retouch_kind() == 0)
+    assert(workspace.tools.retouch_kind() == 0)
     workspace.choose_tool("clone")
-    assert(workspace.retouch_kind() == 1)
+    assert(workspace.tools.retouch_kind() == 1)
     workspace.choose_tool("heal")
-    assert(workspace.retouch_kind() == 2)
+    assert(workspace.tools.retouch_kind() == 2)
     workspace.choose_tool("smear")
-    assert(workspace.retouch_kind() == 4)
-    workspace.smear_mode = 1
-    assert(workspace.retouch_kind() == 3)
-    workspace.smear_mode = 2
-    assert(workspace.retouch_kind() == 5)
-    workspace.set_clone_source(10.0, 12.0)
+    assert(workspace.tools.retouch_kind() == 4)
+    workspace.tools.smear_mode = 1
+    assert(workspace.tools.retouch_kind() == 3)
+    workspace.tools.smear_mode = 2
+    assert(workspace.tools.retouch_kind() == 5)
+    workspace.painting.set_clone_source(10.0, 12.0)
     assert(workspace.canvas.has_clone_source() and workspace.canvas.clone_sample_x(40.0) == 10.0)
 
 ## Unsaved work: a changed tab asks before it closes and quitting asks too;
@@ -484,29 +484,29 @@ func unsaved_changes(arguments: list[str]) -> unit!:
     let workspace = Workspace(64, 48)
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
-    assert(not workspace.document_dirty(0) and panels.files.can_quit())
-    workspace.add_layer()
-    assert(workspace.document_dirty(0))
+    assert(not workspace.documents.dirty(0) and panels.files.can_quit())
+    workspace.edits.add_layer()
+    assert(workspace.documents.dirty(0))
     panels.files.close_document_at(0)
-    assert(panels.files.confirm.is_open() and workspace.document_count() == 1 and workspace.layer_count() == 2)
+    assert(panels.files.confirm.is_open() and workspace.documents.count() == 1 and workspace.canvas.layer_count() == 2)
     assert(not panels.files.can_quit())
-    assert(workspace.export_name(".png") == "Untitled.png")
-    workspace.save(folder + "/unsaved")
-    assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0))
-    assert(workspace.export_name(".jpg") == "unsaved.jpg")
-    workspace.export(folder + "/unsaved.png")
-    assert(workspace.path == folder + "/unsaved.l2d" and not workspace.document_dirty(0) and panels.files.can_quit())
+    assert(workspace.documents.export_name(".png") == "Untitled.png")
+    workspace.documents.save(folder + "/unsaved")
+    assert(workspace.live.path == folder + "/unsaved.l2d" and not workspace.documents.dirty(0))
+    assert(workspace.documents.export_name(".jpg") == "unsaved.jpg")
+    workspace.documents.export(folder + "/unsaved.png")
+    assert(workspace.live.path == folder + "/unsaved.l2d" and not workspace.documents.dirty(0) and panels.files.can_quit())
     # Nothing past the canvas: Reveal All has nothing to do.
-    assert(not workspace.reveal_all())
+    assert(not workspace.image.reveal_all())
     # The saved file opens in a tab of its own, its two layers back, and the
     # layer selected when it was saved selected again.
-    workspace.select(0)
-    workspace.save(folder + "/copy")
-    workspace.open(folder + "/unsaved.l2d")
-    assert(workspace.document_count() == 2 and workspace.layer_count() == 2 and workspace.path == folder + "/unsaved.l2d")
-    assert(workspace.selected == 1)
-    workspace.open(folder + "/copy.l2d")
-    assert(workspace.selected == 0)
+    workspace.layers.select(0)
+    workspace.documents.save(folder + "/copy")
+    workspace.documents.open(folder + "/unsaved.l2d")
+    assert(workspace.documents.count() == 2 and workspace.canvas.layer_count() == 2 and workspace.live.path == folder + "/unsaved.l2d")
+    assert(workspace.layers.selected == 1)
+    workspace.documents.open(folder + "/copy.l2d")
+    assert(workspace.layers.selected == 0)
     panels.close()
 
 ## The Layers panel's operations: titles fitted to the selection, groups
@@ -519,25 +519,25 @@ func layer_panel_ops() -> unit!:
     let panels = Panels(workspace, actions, Font())
     actions.add_layer.trigger()
     actions.add_layer.trigger()
-    assert(workspace.layer_count() == 3 and workspace.selected == 2)
-    workspace.toggle_picked(1)
+    assert(workspace.canvas.layer_count() == 3 and workspace.layers.selected == 2)
+    workspace.layers.toggle_picked(1)
     panels.layers_panel.fit_titles()
     assert(actions.merge_down.text() == "Merge Layers" and actions.delete_layer.text() == "Delete Selected Layers" and not actions.rename_layer.is_enabled())
     actions.group_layers.trigger()
-    assert(workspace.layer_count() == 4 and workspace.canvas.layer_is_group(workspace.selected))
+    assert(workspace.canvas.layer_count() == 4 and workspace.canvas.layer_is_group(workspace.layers.selected))
     panels.layers_panel.fit_titles()
     assert(actions.merge_down.text() == "Merge Group")
     # The group's copy holds copies of its two layers.
     actions.duplicate_layer.trigger()
-    assert(workspace.layer_count() == 7 and workspace.canvas.layer_is_group(workspace.selected))
+    assert(workspace.canvas.layer_count() == 7 and workspace.canvas.layer_is_group(workspace.layers.selected))
     actions.merge_down.trigger()
-    assert(workspace.layer_count() == 5 and not workspace.canvas.layer_is_group(workspace.selected))
+    assert(workspace.canvas.layer_count() == 5 and not workspace.canvas.layer_is_group(workspace.layers.selected))
     assert(workspace.canvas.undo_name() == "Merge Group")
     # Every selected layer takes the opacity, in one step.
-    workspace.select(0)
-    workspace.toggle_picked(workspace.layer_count() - 1)
+    workspace.layers.select(0)
+    workspace.layers.toggle_picked(workspace.canvas.layer_count() - 1)
     set_opacity_all(workspace, 0.25)
-    assert(workspace.canvas.layer_opacity(0) == 0.25 and workspace.canvas.layer_opacity(workspace.layer_count() - 1) == 0.25)
+    assert(workspace.canvas.layer_opacity(0) == 0.25 and workspace.canvas.layer_opacity(workspace.canvas.layer_count() - 1) == 0.25)
     let keys = OpacityKeys()
     assert(keys.typed(5, 1000) == 0.5 and keys.typed(5, 1200) == 0.55 and keys.typed(0, 5000) == 1.0 and keys.typed(0, 5100) == 0.0)
     panels.close()
@@ -555,18 +555,18 @@ func size_dialogs() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let dialogs = panels.size_dialogs
-    workspace.set_color(1.0, 0.0, 0.0)
-    workspace.fill_selection(false)
+    workspace.colors.set_color(1.0, 0.0, 0.0)
+    workspace.painting.fill_selection(false)
     # Grown to 60 by 50 about the bottom-right corner, the new canvas white on a layer of its own.
     dialogs.canvas_size.resize(60, 50, 8, 4)
-    assert(workspace.width() == 60 and workspace.height() == 50 and workspace.layer_count() == 2)
+    assert(workspace.canvas.width() == 60 and workspace.canvas.height() == 50 and workspace.canvas.layer_count() == 2)
     assert(workspace.canvas.layer_name(0) == "Canvas Extension" and workspace.canvas.undo_name() == "Canvas Size")
     # Trimmed by the top-left color (the white extension): back to the red picture.
     assert(dialogs.trim.trim(1, true, true, true, true))
-    assert(workspace.width() == 40 and workspace.height() == 30)
+    assert(workspace.canvas.width() == 40 and workspace.canvas.height() == 30)
     assert(not dialogs.trim.trim(0, true, true, true, true))
     workspace.canvas.undo()
-    assert(workspace.width() == 60)
+    assert(workspace.canvas.width() == 60)
     # One dialog at a time: Canvas Size waits while New Canvas is open. Escape
     # cancels the open one; Enter accepts it (New Canvas creates).
     let app = Application(panels.body)
@@ -577,11 +577,11 @@ func size_dialogs() -> unit!:
     app.layout(1200.0, 800.0)
     app.dispatch(Event(kind = EventKind.key_down, key = Key.escape))
     assert(not dialogs.new_canvas.dialog.is_open())
-    let before = workspace.document_count()
+    let before = workspace.documents.count()
     dialogs.new_canvas.open()
     app.layout(1200.0, 800.0)
     app.dispatch(Event(kind = EventKind.key_down, key = Key.enter))
-    assert(not dialogs.new_canvas.dialog.is_open() and workspace.document_count() == before + 1)
+    assert(not dialogs.new_canvas.dialog.is_open() and workspace.documents.count() == before + 1)
     app.close()
     panels.close()
 
@@ -606,10 +606,10 @@ func selection_tools() -> unit!:
     lasso.cancel()
     assert(not lasso.active)
     # The header's mode applies without modifiers; the modifiers still win.
-    workspace.selecting.mode = 1
-    assert(workspace.selecting.mode_for(false, false) == 1 and workspace.selecting.mode_for(false, true) == 2 and workspace.selecting.mode_for(true, true) == 3)
-    workspace.selecting.feather = 3
-    workspace.select_shape(50.0, 30.0, 62.0, 46.0, false, workspace.selecting.mode_for(false, false))
+    workspace.tools.selecting.mode = 1
+    assert(workspace.tools.selecting.mode_for(false, false) == 1 and workspace.tools.selecting.mode_for(false, true) == 2 and workspace.tools.selecting.mode_for(true, true) == 3)
+    workspace.tools.selecting.feather = 3
+    workspace.selection.select_shape(50.0, 30.0, 62.0, 46.0, false, workspace.tools.selecting.mode_for(false, false))
     assert(workspace.canvas.selected_at(35, 15) == 255 and workspace.canvas.selected_at(56, 38) > 200 and workspace.canvas.selected_at(50, 38) < 255)
 
 ## Guides out of a ruler, moved, dragged back to go; snapping to the canvas,
@@ -633,13 +633,13 @@ func guides_and_snapping() -> unit!:
     guides.drag(-5.0, 20.0, true)
     guides.finish(workspace)
     assert(workspace.canvas.guide_count() == 1)
-    workspace.lock_guides = true
+    workspace.viewport.lock_guides = true
     assert(guides.hit(workspace, 100.0, 50.0, 2.0) == -1)
     # The snapper: a box moved near the guide at 100 and the canvas's right edge.
     let snapper = Snapper()
     snapper.gather(workspace, [], true)
     assert(snapper.shift_x(95.0, 120.0) == 5.0 and snapper.snap_x(197.0) == 200.0 and snapper.snap_y(30.0) == 30.0)
-    workspace.snap = false
+    workspace.viewport.snap = false
     snapper.gather(workspace, [], true)
     assert(snapper.snap_x(197.0) == 197.0)
 
@@ -652,10 +652,10 @@ func live_text() -> unit!:
     let panels = Panels(workspace, actions, Font())
     let editing = panels.text_editing
     editing.begin_new(10.0, 10.0, 0.0)
-    assert(editing.active() and workspace.layer_count() == 2 and workspace.canvas.layer_typed(1))
+    assert(editing.active() and workspace.canvas.layer_count() == 2 and workspace.canvas.layer_typed(1))
     editing.replace_text("Hello there")
     assert(workspace.canvas.layer_text(1) == "Hello there")
-    workspace.typing.size = 20.0
+    workspace.tools.typing.size = 20.0
     editing.restyle()
     assert(workspace.canvas.layer_type_value(1, 0) == 20.0)
     actions.commit_text.trigger()
@@ -663,11 +663,11 @@ func live_text() -> unit!:
     # Making, naming and typing a new text layer is one undo step.
     assert(workspace.canvas.undo_name() == "Add Text")
     # Edited again, it brings its own settings; cancelled, it says what it said.
-    workspace.typing.size = 60.0
+    workspace.tools.typing.size = 60.0
     editing.begin_existing(1)
-    assert(workspace.typing.size == 20.0)
+    assert(workspace.tools.typing.size == 20.0)
     editing.replace_text("Changed")
-    workspace.typing.size = 44.0
+    workspace.tools.typing.size = 44.0
     editing.restyle()
     editing.cancel()
     assert(workspace.canvas.layer_text(1) == "Hello there" and workspace.canvas.layer_type_value(1, 0) == 20.0)
@@ -680,18 +680,18 @@ func live_text() -> unit!:
     editing.begin_new(80.0, 80.0, 0.0)
     editing.replace_text("Gone")
     editing.cancel()
-    assert(workspace.layer_count() == 2 and not workspace.canvas.modified())
+    assert(workspace.canvas.layer_count() == 2 and not workspace.canvas.modified())
     # Its box, not only its ink, is where a click edits it; the header restyles it once committed.
-    assert(workspace.text_layer_at(12.0, 15.0, 2.0) == 1 and workspace.text_layer_at(190.0, 110.0, 2.0) == -1)
-    workspace.select(1)
-    workspace.typing.style = "Bold"
-    workspace.typing.size = 30.0
+    assert(workspace.layers.text_layer_at(12.0, 15.0, 2.0) == 1 and workspace.layers.text_layer_at(190.0, 110.0, 2.0) == -1)
+    workspace.layers.select(1)
+    workspace.tools.typing.style = "Bold"
+    workspace.tools.typing.size = 30.0
     editing.restyle()
     assert(workspace.canvas.layer_font_style(1) == "Bold" and workspace.canvas.layer_type_value(1, 0) == 30.0 and workspace.canvas.layer_text(1) == "Hello there")
     # Left empty, a new one goes.
     editing.begin_new(50.0, 50.0, 100.0)
     editing.commit()
-    assert(workspace.layer_count() == 2)
+    assert(workspace.canvas.layer_count() == 2)
     panels.close()
 
 ## A gradient stays live after its drag: a handle moves its end, Enter keeps
@@ -701,16 +701,16 @@ func live_gradient() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     panels.choose_tool("gradient")
     let steps = workspace.canvas.step_serial()
     press(view, 10.0, 50.0)
     drag_to(view, 100.0, 50.0)
     release(view, 100.0, 50.0)
-    if let edit = workspace.gradient:
+    if let edit = workspace.painting.gradient:
         assert(edit.x0 == 10.0 and edit.x1 == 100.0)
     else:
         assert(false)
@@ -719,10 +719,10 @@ func live_gradient() -> unit!:
     press(view, 100.0, 50.0)
     drag_to(view, 180.0, 58.0, shift = true)
     release(view, 180.0, 58.0, shift = true)
-    if let edit = workspace.gradient:
+    if let edit = workspace.painting.gradient:
         assert(math.abs(edit.y1 - 50.0) < 0.001 and edit.x1 > 170.0)
     view.event(Event(kind = EventKind.key_down, key = Key.enter))
-    assert(workspace.gradient == none and not workspace.canvas.previewing() and workspace.canvas.step_serial() == steps + 1)
+    assert(workspace.painting.gradient == none and not workspace.canvas.previewing() and workspace.canvas.step_serial() == steps + 1)
     # A new drag keeps the one before; Esc drops the new one.
     press(view, 20.0, 20.0)
     drag_to(view, 20.0, 90.0)
@@ -732,7 +732,7 @@ func live_gradient() -> unit!:
     release(view, 150.0, 90.0)
     assert(workspace.canvas.step_serial() == steps + 2)
     view.event(Event(kind = EventKind.key_down, key = Key.escape))
-    assert(workspace.gradient == none and workspace.canvas.step_serial() == steps + 2)
+    assert(workspace.painting.gradient == none and workspace.canvas.step_serial() == steps + 2)
     panels.close()
 
 ## The Crop tool's box starts at the selection, fits a ratio about its middle,
@@ -742,12 +742,12 @@ func crop_box_options() -> unit!:
     workspace.canvas.bind_headless()
     workspace.canvas.select_rectangle(100, 50, 200, 100)
     workspace.choose_tool("crop")
-    if let box = workspace.crop_box:
+    if let box = workspace.image.crop_box:
         assert(box.left == 100.0 and box.top == 50.0 and box.width() == 200 and box.height() == 100)
     else:
         assert(false)
-    workspace.set_crop_ratio(1.0)
-    if let box = workspace.crop_box:
+    workspace.image.set_crop_ratio(1.0)
+    if let box = workspace.image.crop_box:
         # Square, the largest inside, about the middle.
         assert(box.width() == 100 and box.height() == 100 and box.left == 150.0)
         # The right edge dragged out 40: the height follows, about the middle.
@@ -755,8 +755,8 @@ func crop_box_options() -> unit!:
         box.drag(290.0, 100.0, false)
         box.end()
         assert(box.width() == 140 and box.height() == 140)
-    workspace.set_crop_ratio(0.0)
-    if let box = workspace.crop_box:
+    workspace.image.set_crop_ratio(0.0)
+    if let box = workspace.image.crop_box:
         # Alt: the left edge moves in as far as the right is pulled out.
         let left = box.left
         let right = box.right
@@ -770,16 +770,16 @@ func crop_box_options() -> unit!:
 func mask_actions() -> unit!:
     let workspace = Workspace(120, 80)
     workspace.canvas.bind_headless()
-    workspace.add_layer()
-    let top = workspace.selected
-    workspace.toggle_mask()
+    workspace.edits.add_layer()
+    let top = workspace.layers.selected
+    workspace.edits.toggle_mask()
     assert(workspace.canvas.layer_masked(top) and workspace.canvas.editing_mask())
-    workspace.toggle_mask_link()
+    workspace.edits.toggle_mask_link()
     assert(not workspace.canvas.layer_mask_linked(top))
-    workspace.copy_mask()
-    workspace.select(0)
-    assert(workspace.mask_source_present())
-    workspace.paste_mask()
+    workspace.edits.copy_mask()
+    workspace.layers.select(0)
+    assert(workspace.edits.mask_source_present())
+    workspace.edits.paste_mask()
     assert(workspace.canvas.layer_masked(0) and workspace.canvas.editing_mask())
 
 ## A brush stroke through the view ends on release and is one undo step.
@@ -788,10 +788,10 @@ func stroke_undo() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     panels.choose_tool("brush")
     press(view, 10.0, 10.0)
     drag_to(view, 60.0, 40.0)
@@ -799,9 +799,9 @@ func stroke_undo() -> unit!:
     assert(not workspace.canvas.painting() and workspace.canvas.can_undo() and workspace.canvas.undo_name() == "Brush Stroke")
     # The frame's refresh shows it, and showing it changes nothing more.
     panels.refresh_if_changed()
-    let shown = workspace.revision
+    let shown = workspace.live.revision
     panels.refresh_if_changed()
-    assert(workspace.revision == shown)
+    assert(workspace.live.revision == shown)
     panels.close()
 
 class Sampled:
@@ -815,22 +815,22 @@ class Sampled:
 func eyedropper_sample() -> unit!:
     let workspace = Workspace(40, 30)
     workspace.canvas.bind_headless()
-    workspace.set_color(1.0, 0.0, 0.0)
-    workspace.fill_selection(false)
+    workspace.colors.set_color(1.0, 0.0, 0.0)
+    workspace.painting.fill_selection(false)
     let sampled = Sampled()
-    assert(not workspace.sample_to(5.0, 5.0))
-    workspace.sample_for = sampled.take
-    assert(workspace.sample_to(5.0, 5.0) and sampled.color.length == 3 and sampled.color[0] > 0.99 and sampled.color[1] < 0.01)
+    assert(not workspace.eyedroppers.sample_to(5.0, 5.0))
+    workspace.eyedroppers.sample_for = sampled.take
+    assert(workspace.eyedroppers.sample_to(5.0, 5.0) and sampled.color.length == 3 and sampled.color[0] > 0.99 and sampled.color[1] < 0.01)
 
 ## A layer's effects listed under it: the eye hides one and keeps it listed,
 ## the cross deletes it, and one copies to another layer with its settings.
 func effect_rows() -> unit!:
     let workspace = Workspace(40, 30)
     workspace.canvas.bind_headless()
-    workspace.add_layer()
-    let top = workspace.selected
-    workspace.set_style_value(0, 1.0)
-    workspace.set_style_value(3, 9.0)
+    workspace.edits.add_layer()
+    let top = workspace.layers.selected
+    workspace.previews.set_style_value(0, 1.0)
+    workspace.previews.set_style_value(3, 9.0)
     let rows = EffectRows()
     let shadow = 5
     assert(rows.listed(workspace.canvas, top) == [shadow])
@@ -848,14 +848,14 @@ func brush_sizing() -> unit!:
     let workspace = Workspace(120, 80)
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
     panels.choose_tool("brush")
-    let before = workspace.brush.diameter
+    let before = workspace.tools.brush.diameter
     view.event(Event(kind = EventKind.pointer_down, x = 50.0, y = 40.0, button = 1, inside = true))
     view.event(Event(kind = EventKind.pointer_moved, x = 80.0, y = 40.0, inside = true))
     view.event(Event(kind = EventKind.pointer_up, x = 80.0, y = 40.0, button = 1, inside = true))
-    assert(math.abs(workspace.brush.diameter - (before + 30.0)) < 0.001)
+    assert(math.abs(workspace.tools.brush.diameter - (before + 30.0)) < 0.001)
     panels.close()
 
 ## Whole layers: copied with nothing selected they paste above the selected
@@ -863,22 +863,22 @@ func brush_sizing() -> unit!:
 func whole_layers() -> unit!:
     let workspace = Workspace(40, 30)
     workspace.canvas.bind_headless()
-    workspace.add_layer()
-    workspace.set_style_value(0, 1.0)
+    workspace.edits.add_layer()
+    workspace.previews.set_style_value(0, 1.0)
     copy_layers(workspace, false)
     assert(Canvas.copied_layers() == 1)
     paste_layers(workspace, false)
-    assert(workspace.layer_count() == 3 and workspace.selected == 2 and workspace.canvas.style_value(2, 0) == 1.0)
+    assert(workspace.canvas.layer_count() == 3 and workspace.layers.selected == 2 and workspace.canvas.style_value(2, 0) == 1.0)
     copy_layers(workspace, true)
-    assert(workspace.layer_count() == 2)
+    assert(workspace.canvas.layer_count() == 2)
     paste_layers(workspace, true)
-    assert(workspace.layer_count() == 3)
+    assert(workspace.canvas.layer_count() == 3)
     let source = workspace.canvas
-    workspace.create(80, 60)
-    assert(workspace.current == 1)
-    workspace.switch_document(0)
+    workspace.documents.create(80, 60)
+    assert(workspace.documents.current == 1)
+    workspace.documents.switch_to(0)
     send_layers(workspace, 1)
-    assert(workspace.current == 1 and workspace.layer_count() == 2 and workspace.canvas.style_value(1, 0) == 1.0)
+    assert(workspace.documents.current == 1 and workspace.canvas.layer_count() == 2 and workspace.canvas.style_value(1, 0) == 1.0)
     assert(source.layer_count() == 3)
 
 ## The Filter menu's dialogs preview on the layer and keep one step each;
@@ -887,62 +887,62 @@ func filter_dialogs() -> unit!:
     let workspace = Workspace(80, 60)
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
-    workspace.set_color(0.5, 0.5, 0.5)
-    workspace.fill_selection(false)
+    workspace.colors.set_color(0.5, 0.5, 0.5)
+    workspace.painting.fill_selection(false)
     let names = ["Motion Blur", "Lens Correction", "Bloom", "Tonal Contrast"]
     var filter = 0
     while filter < 4:
         panels.adjust.filter(filter)
-        assert(workspace.previewing())
+        assert(workspace.previews.previewing())
         panels.adjust.apply()
-        assert(not workspace.previewing() and workspace.canvas.undo_name() == names[filter])
+        assert(not workspace.previews.previewing() and workspace.canvas.undo_name() == names[filter])
         filter += 1
     panels.adjust.open(12)
     panels.adjust.apply()
-    let before = workspace.layer_count()
+    let before = workspace.canvas.layer_count()
     for kind in [12, 13, 14, 15]:
         let spec = adjustments()[kind]
-        discard(workspace.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults())))
-    assert(workspace.layer_count() == before + 4 and workspace.canvas.layer_adjustment(workspace.selected) == 15)
+        discard(workspace.previews.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults())))
+    assert(workspace.canvas.layer_count() == before + 4 and workspace.canvas.layer_adjustment(workspace.layers.selected) == 15)
     panels.close()
 
 ## Tool options written when the window closes come back when it opens.
 func tool_options_kept() -> unit!:
     let path = tools_path(paths.join(files.home_directory(), ".luced-2d-test"))
     let first = Workspace(40, 30)
-    first.tool = "lasso"
-    first.brush.diameter = 77.0
-    first.selecting.feather = 9
-    first.typing.family = "Menlo"
-    first.gradient_radial = true
+    first.tools.tool = "lasso"
+    first.tools.brush.diameter = 77.0
+    first.tools.selecting.feather = 9
+    first.tools.typing.family = "Menlo"
+    first.tools.gradient_radial = true
     remember_tools(first, path)
     let second = Workspace(40, 30)
     restore_tools(second, path)
-    assert(second.tool == "lasso" and second.brush.diameter == 77.0 and second.selecting.feather == 9 and second.typing.family == "Menlo" and second.gradient_radial)
+    assert(second.tools.tool == "lasso" and second.tools.brush.diameter == 77.0 and second.tools.selecting.feather == 9 and second.tools.typing.family == "Menlo" and second.tools.gradient_radial)
     # The brush in hand comes back whole: its dynamics, tip and texture, and the library brush it was.
-    first.brush.dynamics[3] = mapped(3)
-    first.brush.dynamics[2] = mapped(8, 0.2, 0.5, 30)
+    first.tools.brush.dynamics[3] = mapped(3)
+    first.tools.brush.dynamics[2] = mapped(8, 0.2, 0.5, 30)
     let tip = BrushMask.create(20, 10)
     tip.dab(5.0, 5.0, 4.0, 1.0, 1.0)
-    first.brush.tip = tip
+    first.tools.brush.tip = tip
     let texture = BrushMask.create(8, 8)
     texture.clear(1.0)
-    first.brush.texture_image = texture
-    first.brush.texture = 4
-    first.brush.preset = "My \"Ink\""
-    first.brush.folder = "my-ink"
+    first.tools.brush.texture_image = texture
+    first.tools.brush.texture = 4
+    first.tools.brush.preset = "My \"Ink\""
+    first.tools.brush.folder = "my-ink"
     remember_tools(first, path)
     let fourth = Workspace(40, 30)
     restore_tools(fourth, path)
-    assert(fourth.brush.preset == "My \"Ink\"" and fourth.brush.folder == "my-ink" and fourth.brush.texture == 4)
-    assert(brush_text(fourth.brush, "x") == brush_text(first.brush, "x"))
-    let back = fourth.brush.tip else trap("the tip comes back")
-    assert(back.coverage() == tip.coverage() and fourth.brush.texture_image != none)
+    assert(fourth.tools.brush.preset == "My \"Ink\"" and fourth.tools.brush.folder == "my-ink" and fourth.tools.brush.texture == 4)
+    assert(brush_text(fourth.tools.brush, "x") == brush_text(first.tools.brush, "x"))
+    let back = fourth.tools.brush.tip else trap("the tip comes back")
+    assert(back.coverage() == tip.coverage() and fourth.tools.brush.texture_image != none)
     # What the file gets wrong keeps its default.
     files.write_text(path, "[brush]\ndiameter = -5\n[tool]\ncurrent = \"nothing\"\n")
     let third = Workspace(40, 30)
     restore_tools(third, path)
-    assert(third.brush.diameter == 32.0 and third.tool == "brush")
+    assert(third.tools.brush.diameter == 32.0 and third.tools.tool == "brush")
 
 ## The update feed tells of a later release only.
 func update_versions() -> unit!:
@@ -956,19 +956,19 @@ func color_range() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    workspace.set_color(0.0, 0.0, 1.0)
-    workspace.fill_selection(false)
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    workspace.colors.set_color(0.0, 0.0, 1.0)
+    workspace.painting.fill_selection(false)
     workspace.canvas.select_ellipse(33, 17, 30, 30, 0)
-    workspace.set_color(1.0, 0.8, 0.0)
-    workspace.fill_selection(false)
+    workspace.colors.set_color(1.0, 0.8, 0.0)
+    workspace.painting.fill_selection(false)
     workspace.canvas.deselect()
     workspace.canvas.select_rectangle(0, 0, 8, 8, 0)
     panels.color_range.open()
-    assert(workspace.range_sample_for != none)
+    assert(workspace.eyedroppers.range_sample_for != none)
     press(view, 48.0, 32.0)
     release(view, 48.0, 32.0)
     panels.color_range.poll()
@@ -981,7 +981,7 @@ func color_range() -> unit!:
     panels.color_range.poll()
     assert(workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 255)
     panels.color_range.cancel()
-    assert(workspace.range_sample_for == none and workspace.canvas.undo_name() == "Select" and not workspace.canvas.can_redo() and workspace.canvas.selected_at(48, 32) == 0)
+    assert(workspace.eyedroppers.range_sample_for == none and workspace.canvas.undo_name() == "Select" and not workspace.canvas.can_redo() and workspace.canvas.selected_at(48, 32) == 0)
     # OK: one step.
     panels.color_range.open()
     press(view, 48.0, 32.0)
@@ -989,9 +989,9 @@ func color_range() -> unit!:
     panels.color_range.apply()
     assert(workspace.canvas.undo_name() == "Color Range" and workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 0)
     # Headless, from a script: the disc's color and the shadows.
-    workspace.select_color_range(0, 40.0, false, [1.0, 0.9, 0.0], [false])
+    workspace.selection.select_color_range(0, 40.0, false, [1.0, 0.9, 0.0], [false])
     assert(workspace.canvas.selected_at(48, 32) == 255 and workspace.canvas.selected_at(4, 4) == 0)
-    workspace.select_color_range(9, 40.0, false, [], [])
+    workspace.selection.select_color_range(9, 40.0, false, [], [])
     assert(workspace.canvas.selected_at(48, 32) == 0)
     panels.close()
 
@@ -1003,19 +1003,19 @@ func replace_color() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    workspace.set_color(0.0, 0.0, 1.0)
-    workspace.fill_selection(false)
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    workspace.colors.set_color(0.0, 0.0, 1.0)
+    workspace.painting.fill_selection(false)
     workspace.canvas.select_ellipse(33, 17, 30, 30, 0)
-    workspace.set_color(1.0, 1.0, 0.0)
-    workspace.fill_selection(false)
+    workspace.colors.set_color(1.0, 1.0, 0.0)
+    workspace.painting.fill_selection(false)
     workspace.canvas.deselect()
     let before = workspace.canvas.undo_name()
     panels.replace_color.open()
-    assert(workspace.range_sample_for != none)
+    assert(workspace.eyedroppers.range_sample_for != none)
     press(view, 48.0, 32.0)
     release(view, 48.0, 32.0)
     panels.replace_color.set_replacement(-60.0, 0.0, 0.0)
@@ -1026,7 +1026,7 @@ func replace_color() -> unit!:
     assert(workspace.canvas.picked_blue() > 0.9 and workspace.canvas.picked_red() < 0.05)
     panels.replace_color.cancel()
     workspace.canvas.pick(48, 32)
-    assert(workspace.range_sample_for == none and workspace.canvas.picked_green() > 0.9 and workspace.canvas.undo_name() == before)
+    assert(workspace.eyedroppers.range_sample_for == none and workspace.canvas.picked_green() > 0.9 and workspace.canvas.undo_name() == before)
     panels.replace_color.open()
     press(view, 48.0, 32.0)
     release(view, 48.0, 32.0)
@@ -1044,18 +1044,18 @@ func replace_color() -> unit!:
 ## Tab steps a tool through its modes; the idle tool leaves the canvas alone.
 func tool_modes() -> unit!:
     let workspace = Workspace(40, 30)
-    workspace.tool = "marquee"
-    workspace.cycle_tool_mode()
-    assert(workspace.selecting.mode == 1)
-    workspace.tool = "brush"
-    workspace.cycle_tool_mode()
-    assert(workspace.tool == "eraser" and workspace.erasing)
+    workspace.tools.tool = "marquee"
+    workspace.tools.cycle_tool_mode()
+    assert(workspace.tools.selecting.mode == 1)
+    workspace.tools.tool = "brush"
+    workspace.tools.cycle_tool_mode()
+    assert(workspace.tools.tool == "eraser" and workspace.tools.erasing)
     let panels = Panels(workspace, Actions(), Font())
     panels.choose_tool("idle")
     let steps = workspace.canvas.undo_name()
     press(panels.view, 10.0, 10.0)
     release(panels.view, 12.0, 12.0)
-    assert(workspace.canvas.undo_name() == steps and workspace.tool == "idle")
+    assert(workspace.canvas.undo_name() == steps and workspace.tools.tool == "idle")
     panels.close()
 
 ## A script's lines are read back exactly; a script run by Luce's interpreter
@@ -1068,18 +1068,18 @@ func scripts() -> unit!:
     let workspace = Workspace(64, 48)
     workspace.canvas.bind_headless()
     let host = ScriptHost(workspace, none, paths.join(files.home_directory(), ".luced-2d-test-run"))
-    let before = workspace.layer_count()
+    let before = workspace.canvas.layer_count()
     host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.add_layer(\"Sun\")\n    luced.set_color(1.0, 0.8, 0.0)\n    luced.select_ellipse(10, 10, 20, 20)\n    luced.fill()\n    luced.adjust(\"Exposure\", [0.5])\n    print(f\"{luced.document_width()} wide\")\n    return 0\n")
     if host.console.contains("No such file") or host.console.contains("status 127"):
         # No Luce installed where the tests run: nothing more to check here.
         return
     assert(host.succeeded and host.console.contains("64 wide"))
-    assert(workspace.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.selected) == "Sun")
+    assert(workspace.canvas.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.layers.selected) == "Sun")
     assert(workspace.canvas.undo_name() == "Script")
     workspace.undo()
-    assert(workspace.layer_count() == before)
+    assert(workspace.canvas.layer_count() == before)
     host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.select_layer(9)\n    luced.add_layer(\"Never\")\n    return 0\n")
-    assert(not host.succeeded and host.console.contains("select_layer failed") and workspace.layer_count() == before)
+    assert(not host.succeeded and host.console.contains("select_layer failed") and workspace.canvas.layer_count() == before)
     # A menu command that needs a selection runs once the script made one,
     # with no window to refresh which commands can run.
     let actions = Actions()
@@ -1114,13 +1114,13 @@ func script_editor() -> unit!:
     let panels = Panels(workspace, Actions(), Font())
     panels.scripts.open()
     assert(panels.scripts.dialog.is_open())
-    let before = workspace.layer_count()
+    let before = workspace.canvas.layer_count()
     panels.scripts.run()
     while panels.scripts.host.running():
         panels.scripts.poll()
     panels.scripts.poll()
     if panels.scripts.host.succeeded:
-        assert(workspace.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.selected) == "Dots")
+        assert(workspace.canvas.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.layers.selected) == "Dots")
     panels.scripts.close()
     panels.close()
 
@@ -1135,59 +1135,59 @@ func groups_and_shapes() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    let before = workspace.layer_count()
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    let before = workspace.canvas.layer_count()
     for tool in ["rectangle", "shape_ellipse", "line", "shape_polygon"]:
         # From a pixel layer each shape makes a layer of its own.
-        workspace.select(0)
+        workspace.layers.select(0)
         panels.choose_tool(tool)
         press(view, 20.0, 20.0)
         drag_to(view, 60.0, 50.0)
         release(view, 60.0, 50.0)
-    assert(workspace.layer_count() == before + 4 and workspace.canvas.layer_name(workspace.selected) == "Polygon" and not workspace.canvas.has_selection())
+    assert(workspace.canvas.layer_count() == before + 4 and workspace.canvas.layer_name(workspace.layers.selected) == "Polygon" and not workspace.canvas.has_selection())
     # They are shape layers: vector, restyled from the header.
-    assert(workspace.canvas.layer_shaped(workspace.selected) and workspace.canvas.layer_shape_value(workspace.selected, 0) == 3.0)
+    assert(workspace.canvas.layer_shaped(workspace.layers.selected) and workspace.canvas.layer_shape_value(workspace.layers.selected, 0) == 3.0)
     workspace.undo()
-    assert(workspace.layer_count() == before + 3)
-    workspace.shape_stroke = true
+    assert(workspace.canvas.layer_count() == before + 3)
+    workspace.tools.shape_stroke = true
     restyle_selected(workspace)
-    assert(workspace.canvas.layer_shape_value(workspace.selected, 11) == 1.0)
+    assert(workspace.canvas.layer_shape_value(workspace.layers.selected, 11) == 1.0)
     # The line scaled 200%: its weight doubles; the header shows it and a restyle keeps it.
     panels.choose_tool("line")
-    workspace.shape_weight = 3.0
+    workspace.tools.shape_weight = 3.0
     restyle_selected(workspace)
-    assert(workspace.begin_transform())
-    if let session = workspace.transform:
+    assert(workspace.transforms.begin_transform())
+    if let session = workspace.transforms.transform:
         session.box.set_scale(200.0)
-    workspace.preview_transform()
-    workspace.finish_transform(true)
-    assert(workspace.canvas.layer_shaped(workspace.selected) and math.abs(workspace.canvas.layer_shape_value(workspace.selected, 15) - 6.0) < 1e-6)
+    workspace.transforms.preview_transform()
+    workspace.transforms.finish_transform(true)
+    assert(workspace.canvas.layer_shaped(workspace.layers.selected) and math.abs(workspace.canvas.layer_shape_value(workspace.layers.selected, 15) - 6.0) < 1e-6)
     panels.header.show(false)
-    assert(workspace.shape_weight == 6.0)
-    workspace.shape_sides = 7
+    assert(workspace.tools.shape_weight == 6.0)
+    workspace.tools.shape_sides = 7
     restyle_selected(workspace)
-    assert(math.abs(workspace.canvas.layer_shape_value(workspace.selected, 15) - 6.0) < 1e-6)
+    assert(math.abs(workspace.canvas.layer_shape_value(workspace.layers.selected, 15) - 6.0) < 1e-6)
     # The transform box is the shape and its stroke, no more: doubled, the pixels are
     # twice as wide (the rasteriser leaves no faint residue beside a shape).
     let big = Workspace(1280, 800)
     big.canvas.bind_headless()
     let big_panels = Panels(big, Actions(), Font())
     big_panels.choose_tool("rectangle")
-    big.shape_stroke = true
-    big.shape_stroke_width = 4.0
-    big.shape_radius = 20.0
+    big.tools.shape_stroke = true
+    big.tools.shape_stroke_width = 4.0
+    big.tools.shape_radius = 20.0
     draw_shape(big, "rectangle", 300.0, 300.0, 219.0, 148.0)
-    assert(big.canvas.measure_content(big.selected_id()) and big.canvas.content_width() == 223 and big.canvas.content_height() == 152)
-    assert(big.begin_transform())
-    if let session = big.transform:
+    assert(big.canvas.measure_content(big.layers.selected_id()) and big.canvas.content_width() == 223 and big.canvas.content_height() == 152)
+    assert(big.transforms.begin_transform())
+    if let session = big.transforms.transform:
         session.box.set_width(session.box.width * 2.0, true)
-    big.preview_transform()
-    big.finish_transform(true)
-    assert(big.canvas.measure_content(big.selected_id()) and big.canvas.content_width() >= 446 and big.canvas.content_width() <= 448)
-    assert(big.canvas.layer_shape_value(big.selected, 15) == 8.0)
+    big.transforms.preview_transform()
+    big.transforms.finish_transform(true)
+    assert(big.canvas.measure_content(big.layers.selected_id()) and big.canvas.content_width() >= 446 and big.canvas.content_width() <= 448)
+    assert(big.canvas.layer_shape_value(big.layers.selected, 15) == 8.0)
     big_panels.close()
     # The rail's brush group shows the pencil once it is chosen.
     panels.choose_tool("pencil")
@@ -1204,12 +1204,12 @@ func on_image_adjustment() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    workspace.set_color(1.0, 0.0, 0.0)
-    workspace.fill_selection(false)
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    workspace.colors.set_color(1.0, 0.0, 0.0)
+    workspace.painting.fill_selection(false)
     panels.adjust.open(1)
     panels.adjust.controls.toggle_on_image()
     press(view, 30.0, 30.0)
@@ -1219,7 +1219,7 @@ func on_image_adjustment() -> unit!:
     let shown = panels.adjust.controls.values(1)
     assert(shown[3 + 1] > 15.0)
     panels.adjust.cancel()
-    assert(workspace.drag_for == none)
+    assert(workspace.eyedroppers.drag_for == none)
     panels.close()
 
 ## Every hue finds its range: Reds 1 … Magentas 6, a grey Master.
@@ -1234,12 +1234,12 @@ func dodge_and_burn() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    workspace.set_color(0.2140, 0.2140, 0.2140)
-    workspace.fill_selection(false)
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    workspace.colors.set_color(0.2140, 0.2140, 0.2140)
+    workspace.painting.fill_selection(false)
     panels.choose_tool("dodge")
     press(view, 20.0, 20.0)
     release(view, 20.0, 20.0)
@@ -1248,9 +1248,9 @@ func dodge_and_burn() -> unit!:
     press(view, 60.0, 20.0)
     release(view, 60.0, 20.0)
     assert(workspace.canvas.undo_name() == "Burn")
-    let range = workspace.tone_range
-    workspace.cycle_tool_mode()
-    assert(workspace.tone_range == (range + 1) % 3)
+    let range = workspace.tools.tone_range
+    workspace.tools.cycle_tool_mode()
+    assert(workspace.tools.tone_range == (range + 1) % 3)
     panels.close()
 
 
@@ -1258,8 +1258,8 @@ func dodge_and_burn() -> unit!:
 func opens_photos() -> unit!:
     let workspace = Workspace(16, 16)
     for name in ["IMG_0001.HEIC", "a.heif", "b.dng", "c.CR2", "c.cr3", "d.nef", "e.arw", "f.orf", "g.rw2", "h.pef", "i.raf"]:
-        assert(workspace.can_open(name) and workspace.can_place(name))
-    assert(not workspace.can_open("notes.txt"))
+        assert(workspace.documents.can_open(name) and workspace.documents.can_place(name))
+    assert(not workspace.documents.can_open("notes.txt"))
 
 ## Window › a panel, by id.
 func window_command(actions: Actions, id: str) -> Command!:
@@ -1329,11 +1329,11 @@ func pen_paths() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     let view = panels.view
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    let before = workspace.layer_count()
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    let before = workspace.canvas.layer_count()
     panels.choose_tool("pen")
     press(view, 20.0, 20.0)
     release(view, 20.0, 20.0)
@@ -1342,45 +1342,45 @@ func pen_paths() -> unit!:
     release(view, 80.0, 20.0)
     press(view, 60.0, 60.0)
     release(view, 60.0, 60.0)
-    assert(workspace.layer_count() == before and view.pen.drawing)
+    assert(workspace.canvas.layer_count() == before and view.pen.drawing)
     # A click on the first anchor closes the path: a layer of its own.
     press(view, 20.0, 20.0)
     release(view, 20.0, 20.0)
     let canvas = workspace.canvas
-    let index = workspace.selected
-    assert(not view.pen.drawing and workspace.layer_count() == before + 1 and canvas.layer_name(index) == "Path")
+    let index = workspace.layers.selected
+    assert(not view.pen.drawing and workspace.canvas.layer_count() == before + 1 and canvas.layer_name(index) == "Path")
     assert(canvas.layer_path_count(index) == 3 and canvas.layer_path_closed(index))
     # The drag made a smooth anchor: its handles pulled out evenly.
     assert(canvas.layer_path_value(index, 1, 4) == 80.0 and canvas.layer_path_value(index, 1, 2) == 40.0 and canvas.layer_path_value(index, 0, 4) == 20.0)
     workspace.undo()
-    assert(workspace.layer_count() == before)
+    assert(workspace.canvas.layer_count() == before)
     workspace.redo()
-    workspace.select(workspace.layer_count() - 1)
-    assert(workspace.layer_count() == before + 1 and canvas.layer_path_count(workspace.selected) == 3)
+    workspace.layers.select(workspace.canvas.layer_count() - 1)
+    assert(workspace.canvas.layer_count() == before + 1 and canvas.layer_path_count(workspace.layers.selected) == 3)
     # Dragging an anchor moves it, one step.
     press(view, 60.0, 60.0)
     drag_to(view, 60.0, 70.0)
     release(view, 60.0, 70.0)
-    assert(canvas.layer_path_value(workspace.selected, 2, 1) == 70.0)
+    assert(canvas.layer_path_value(workspace.layers.selected, 2, 1) == 70.0)
     workspace.undo()
-    workspace.select(workspace.layer_count() - 1)
-    assert(canvas.layer_path_value(workspace.selected, 2, 1) == 60.0)
+    workspace.layers.select(workspace.canvas.layer_count() - 1)
+    assert(canvas.layer_path_value(workspace.layers.selected, 2, 1) == 60.0)
     # A click on the curve adds an anchor there; a click on an anchor takes it away.
     press(view, 40.0, 40.0)
     release(view, 40.0, 40.0)
-    assert(canvas.layer_path_count(workspace.selected) == 4)
+    assert(canvas.layer_path_count(workspace.layers.selected) == 4)
     press(view, 60.0, 60.0)
     release(view, 60.0, 60.0)
-    assert(canvas.layer_path_count(workspace.selected) == 3)
+    assert(canvas.layer_path_count(workspace.layers.selected) == 3)
     # Alt drags one handle alone; without it the other turns to stay opposite.
     press(view, 80.0, 20.0)
     drag_to(view, 80.0, 30.0, alt = true)
     release(view, 80.0, 30.0, alt = true)
-    assert(canvas.layer_path_value(workspace.selected, 1, 5) == 30.0 and canvas.layer_path_value(workspace.selected, 1, 3) == 20.0)
+    assert(canvas.layer_path_value(workspace.layers.selected, 1, 5) == 30.0 and canvas.layer_path_value(workspace.layers.selected, 1, 3) == 20.0)
     press(view, 40.0, 20.0)
     drag_to(view, 40.0, 10.0)
     release(view, 40.0, 10.0)
-    assert(canvas.layer_path_value(workspace.selected, 1, 3) == 10.0 and canvas.layer_path_value(workspace.selected, 1, 5) > 20.0)
+    assert(canvas.layer_path_value(workspace.layers.selected, 1, 3) == 10.0 and canvas.layer_path_value(workspace.layers.selected, 1, 5) > 20.0)
     # An open path ends with Enter; drawn on the path's vector layer, it is that
     # layer's second element, active.
     press(view, 10.0, 75.0)
@@ -1388,30 +1388,30 @@ func pen_paths() -> unit!:
     press(view, 40.0, 76.0)
     release(view, 40.0, 76.0)
     view.event(Event(kind = EventKind.key_down, key = Key.enter))
-    assert(workspace.layer_count() == before + 1 and canvas.element_count(workspace.selected) == 2)
-    assert(canvas.layer_path_count(workspace.selected) == 2 and not canvas.layer_path_closed(workspace.selected))
+    assert(workspace.canvas.layer_count() == before + 1 and canvas.element_count(workspace.layers.selected) == 2)
+    assert(canvas.layer_path_count(workspace.layers.selected) == 2 and not canvas.layer_path_closed(workspace.layers.selected))
 ## Layer › Align and Distribute on three painted layers, each one undo step.
 func aligning() -> unit!:
     let workspace = Workspace(300, 200)
     workspace.canvas.bind_headless()
-    workspace.add_layer()
-    workspace.add_layer()
+    workspace.edits.add_layer()
+    workspace.edits.add_layer()
     let painted = [[10, 20, 30, 30], [100, 50, 20, 40], [200, 120, 40, 10]]
     for index in 0..<3:
-        workspace.select(index)
+        workspace.layers.select(index)
         workspace.canvas.select_rectangle(painted[index][0], painted[index][1], painted[index][2], painted[index][3])
-        workspace.fill_selection(false)
-        workspace.deselect()
-    workspace.select(0)
-    workspace.toggle_picked(1)
-    workspace.toggle_picked(2)
-    assert(workspace.selected_ids().length == 3)
+        workspace.painting.fill_selection(false)
+        workspace.selection.deselect()
+    workspace.layers.select(0)
+    workspace.layers.toggle_picked(1)
+    workspace.layers.toggle_picked(2)
+    assert(workspace.layers.selected_ids().length == 3)
     # Several layers line up against the box around them all.
     assert(align_layers(workspace, "left"))
     assert(left_of(workspace, 0) == 10 and left_of(workspace, 1) == 10 and left_of(workspace, 2) == 10)
     assert(workspace.canvas.undo_name() == "Align Left Edges")
     workspace.undo()
-    assert(left_of(workspace, 1) == 100 and left_of(workspace, 2) == 200 and workspace.selected_ids().length == 3)
+    assert(left_of(workspace, 1) == 100 and left_of(workspace, 2) == 200 and workspace.layers.selected_ids().length == 3)
     # Centers meet at the middle of that box, 10..240.
     assert(align_layers(workspace, "hcenter"))
     assert(left_of(workspace, 0) == 110 and left_of(workspace, 1) == 115 and left_of(workspace, 2) == 105)
@@ -1422,7 +1422,7 @@ func aligning() -> unit!:
     workspace.undo()
     assert(left_of(workspace, 1) == 100)
     # Alone, a layer lines up against the canvas; with a selection, against that.
-    workspace.select(2)
+    workspace.layers.select(2)
     assert(align_layers(workspace, "bottom") and top_of(workspace, 2) == 190)
     workspace.canvas.select_rectangle(50, 40, 100, 100)
     assert(align_layers(workspace, "right") and left_of(workspace, 2) == 110)
@@ -1519,42 +1519,42 @@ func refining_selections() -> unit!:
     # Red on the left, blue in a column, red again on the right.
     foreground(workspace, 1.0, 0.0, 0.0)
     workspace.canvas.select_rectangle(0, 0, 150, 300)
-    workspace.fill_selection(false)
+    workspace.painting.fill_selection(false)
     foreground(workspace, 0.0, 0.0, 1.0)
     workspace.canvas.select_rectangle(150, 0, 50, 300)
-    workspace.fill_selection(false)
+    workspace.painting.fill_selection(false)
     foreground(workspace, 1.0, 0.0, 0.0)
     workspace.canvas.select_rectangle(200, 0, 200, 300)
-    workspace.fill_selection(false)
+    workspace.painting.fill_selection(false)
     workspace.canvas.select_rectangle(10, 10, 5, 5)
-    workspace.grow_selection(true)
+    workspace.selection.grow_selection(true)
     assert(workspace.canvas.undo_name() == "Grow" and workspace.canvas.selected_at(140, 290) == 255 and workspace.canvas.selected_at(300, 150) == 0)
-    workspace.grow_selection(false)
+    workspace.selection.grow_selection(false)
     assert(workspace.canvas.undo_name() == "Similar" and workspace.canvas.selected_at(300, 150) == 255 and workspace.canvas.selected_at(170, 150) == 0)
     workspace.canvas.select_rectangle(50, 50, 100, 100)
-    workspace.border_selection(8)
+    workspace.selection.border_selection(8)
     assert(workspace.canvas.undo_name() == "Border" and workspace.canvas.selected_at(100, 100) == 0 and workspace.canvas.selected_at(50, 100) > 0)
     workspace.undo()
-    workspace.smooth_selection(3)
+    workspace.selection.smooth_selection(3)
     assert(workspace.canvas.undo_name() == "Smooth" and workspace.canvas.selected_at(100, 100) == 255)
     # The box moves the outline; Apply keeps it, the pixels stay.
     workspace.canvas.select_rectangle(100, 100, 50, 50)
-    assert(workspace.begin_selection_transform())
-    let session = workspace.transform else trap("a transform is under way")
+    assert(workspace.transforms.begin_selection_transform())
+    let session = workspace.transforms.transform else trap("a transform is under way")
     assert(session.outline and not session.floats())
     session.box.dx = 60.0
-    workspace.preview_transform()
-    workspace.finish_transform(true)
-    assert(workspace.transform == none and workspace.canvas.undo_name() == "Transform Selection")
+    workspace.transforms.preview_transform()
+    workspace.transforms.finish_transform(true)
+    assert(workspace.transforms.transform == none and workspace.canvas.undo_name() == "Transform Selection")
     assert(workspace.canvas.selection_left() == 160 and workspace.canvas.selected_at(120, 120) == 0)
     workspace.undo()
     assert(workspace.canvas.selection_left() == 100)
     # Cancelled, nothing changes.
-    assert(workspace.begin_selection_transform())
-    let again = workspace.transform else trap("a transform is under way")
+    assert(workspace.transforms.begin_selection_transform())
+    let again = workspace.transforms.transform else trap("a transform is under way")
     again.box.dx = 30.0
-    workspace.preview_transform()
-    workspace.finish_transform(false)
+    workspace.transforms.preview_transform()
+    workspace.transforms.finish_transform(false)
     assert(workspace.canvas.selection_left() == 100)
     quick_masking()
 
@@ -1576,9 +1576,9 @@ func quick_masking() -> unit!:
     frame.close()
     # A stroke on the mask is listed after Quick Mask, as Photoshop lists it.
     panels.choose_tool("brush")
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     press(view, 30.0, 30.0)
     drag_to(view, 60.0, 60.0)
     release(view, 60.0, 60.0)
@@ -1587,10 +1587,10 @@ func quick_masking() -> unit!:
     workspace.undo()
     # White fills the whole mask (the selection does not clip meanwhile): all selected.
     foreground(workspace, 1.0, 1.0, 1.0)
-    workspace.fill_selection(false)
+    workspace.painting.fill_selection(false)
     actions.quick_mask.trigger()
     assert(not workspace.canvas.quick_mask() and workspace.canvas.undo_name() == "Exit Quick Mask")
-    assert(workspace.canvas.selected_at(200, 150) == 255 and workspace.layer_count() == 1)
+    assert(workspace.canvas.selected_at(200, 150) == 255 and workspace.canvas.layer_count() == 1)
     workspace.undo()
     # Undone, Exit Quick Mask brings the mode back with the selection it had.
     assert(workspace.canvas.quick_mask() and workspace.canvas.selected_at(200, 150) == 0 and workspace.canvas.selected_at(30, 30) == 255)
@@ -1606,11 +1606,11 @@ func magnetic_lassoing() -> unit!:
     workspace.canvas.bind_headless()
     foreground(workspace, 1.0, 1.0, 1.0)
     workspace.canvas.select_rectangle(150, 0, 150, 200)
-    workspace.fill_selection(false)
+    workspace.painting.fill_selection(false)
     workspace.canvas.deselect()
     workspace.choose_tool("magnetic")
     assert(group_of("magnetic") == group_of("lasso"))
-    workspace.selecting.magnetic_width = 12.0
+    workspace.tools.selecting.magnetic_width = 12.0
     let lasso = MagneticLasso()
     lasso.click(workspace, 150.0, 5.0, false, false, 1.0, 6.0, 0)
     lasso.hover(workspace, 144.0, 100.0)
@@ -1651,7 +1651,7 @@ func selecting_and_masking() -> unit!:
     dialog.poll()
     # The setting is recorded; the selection stays as it was until OK.
     assert(workspace.canvas.selected_at(98, 100) == 0 and workspace.canvas.refine_preview_level() == -1)
-    workspace.set_refine_view(3)
+    workspace.selection.set_refine_view(3)
     # A frame of the view works it out at the view's resolution, in the background.
     let view = CanvasView(workspace)
     view.layout().set_size(300.0, 200.0)
@@ -1685,9 +1685,9 @@ func selecting_and_masking() -> unit!:
 
 ## Set the foreground color, as the palette does.
 func foreground(workspace: Workspace, red: float, green: float, blue: float):
-    workspace.red = red
-    workspace.green = green
-    workspace.blue = blue
+    workspace.colors.red = red
+    workspace.colors.green = green
+    workspace.colors.blue = blue
 
 ## Shift+L steps Polygonal → Magnetic → Lasso; other keys pick their tool.
 func lasso_cycle() -> unit!:
@@ -1729,12 +1729,12 @@ func corner_modes() -> unit!:
 func blue_box(workspace: Workspace) -> unit!:
     workspace.canvas.select_rectangle(40, 40, 120, 80)
     foreground(workspace, 0.0, 0.2, 1.0)
-    workspace.fill_selection(false)
-    workspace.deselect()
+    workspace.painting.fill_selection(false)
+    workspace.selection.deselect()
 
 ## The selected layer's painted box: left, top, right, bottom.
 func painted_box(workspace: Workspace) -> list[int]!:
-    assert(workspace.canvas.measure_content(workspace.selected_id()))
+    assert(workspace.canvas.measure_content(workspace.layers.selected_id()))
     let canvas = workspace.canvas
     return [canvas.content_left(), canvas.content_top(), canvas.content_left() + canvas.content_width(), canvas.content_top() + canvas.content_height()]
 
@@ -1746,17 +1746,17 @@ func warping() -> unit!:
     let panels = Panels(workspace, actions, Font())
     let view = panels.view
     workspace.canvas.bind_headless()
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
-    workspace.add_layer()
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    workspace.edits.add_layer()
     blue_box(workspace)
     let found = painted_box(workspace)
     assert(found == [40, 40, 160, 120])
     actions.update(workspace)
     actions.transform_warp.trigger()
-    let warp = workspace.mesh_warp else trap("warp is up")
+    let warp = workspace.transforms.mesh_warp else trap("warp is up")
     assert(not warp.puppet and near(warp.points[0], 39.0) and near(warp.points[31], 121.0))
     # The top-left corner dragged out takes its handles along.
     press(view, 39.0, 39.0)
@@ -1769,7 +1769,7 @@ func warping() -> unit!:
     view.draw(frame.target())
     frame.close()
     view.event(Event(kind = EventKind.key_down, key = Key.enter))
-    assert(workspace.mesh_warp == none and workspace.canvas.undo_name() == "Warp")
+    assert(workspace.transforms.mesh_warp == none and workspace.canvas.undo_name() == "Warp")
     let bent = painted_box(workspace)
     assert(bent[0] <= 22 and bent[1] <= 32 and bent[2] == 160 and bent[3] == 120)
     workspace.undo()
@@ -1777,15 +1777,15 @@ func warping() -> unit!:
     # A style from the header: Arc lifts the middle of the top.
     actions.update(workspace)
     actions.transform_warp.trigger()
-    let styled = workspace.mesh_warp else trap("warp is up")
+    let styled = workspace.transforms.mesh_warp else trap("warp is up")
     styled.set_style(0, 0.5)
-    workspace.finish_mesh_warp(true)
+    workspace.transforms.finish_mesh_warp(true)
     assert(painted_box(workspace)[1] < 32)
     workspace.undo()
     # Puppet Warp: two pins, the right one dragged up; Esc leaves it as it was.
     actions.update(workspace)
     actions.puppet_warp.trigger()
-    let puppet = workspace.mesh_warp else trap("puppet is up")
+    let puppet = workspace.transforms.mesh_warp else trap("puppet is up")
     assert(puppet.puppet)
     press(view, 50.0, 80.0)
     release(view, 50.0, 80.0)
@@ -1798,7 +1798,7 @@ func warping() -> unit!:
     release(view, 50.0, 80.0, alt = true)
     assert(workspace.canvas.puppet_pin_count() == 1)
     view.event(Event(kind = EventKind.key_down, key = Key.escape))
-    assert(workspace.mesh_warp == none and painted_box(workspace) == found)
+    assert(workspace.transforms.mesh_warp == none and painted_box(workspace) == found)
     # From a script: skew, perspective, a warp style and a puppet warp, a step each.
     let commands = ScriptCommands(workspace, actions)
     commands.apply(parse_line("@l2d skew\t20\t0") else trap("line"))
@@ -1836,7 +1836,7 @@ func alpha_channel_panel(arguments: list[str]) -> unit!:
     assert(canvas.channel_count() == 1 and canvas.channel_name(0) == "Alpha 1" and canvas.undo_name() == "Save Selection")
     assert(next_alpha_name(workspace) == "Alpha 2")
     # Load Selection: a new selection, then subtracted from a wider one.
-    workspace.deselect()
+    workspace.selection.deselect()
     panels.refresh()
     actions.load_selection.trigger()
     assert(panels.load_selection.dialog.is_open())
@@ -1895,14 +1895,14 @@ func alpha_channel_panel(arguments: list[str]) -> unit!:
     let commands = ScriptCommands(workspace, actions)
     commands.apply(parse_line("@l2d save_selection\tCorner") else trap("line"))
     assert(canvas.channel_count() == 3 and canvas.channel_name(2) == "Corner")
-    workspace.deselect()
+    workspace.selection.deselect()
     commands.apply(parse_line("@l2d load_selection\tCorner\t0") else trap("line"))
     assert(canvas.selected_at(5, 5) == 255 and canvas.selected_at(50, 50) == 0)
     commands.apply(parse_line("@l2d delete_channel\tAlpha 2") else trap("line"))
     assert(canvas.channel_count() == 2 and canvas.channel_name(1) == "Corner")
     # Saved and opened again, the channels come back.
     let path = paths.join(arguments[arguments.length - 1], "channels.l2d")
-    workspace.save(path)
+    workspace.documents.save(path)
     let reopened = Canvas.open(path)
     assert(reopened.channel_count() == 2 and reopened.channel_name(0) == "Alpha 1" and reopened.channel_name(1) == "Corner")
     reopened.close()
@@ -1920,18 +1920,18 @@ func vector_panel(arguments: list[str]) -> unit!:
     let view = panels.view
     let canvas = workspace.canvas
     canvas.bind_headless()
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     # A red rectangle on a layer of its own, then a script's ellipse added to it.
     foreground(workspace, 1.0, 0.0, 0.0)
     draw_shape(workspace, "rectangle", 10.0, 10.0, 60.0, 40.0)
-    let layer = workspace.selected
+    let layer = workspace.layers.selected
     let commands = ScriptCommands(workspace, actions)
     foreground(workspace, 0.0, 0.0, 1.0)
     commands.apply(parse_line("@l2d add_vector\tellipse\t50\t30\t60\t40") else trap("line"))
-    assert(workspace.selected == layer and canvas.element_count(layer) == 2 and canvas.element_name(layer, 1) == "Ellipse" and active_element(workspace) == 1)
+    assert(workspace.layers.selected == layer and canvas.element_count(layer) == 2 and canvas.element_name(layer, 1) == "Ellipse" and active_element(workspace) == 1)
     # Window › Vector: the ellipse's row on top, the rectangle's below it.
     # Open from the start, a tab beside Layers; Window › Vector closes it and brings it back.
     assert(panels.catalog.is_open("vector"))
@@ -1970,7 +1970,7 @@ func vector_panel(arguments: list[str]) -> unit!:
     # Cmd-click on the rectangle's row: its outline is the selection.
     rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true, meta = true))
     assert(canvas.has_selection() and canvas.selected_at(20, 20) == 255 and canvas.selected_at(150, 100) == 0)
-    workspace.deselect()
+    workspace.selection.deselect()
     # The Move tool's press picks the element under it; the drag moves it alone.
     panels.choose_tool("move")
     press(view, 20.0, 20.0)
@@ -1979,22 +1979,22 @@ func vector_panel(arguments: list[str]) -> unit!:
     release(view, 30.0, 20.0)
     assert(canvas.element_value(layer, 0, 20) == 10.0 and canvas.element_value(layer, 1, 20) == 0.0)
     # A free transform of the active element: only its outline moves until Apply.
-    assert(workspace.begin_transform())
-    let session = workspace.transform else trap("a transform is up")
-    assert(session.element == 0 and not session.distorts() and not workspace.begin_transform_mode(mode_skew))
+    assert(workspace.transforms.begin_transform())
+    let session = workspace.transforms.transform else trap("a transform is up")
+    assert(session.element == 0 and not session.distorts() and not workspace.transforms.begin_transform_mode(mode_skew))
     session.box.set_scale(200.0)
-    workspace.preview_transform()
+    workspace.transforms.preview_transform()
     let drawn = Frame(window.Size(200.0, 120.0, 200.0, 120.0, 1.0))
     view.layout().set_size(200.0, 120.0)
     view.draw(drawn.target())
     drawn.close()
-    workspace.finish_transform(true)
+    workspace.transforms.finish_transform(true)
     assert(canvas.undo_name() == "Free Transform" and math.abs(canvas.element_value(layer, 0, 16) - 2.0) < 1e-9 and canvas.element_value(layer, 1, 16) == 1.0)
     # The footer's New Path: an empty path, active, which the Pen's next path fills.
     assert(next_path_name(workspace) == "Path 1")
     vector.show()
-    workspace.as_one("New Path", func () -> unit!:
-        canvas.add_empty_path(workspace.selected_id(), next_path_name(workspace)))
+    workspace.edits.as_one("New Path", func () -> unit!:
+        canvas.add_empty_path(workspace.layers.selected_id(), next_path_name(workspace)))
     assert(canvas.element_count(layer) == 3 and active_element(workspace) == 2 and canvas.element_value(layer, 2, 22) == 0.0)
     panels.choose_tool("pen")
     press(view, 150.0, 20.0)
@@ -2005,7 +2005,7 @@ func vector_panel(arguments: list[str]) -> unit!:
     release(view, 170.0, 60.0)
     press(view, 150.0, 20.0)
     release(view, 150.0, 20.0)
-    assert(workspace.selected == layer and canvas.element_count(layer) == 3 and canvas.element_value(layer, 2, 22) == 3.0 and canvas.element_name(layer, 2) == "Path 1")
+    assert(workspace.layers.selected == layer and canvas.element_count(layer) == 3 and canvas.element_value(layer, 2, 22) == 3.0 and canvas.element_name(layer, 2) == "Path 1")
     # A script's calls by the element's place.
     commands.apply(parse_line("@l2d rename_vector\t2\tTriangle") else trap("line"))
     commands.apply(parse_line("@l2d duplicate_vector\t0") else trap("line"))
@@ -2015,15 +2015,15 @@ func vector_panel(arguments: list[str]) -> unit!:
     assert(canvas.element_count(layer) == 3 and not canvas.element_visible(layer, 0))
     # Saved and opened again, the elements come back.
     let path = paths.join(arguments[arguments.length - 1], "vectors.l2d")
-    workspace.save(path)
+    workspace.documents.save(path)
     let reopened = Canvas.open(path)
     assert(reopened.element_count(layer) == 3 and reopened.element_name(layer, 2) == "Triangle" and not reopened.element_visible(layer, 0))
     reopened.close()
     # Edit › Transform › Skew and Perspective are named so in History.
-    workspace.add_layer()
+    workspace.edits.add_layer()
     blue_box(workspace)
     for mode in [mode_skew, mode_perspective]:
-        let skewed = begin_free_transform(canvas, [workspace.selected_id()], 1) else trap("a box")
+        let skewed = begin_free_transform(canvas, [workspace.layers.selected_id()], 1) else trap("a box")
         skewed.box.mode = mode
         let b = skewed.box
         skewed.box.corners = [b.left + 10.0, b.top, b.left + b.width + 10.0, b.top, b.left + b.width, b.top + b.height, b.left, b.top + b.height]
@@ -2045,20 +2045,20 @@ func node_editor(arguments: list[str]) -> unit!:
     let panels = Panels(workspace, actions, Font())
     let canvas = workspace.canvas
     canvas.bind_headless()
-    workspace.fitted = true
-    workspace.zoom = 1.0
-    workspace.offset_x = 0.0
-    workspace.offset_y = 0.0
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
     actions.add_vector_layer.trigger()
-    let layer = workspace.selected
+    let layer = workspace.layers.selected
     assert(canvas.layer_shaped(layer) and canvas.layer_name(layer) == "Vector 1" and canvas.undo_name() == "New Vector Layer")
     assert(canvas.graph_node_count(layer) == 4 and canvas.generated_count(layer) == 12)
     # The ring's top star is drawn above the middle.
     assert(alpha_at(canvas, 200, int(150.0 - 300.0 * 0.32)) > 0.9 and alpha_at(canvas, 200, 150) < 0.1)
     # The shape tool adds to the vector layer rather than making one.
-    let count = workspace.layer_count()
+    let count = workspace.canvas.layer_count()
     draw_shape(workspace, "rectangle", 10.0, 10.0, 40.0, 30.0)
-    assert(workspace.layer_count() == count and canvas.element_count(layer) == 1)
+    assert(workspace.canvas.layer_count() == count and canvas.element_count(layer) == 1)
     workspace.undo()
     # Window › Node Editor shows the graph under the canvas.
     window_command(actions, "nodes").trigger()
@@ -2142,7 +2142,7 @@ func node_editor(arguments: list[str]) -> unit!:
     view.refresh()
     var added = 0
     while added < 200:
-        discard(canvas.add_graph_node(workspace.selected_id(), 7, float(added % 20) * 200.0, 1200.0 + float(added // 20) * 120.0))
+        discard(canvas.add_graph_node(workspace.layers.selected_id(), 7, float(added % 20) * 200.0, 1200.0 + float(added // 20) * 120.0))
         added += 1
     workspace.touch()
     let busy = Frame(window.Size(600.0, 320.0, 600.0, 320.0, 1.0))
@@ -2152,7 +2152,7 @@ func node_editor(arguments: list[str]) -> unit!:
     assert(state.graph.nodes.length == 205)
     # Saved and opened, the graph comes back with the layer.
     let path = paths.join(arguments[arguments.length - 1], "nodes.l2d")
-    workspace.save(path)
+    workspace.documents.save(path)
     let reopened = Canvas.open(path)
     assert(reopened.graph_node_count(layer) == 205 and reopened.graph_link_count(layer) == 3 and reopened.generated_count(layer) == 32)
     reopened.close()
@@ -2160,7 +2160,7 @@ func node_editor(arguments: list[str]) -> unit!:
     # to the Clone's Scale, the star colored.
     let commands = ScriptCommands(workspace, actions)
     commands.apply(parse_line("@l2d new_vector_layer") else trap("line"))
-    let scripted = workspace.selected
+    let scripted = workspace.layers.selected
     commands.apply(parse_line("@l2d set_node\tcircle\tCount\t20") else trap("line"))
     commands.apply(parse_line("@l2d add_node\tRandom\tsizes\t0\t400") else trap("line"))
     commands.apply(parse_line("@l2d link_nodes\tsizes\tclone\tScale") else trap("line"))
@@ -2195,7 +2195,7 @@ func wheel_release(wheel: ColorWheel, x: float, y: float) -> unit!:
 
 ## Whether the foreground is the encoded sRGB (red, green, blue), near enough.
 func foreground_is(workspace: Workspace, red: float, green: float, blue: float) -> bool:
-    return encodes_as(workspace.red, red) and encodes_as(workspace.green, green) and encodes_as(workspace.blue, blue)
+    return encodes_as(workspace.colors.red, red) and encodes_as(workspace.colors.green, green) and encodes_as(workspace.colors.blue, blue)
 
 func encodes_as(linear: float, encoded: float) -> bool:
     return math.abs(transfer.srgb_encode(linear) - encoded) < 0.002
@@ -2218,7 +2218,7 @@ func color_panel_modes() -> unit!:
     app.layout(260.0, 560.0)
     let bounds = wheel.layout().bounds()
     assert(bounds.width == bounds.height and bounds.width > 200.0)
-    workspace.set_color(1.0, 0.0, 0.0)
+    workspace.colors.set_color(1.0, 0.0, 0.0)
     panel.show()
     assert(panel.state().hue == 0.0 and math.abs(panel.state().saturation - 1.0) < 1e-9 and math.abs(panel.state().brightness - 1.0) < 1e-9)
     # Hue runs clockwise, as GIMP's and Krita's: the ring's top is 270°, violet.
@@ -2255,16 +2255,16 @@ func color_panel_modes() -> unit!:
     wheel_release(wheel, black_x, black_y)
     # A grey or black set elsewhere keeps the hue (the panel refreshes after).
     panel.state().assign(240.0, 0.8, 0.8)
-    workspace.set_color(0.2, 0.2, 0.2)
+    workspace.colors.set_color(0.2, 0.2, 0.2)
     panel.show()
     assert(panel.state().hue == 240.0 and panel.state().saturation == 0.0)
-    workspace.set_color(0.0, 0.0, 0.0)
+    workspace.colors.set_color(0.0, 0.0, 0.0)
     panel.show()
     assert(panel.state().hue == 240.0 and panel.state().saturation == 0.0 and panel.state().brightness == 0.0)
     # Shift drags a quarter as far: 40 points right moves the aim 10.
     panel.state().assign(240.0, 1.0, 1.0)
     panel.show()
-    workspace.set_color(0.0, 0.0, 1.0)
+    workspace.colors.set_color(0.0, 0.0, 1.0)
     panel.choose_mode(1)
     app.layout(260.0, 560.0)
     assert(kept == "square rgb")

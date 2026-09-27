@@ -1,0 +1,77 @@
+## The foreground and background colors (linear), black over white by
+## default, as Compositor's palette: the brush, text and fills use the
+## foreground; gradients run to the background; cmd-Delete fills with it.
+## Also the picker's state: whether a canvas click samples into it, and its
+## history.
+from tool_state import ToolState
+from live import Live
+from hex_color import hex_of_linear, linear_of_hex
+import transfer
+
+pub class Colors:
+    let live: Live
+    let tools: ToolState
+    pub var red: float = 0.0
+    pub var green: float = 0.0
+    pub var blue: float = 0.0
+    pub var back_red: float = 1.0
+    pub var back_green: float = 1.0
+    pub var back_blue: float = 1.0
+    ## While the picker is open a canvas click samples into the color it edits.
+    pub var sampling: bool = false
+    pub var sampling_background: bool = false
+    ## The picker's history: sRGB hex strings, newest first, at most 16.
+    pub var recent: list[str]
+
+    pub func init(self, live: Live, tools: ToolState):
+        self.live = live
+        self.tools = tools
+        self.recent = []
+
+    ## The foreground (or background) color as sRGB hex, for the picker.
+    pub func color_hex(self, background: bool = false) -> str:
+        if background:
+            return hex_of_linear(self.back_red, self.back_green, self.back_blue)
+        return hex_of_linear(self.red, self.green, self.blue)
+
+    ## Set the foreground (or background) color from sRGB hex like "#e7a03f"; anything else is ignored.
+    pub func set_color_hex(self, text: str, background: bool = false):
+        let values = linear_of_hex(text) else return
+        self.set_palette(values[0], values[1], values[2], background)
+
+    ## Set the foreground color, linear components.
+    pub func set_color(self, red: float, green: float, blue: float):
+        self.set_palette(red, green, blue, false)
+
+    ## Set one color of the palette, linear components. Picking a foreground
+    ## color while erasing goes back to the brush, as Photoshop does.
+    pub func set_palette(self, red: float, green: float, blue: float, background: bool):
+        if background:
+            self.back_red = red
+            self.back_green = green
+            self.back_blue = blue
+        else:
+            self.red = red
+            self.green = green
+            self.blue = blue
+            if self.tools.tool == "eraser":
+                self.tools.choose("brush")
+        self.live.touch()
+
+    ## X: the foreground and background colors change places.
+    pub func swap_colors(self):
+        let red = self.red
+        let green = self.green
+        let blue = self.blue
+        self.set_palette(self.back_red, self.back_green, self.back_blue, false)
+        self.set_palette(red, green, blue, true)
+
+    ## D: black over white again.
+    pub func reset_colors(self):
+        self.set_palette(0.0, 0.0, 0.0, false)
+        self.set_palette(1.0, 1.0, 1.0, true)
+
+    ## The foreground then the background color, sRGB-encoded 0..1: the Gradient Map's ends.
+    pub func colors_encoded(self) -> list[float]:
+        return [transfer.srgb_encode(self.red), transfer.srgb_encode(self.green), transfer.srgb_encode(self.blue),
+                transfer.srgb_encode(self.back_red), transfer.srgb_encode(self.back_green), transfer.srgb_encode(self.back_blue)]

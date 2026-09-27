@@ -33,17 +33,17 @@ pub class CropControls:
         var shown = "Free"
         var index = 0
         while index < names.length:
-            if ratio_value(index, workspace) == workspace.crop_ratio and index > 0:
+            if ratio_value(index, workspace) == workspace.image.crop_ratio and index > 0:
                 shown = names[index]
             index += 1
         self.ratio_menu.set_text(shown + " ▾")
-        if let box = workspace.crop_box:
+        if let box = workspace.image.crop_box:
             self.readout.set_text(f"{box.width()} × {box.height()} px")
         else:
             self.readout.set_text("")
 
     func choose(self, index: int) -> unit!:
-        self.workspace.set_crop_ratio(ratio_value(index, self.workspace))
+        self.workspace.image.set_crop_ratio(ratio_value(index, self.workspace))
         self.show()
 
 ## The ratios offered, in the menu's order.
@@ -55,6 +55,6 @@ func ratio_value(index: int, workspace: Workspace) -> float:
     if index == 0:
         return 0.0
     if index == 1:
-        return float(workspace.width()) / float(workspace.height())
+        return float(workspace.canvas.width()) / float(workspace.canvas.height())
     let values = [1.0, 4.0 / 3.0, 1.5, 16.0 / 9.0, 1.25, 0.75, 2.0 / 3.0, 9.0 / 16.0]
     return values[index - 2]

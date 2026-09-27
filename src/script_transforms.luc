@@ -22,7 +22,7 @@ pub func apply_transform(workspace: Workspace, action: str, fields: list[str]) -
 
 ## Distort, Skew or Perspective: the free-transform box's corners set and applied.
 func distort(workspace: Workspace, action: str, fields: list[str]) -> unit!:
-    let ids = workspace.moving_ids()
+    let ids = workspace.layers.moving_ids()
     let found = box_around(workspace.canvas, ids) else error(ui.invalid, "nothing to transform: the layer has no pixels")
     let l = found.left
     let t = found.top
@@ -55,7 +55,7 @@ func distort(workspace: Workspace, action: str, fields: list[str]) -> unit!:
             corners[2] -= amount * found.width * 0.5
     if not convex(corners):
         error(ui.invalid, "the corners must make a shape that does not fold over")
-    let session = begin_free_transform(workspace.canvas, ids, workspace.transform_sampling) else error(ui.invalid, "nothing to transform")
+    let session = begin_free_transform(workspace.canvas, ids, workspace.transforms.transform_sampling) else error(ui.invalid, "nothing to transform")
     if not session.distorts():
         session.finish(false)
         error(ui.invalid, "a vector element follows only scale, turn and move")
@@ -83,13 +83,13 @@ func warp(workspace: Workspace, action: str, fields: list[str]) -> unit!:
             error(ui.invalid, f"no warp style is called {field(fields, 0)}")
     elif fields.length != 32:
         error(ui.invalid, "a warp takes sixteen points, x and y each")
-    if not workspace.begin_mesh_warp(false):
+    if not workspace.transforms.begin_mesh_warp(false):
         error(ui.invalid, "cannot warp while something else is under way")
-    let session = workspace.mesh_warp else error(ui.invalid, "the warp did not start")
+    let session = workspace.transforms.mesh_warp else error(ui.invalid, "the warp did not start")
     shape_warp(session, style, fields) catch failure:
-        workspace.finish_mesh_warp(false)
+        workspace.transforms.finish_mesh_warp(false)
         error(failure.code, failure.message)
-    workspace.finish_mesh_warp(true)
+    workspace.transforms.finish_mesh_warp(true)
 
 func shape_warp(session: MeshWarp, style: int, fields: list[str]) -> unit!:
     if style >= 0:
@@ -104,12 +104,12 @@ func shape_warp(session: MeshWarp, style: int, fields: list[str]) -> unit!:
 func puppet_warp(workspace: Workspace, fields: list[str]) -> unit!:
     if fields.length < 5 or (fields.length - 1) % 4 != 0:
         error(ui.invalid, "a puppet warp takes pins of four numbers each: from x, from y, to x, to y")
-    if not workspace.begin_mesh_warp(true, int(decimal(fields, 0))):
+    if not workspace.transforms.begin_mesh_warp(true, int(decimal(fields, 0))):
         error(ui.invalid, "cannot warp while something else is under way")
     pin_all(workspace, fields) catch failure:
-        workspace.finish_mesh_warp(false)
+        workspace.transforms.finish_mesh_warp(false)
         error(failure.code, failure.message)
-    workspace.finish_mesh_warp(true)
+    workspace.transforms.finish_mesh_warp(true)
 
 func pin_all(workspace: Workspace, fields: list[str]) -> unit!:
     let canvas = workspace.canvas

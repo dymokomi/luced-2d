@@ -108,10 +108,10 @@ pub class ColorPanel:
 
     ## The edited color, encoded sRGB 0..1.
     func current(self) -> science.Color:
-        let w = self.workspace
+        let workspace = self.workspace
         if self.background:
-            return encoded(w.back_red, w.back_green, w.back_blue)
-        return encoded(w.red, w.green, w.blue)
+            return encoded(workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue)
+        return encoded(workspace.colors.red, workspace.colors.green, workspace.colors.blue)
 
     ## Show the edited color everywhere: its HSB follows the palette, keeping
     ## the hue through greys and the saturation through black.
@@ -189,7 +189,7 @@ pub class ColorPanel:
     ## The state's color onto the palette, and every control showing it.
     func apply(self) -> unit!:
         let color = self.state().srgb()
-        self.workspace.set_palette(transfer.srgb_decode(color.red), transfer.srgb_decode(color.green), transfer.srgb_decode(color.blue), self.background)
+        self.workspace.colors.set_palette(transfer.srgb_decode(color.red), transfer.srgb_decode(color.green), transfer.srgb_decode(color.blue), self.background)
         self.show_state()
         if let refresh = self.refreshed:
             refresh()

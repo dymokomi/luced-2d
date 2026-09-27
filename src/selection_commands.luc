@@ -1,0 +1,184 @@
+## The Select menu and the selection tools' work on the canvas: all, none,
+## inverse; marquees and the magic wand; modify, grow and similar; moving the
+## outline or the selected pixels; Quick Mask; and the Color Range and Select
+## and Mask dialogs' sessions.
+from live import Live
+from layer_picking import LayerPicking
+from tool_state import ToolState
+import math
+import transfer
+
+pub class SelectionCommands:
+    let live: Live
+    let layers: LayerPicking
+    let tools: ToolState
+
+    pub func init(self, live: Live, layers: LayerPicking, tools: ToolState):
+        self.live = live
+        self.layers = layers
+        self.tools = tools
+
+    pub func select_all(self) -> unit!:
+        self.live.canvas.select_all()
+        self.live.touch()
+
+    pub func deselect(self) -> unit!:
+        self.live.canvas.deselect()
+        self.live.touch()
+
+    pub func invert_selection(self) -> unit!:
+        self.live.canvas.invert_selection()
+        self.live.touch()
+
+    ## Whether the document pixel under a point is selected at all.
+    pub func in_selection(self, x: float, y: float) -> bool:
+        let canvas = self.live.canvas
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if not canvas.has_selection() or px < 0 or py < 0 or px >= canvas.width() or py >= canvas.height():
+            return false
+        return canvas.selected_at(px, py) > 0
+
+    ## A rectangle or ellipse between two document corners, combined with the
+    ## selection by `mode` (0 replace, 1 add, 2 subtract, 3 intersect).
+    pub func select_shape(self, x0: float, y0: float, x1: float, y1: float, ellipse: bool, mode: int) -> unit!:
+        let left = int(math.floor(math.min(x0, x1)))
+        let top = int(math.floor(math.min(y0, y1)))
+        let right = int(math.ceil(math.max(x0, x1)))
+        let bottom = int(math.ceil(math.max(y0, y1)))
+        if right <= left or bottom <= top:
+            return
+        let canvas = self.live.canvas
+        self.tools.selecting.apply(canvas, not ellipse)
+        if ellipse:
+            canvas.select_ellipse(left, top, right - left, bottom - top, mode)
+        else:
+            canvas.select_rectangle(left, top, right - left, bottom - top, mode)
+        self.live.touch()
+
+    ## The magic wand at a document pixel on the selected layer, combined by `mode` (as `select_shape`).
+    pub func select_wand(self, x: float, y: float, mode: int) -> unit!:
+        let canvas = self.live.canvas
+        let px = int(math.floor(x))
+        let py = int(math.floor(y))
+        if px < 0 or py < 0 or px >= canvas.width() or py >= canvas.height():
+            return
+        let tools = self.tools
+        tools.selecting.apply(canvas, false)
+        canvas.select_wand(self.layers.selected_id(), px, py, tools.tolerance, tools.contiguous, mode, tools.selecting.sample, tools.selecting.all_layers)
+        self.live.touch()
+
+    # -- Modify.
+
+    ## Grow the selection by `pixels` (negative: shrink) and soften its edge by `feather`.
+    pub func adjust_selection(self, pixels: int, feather: int) -> unit!:
+        self.live.canvas.adjust_selection(pixels, feather)
+        self.live.touch()
+
+    ## Select › Modify › Border: a band `width` pixels wide along the selection's edge.
+    pub func border_selection(self, width: int) -> unit!:
+        self.live.canvas.border_selection(width)
+        self.live.touch()
+
+    ## Select › Modify › Smooth: corners rounded and specks dropped over `radius` pixels.
+    pub func smooth_selection(self, radius: int) -> unit!:
+        self.live.canvas.smooth_selection(radius)
+        self.live.touch()
+
+    ## Select › Grow (`contiguous`) and Similar: more of the colors the
+    ## selection covers, within the magic wand's tolerance, on the selected
+    ## layer or (the wand's option) every layer.
+    pub func grow_selection(self, contiguous: bool) -> unit!:
+        self.live.canvas.grow_selection(self.layers.selected_id(), self.tools.tolerance, contiguous, self.tools.selecting.all_layers)
+        self.live.touch()
+
+    ## Quick Mask (Q): the selection becomes a mask the painting tools edit
+    ## (black masks, white selects, gray is partial), tinted red in the view;
+    ## again turns the mask back into the selection. One undo step each way.
+    pub func toggle_quick_mask(self) -> unit!:
+        let canvas = self.live.canvas
+        if canvas.quick_mask():
+            canvas.exit_quick_mask()
+        else:
+            canvas.enter_quick_mask()
+        self.live.touch()
+
+    # -- Moving.
+
+    ## Move the selection's outline by whole pixels, leaving the pixels.
+    pub func move_selection(self, dx: int, dy: int) -> unit!:
+        self.live.canvas.move_selection(dx, dy)
+        self.live.touch()
+
+    ## Move (or, with `copy`, copy) the selected pixels of the selected layer by
+    ## whole pixels, the outline with them. Undoable.
+    pub func move_selected_pixels(self, dx: int, dy: int, copy: bool) -> unit!:
+        self.live.canvas.move_selected_pixels(self.layers.selected_id(), dx, dy, copy)
+        self.live.touch()
+
+    ## Show the selected pixels moved by whole pixels, within a preview begun
+    ## with `begin_preview`; `end_preview` keeps or drops it.
+    pub func preview_move_selected(self, dx: int, dy: int, copy: bool) -> unit!:
+        self.live.canvas.preview_move_selected(dx, dy, copy)
+        self.live.touch()
+
+    # -- Color Range.
+
+    ## Select › Color Range: the picture's pixels in `range` (0 the sampled
+    ## colors, sRGB triples in `colors`, with `subtract` marking those taken
+    ## back out, within `fuzziness`; 1..6 reds to magentas; 7 highlights, 8
+    ## midtones, 9 shadows), turned around by `invert`: one step.
+    pub func select_color_range(self, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
+        self.range_samples(colors, subtract)
+        self.live.canvas.select_color_range(self.layers.selected_id(), range, fuzziness, invert)
+        self.live.touch()
+
+    ## The Color Range dialog: opened, showing a choice live (out of history),
+    ## and closed — OK selecting it as one step, Cancel putting back the selection.
+    pub func begin_color_range(self) -> unit!:
+        self.live.canvas.begin_color_range()
+
+    pub func preview_color_range(self, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
+        self.range_samples(colors, subtract)
+        self.live.canvas.preview_color_range(range, fuzziness, invert)
+        self.live.touch()
+
+    pub func finish_color_range(self, keep: bool, range: int, fuzziness: float, invert: bool, colors: list[float], subtract: list[bool]) -> unit!:
+        self.range_samples(colors, subtract)
+        self.live.canvas.finish_color_range(keep, range, fuzziness, invert)
+        self.live.touch()
+
+    ## Color Range's samples: sRGB triples in `colors`, `subtract` marking those taken out.
+    func range_samples(self, colors: list[float], subtract: list[bool]) -> unit!:
+        let canvas = self.live.canvas
+        canvas.clear_range_samples()
+        var at = 0
+        while at + 2 < colors.length:
+            canvas.add_range_sample(transfer.srgb_decode(colors[at]), transfer.srgb_decode(colors[at + 1]), transfer.srgb_decode(colors[at + 2]),
+                                    subtract[at // 3] if at // 3 < subtract.length else false)
+            at += 3
+
+    # -- Select and Mask.
+
+    ## Select and Mask (select_mask_dialog.luc): begun, previewed (the
+    ## setting is recorded; the view's frames work it out at their own
+    ## resolution, in the background), and kept or put back.
+    pub func begin_refine(self) -> unit!:
+        self.live.canvas.begin_refine()
+        self.live.touch()
+
+    pub func preview_refine(self, radius: int, smooth: int, feather: int, contrast: float, shift: float) -> unit!:
+        self.live.canvas.preview_refine(radius, smooth, feather, contrast, shift)
+        self.live.touch()
+
+    ## With `background` (the dialog's OK) it returns at once: the selection
+    ## refines on the previews' thread, frames show how far, and the step is
+    ## recorded when it is in (the panels' `show_opening`).
+    pub func finish_refine(self, keep: bool, radius: int, smooth: int, feather: int, contrast: float, shift: float, background: bool = false) -> unit!:
+        self.live.canvas.end_refine(keep, radius, smooth, feather, contrast, shift, background)
+        self.live.touch()
+
+    ## 0 marching ants, 1 overlay, 2 on black, 3 on white.
+    pub func set_refine_view(self, view: int) -> unit!:
+        self.live.canvas.set_refine_view(view)
+        self.live.touch()

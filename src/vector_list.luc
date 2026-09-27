@@ -81,7 +81,7 @@ pub class VectorList: Widget:
 
     ## The thumbnail's box in the row from `top`: the document's shape within the square.
     func thumb_rect(self, top: float) -> Rect!:
-        let aspect = float(self.workspace.width()) / float(self.workspace.height())
+        let aspect = float(self.workspace.canvas.width()) / float(self.workspace.canvas.height())
         var width = self.thumb
         var height = self.thumb
         if aspect > 1.0:
@@ -108,7 +108,7 @@ pub class VectorList: Widget:
         while element >= 0:
             let top = self.row_top(element)
             let picked = element == active
-            let shown = canvas.element_visible(workspace.selected, element)
+            let shown = canvas.element_visible(workspace.layers.selected, element)
             if picked:
                 painter.rectangle(Rect(0.0, top, size.width, self.row_height), workspace.look.accent if focused else workspace.look.selection_inactive)
             let ink = theme.on_accent() if picked and focused else (theme.text() if shown else theme.text_muted())
@@ -117,7 +117,7 @@ pub class VectorList: Widget:
             let slot = self.thumb_rect(top)
             painter.rectangle(slot, theme.checker_light())
             self.draw_thumb(painter, element, slot)
-            painter.text(canvas.element_name(workspace.selected, element), self.name_left(), top + 7.0, ink, self.font)
+            painter.text(canvas.element_name(workspace.layers.selected, element), self.name_left(), top + 7.0, ink, self.font)
             painter.text(kind_label(workspace, element), self.name_left(), top + 24.0, soft, self.font)
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
             element -= 1
@@ -134,8 +134,8 @@ pub class VectorList: Widget:
         if points < 2:
             return
         let color = self.paint_of(element)
-        let scale_x = slot.width / float(self.workspace.width())
-        let scale_y = slot.height / float(self.workspace.height())
+        let scale_x = slot.width / float(self.workspace.canvas.width())
+        let scale_y = slot.height / float(self.workspace.canvas.height())
         let step = points // thumb_points + 1
         var previous = Point(slot.x + outline.points[0] * scale_x, slot.y + outline.points[1] * scale_y)
         var point = step
@@ -149,7 +149,7 @@ pub class VectorList: Widget:
     ## The color element `element` shows: its fill, or its stroke when unfilled.
     func paint_of(self, element: int) -> Color!:
         let canvas = self.workspace.canvas
-        let index = self.workspace.selected
+        let index = self.workspace.layers.selected
         let base = 8 if canvas.element_value(index, element, 7) != 0.0 else 12
         return Color(transfer.srgb_encode(canvas.element_value(index, element, base)), transfer.srgb_encode(canvas.element_value(index, element, base + 1)),
                      transfer.srgb_encode(canvas.element_value(index, element, base + 2)))
@@ -157,15 +157,15 @@ pub class VectorList: Widget:
     ## The outlines again when the document or the selected layer changed.
     func refresh_outlines(self) -> unit!:
         let workspace = self.workspace
-        let layer = workspace.selected_id()
-        if self.outlines_revision == workspace.revision and self.outlines_layer == layer:
+        let layer = workspace.layers.selected_id()
+        if self.outlines_revision == workspace.live.revision and self.outlines_layer == layer:
             return
         self.outlines = []
         var element = 0
         while element < element_count(workspace):
-            self.outlines.append(element_outline(workspace.canvas, workspace.selected, element))
+            self.outlines.append(element_outline(workspace.canvas, workspace.layers.selected, element))
             element += 1
-        self.outlines_revision = workspace.revision
+        self.outlines_revision = workspace.live.revision
         self.outlines_layer = layer
 
     ## The row edge nearest `y`, counted from the top (0 above the top row).
@@ -197,7 +197,7 @@ pub class VectorList: Widget:
             self.box.invalidate()
         elif event.kind == EventKind.pointer_moved and self.eye_swipe:
             let element = self.element_at(event.y)
-            if element >= 0 and workspace.canvas.element_visible(workspace.selected, element) != self.eye_shown:
+            if element >= 0 and workspace.canvas.element_visible(workspace.layers.selected, element) != self.eye_shown:
                 self.attempt("Show Vector", func () -> unit!:
                     show_element(workspace, element, self.eye_shown))
                 self.box.invalidate()
@@ -225,7 +225,7 @@ pub class VectorList: Widget:
         let workspace = self.workspace
         if event.x < 28.0:
             # The eye; a drag on down the eyes gives them the same.
-            let shown = not workspace.canvas.element_visible(workspace.selected, element)
+            let shown = not workspace.canvas.element_visible(workspace.layers.selected, element)
             self.attempt("Show Vector", func () -> unit!:
                 show_element(workspace, element, shown))
             self.eye_swipe = true

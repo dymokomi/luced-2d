@@ -59,14 +59,14 @@ pub class ReplaceColorDialog:
     pub func open(self) -> unit!:
         if not self.kit.may_open(self.dialog):
             return
-        self.workspace.begin_preview() catch failure:
+        self.workspace.previews.begin_preview() catch failure:
             self.fail(f"Replace Color: {failure.message}")
             return
         self.open_preview = true
         self.colors = []
         self.subtract = []
         self.preview_box.set_checked(true)
-        self.workspace.range_sample_for = self.sampled
+        self.workspace.eyedroppers.range_sample_for = self.sampled
         self.dialog.open()
         self.show()
 
@@ -137,7 +137,7 @@ pub class ReplaceColorDialog:
             self.workspace.canvas.show_preview_original()
             self.workspace.touch()
             return
-        self.workspace.preview_adjust(replace_kind, self.numbers())
+        self.workspace.previews.preview_adjust(replace_kind, self.numbers())
 
     pub func cancel(self) -> unit!:
         self.close(false)
@@ -147,7 +147,7 @@ pub class ReplaceColorDialog:
 
     ## Close the dialog: Apply (`keep`) keeps the change as one step.
     func close(self, keep: bool) -> unit!:
-        self.workspace.range_sample_for = none
+        self.workspace.eyedroppers.range_sample_for = none
         self.dialog.hide()
         self.pending = false
         if self.open_preview:
@@ -155,9 +155,9 @@ pub class ReplaceColorDialog:
             let kept = keep and self.subtract.length > 0
             if kept:
                 # What the controls say is kept, the preview shown or not.
-                self.workspace.preview_adjust(replace_kind, self.numbers()) catch failure:
+                self.workspace.previews.preview_adjust(replace_kind, self.numbers()) catch failure:
                     self.fail(f"Replace Color: {failure.message}")
-            self.workspace.end_preview(kept) catch failure:
+            self.workspace.previews.end_preview(kept) catch failure:
                 self.fail(f"Replace Color: {failure.message}")
         self.refresh()
 

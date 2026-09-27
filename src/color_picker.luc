@@ -105,8 +105,8 @@ pub class RecentColors: Widget:
         while index < 16:
             let x = float(index) * (self.cell + self.gap)
             painter.rounded_rectangle(Rect(x, 0.0, self.cell, self.cell), theme.border(), 4.0)
-            if index < self.workspace.recent.length:
-                painter.rounded_rectangle(Rect(x + 1.0, 1.0, self.cell - 2.0, self.cell - 2.0), linear_of(srgb_of(self.workspace.recent[index])), 3.0)
+            if index < self.workspace.colors.recent.length:
+                painter.rounded_rectangle(Rect(x + 1.0, 1.0, self.cell - 2.0, self.cell - 2.0), linear_of(srgb_of(self.workspace.colors.recent[index])), 3.0)
             else:
                 painter.rounded_rectangle(Rect(x + 1.0, 1.0, self.cell - 2.0, self.cell - 2.0), theme.surface(), 3.0)
             index += 1
@@ -116,9 +116,9 @@ pub class RecentColors: Widget:
         if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
             return
         let index = int(math.floor(event.x / (self.cell + self.gap)))
-        if index >= 0 and index < self.workspace.recent.length:
+        if index >= 0 and index < self.workspace.colors.recent.length:
             if let pick = self.on_pick:
-                pick(self.workspace.recent[index])
+                pick(self.workspace.colors.recent[index])
 
 ## The color picker after Photoshop's: a 256-point field and a strip, the
 ## strip's channel chosen by the radio beside each field (H, S, B, R, G, B, L,
@@ -230,10 +230,10 @@ pub class ColorPicker:
     pub func open(self, background: bool) -> unit!:
         self.target = none
         self.background = background
-        self.before = self.workspace.color_hex(background)
+        self.before = self.workspace.colors.color_hex(background)
         self.title.set_text("Background Color" if background else "Foreground Color")
-        self.workspace.sampling = true
-        self.workspace.sampling_background = background
+        self.workspace.colors.sampling = true
+        self.workspace.colors.sampling_background = background
         let original = srgb_of(self.before)
         self.preview.original = linear_of(original)
         self.show(original)
@@ -242,7 +242,7 @@ pub class ColorPicker:
     ## The palette changed under the picker (a canvas click sampled): show it.
     pub func sync(self) -> unit!:
         if self.is_open():
-            self.show(srgb_of(self.workspace.color_hex(self.background)))
+            self.show(srgb_of(self.workspace.colors.color_hex(self.background)))
 
     pub func finish(self, keep: bool) -> unit!:
         if let send = self.target:
@@ -250,8 +250,8 @@ pub class ColorPicker:
                 send(self.before)
             self.target = none
         elif not keep:
-            self.workspace.set_color_hex(self.before, self.background)
-        self.workspace.sampling = false
+            self.workspace.colors.set_color_hex(self.before, self.background)
+        self.workspace.colors.sampling = false
         self.dialog.hide()
         if keep:
             if let remember = self.committed:
@@ -403,7 +403,7 @@ pub class ColorPicker:
         if let send = self.target:
             send(hex)
         else:
-            self.workspace.set_color_hex(hex, self.background)
+            self.workspace.colors.set_color_hex(hex, self.background)
         self.show(clamped)
 
     func choose_mode(self, mode: int) -> unit!:

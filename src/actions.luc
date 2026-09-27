@@ -322,7 +322,7 @@ pub class Actions:
         # nor while Select and Mask's OK refines the selection.
         let previewing = canvas.previewing() or canvas.is_opening() or canvas.refine_keeping()
         let selection = canvas.has_selection()
-        let layers = workspace.layer_count()
+        let layers = workspace.canvas.layer_count()
         self.undo.set_enabled(canvas.can_undo() and not previewing)
         self.redo.set_enabled(canvas.can_redo() and not previewing)
         self.redo_y.set_enabled(canvas.can_redo() and not previewing)
@@ -345,25 +345,25 @@ pub class Actions:
         self.smooth.set_enabled(selection)
         self.grow.set_enabled(selection and not previewing)
         self.similar.set_enabled(selection and not previewing)
-        self.transform_selection.set_enabled(selection and not previewing and workspace.transform == none)
-        self.quick_mask.set_enabled(not previewing and workspace.transform == none)
-        self.select_mask.set_enabled(selection and not previewing and workspace.transform == none and not canvas.quick_mask())
+        self.transform_selection.set_enabled(selection and not previewing and workspace.transforms.transform == none)
+        self.quick_mask.set_enabled(not previewing and workspace.transforms.transform == none)
+        self.select_mask.set_enabled(selection and not previewing and workspace.transforms.transform == none and not canvas.quick_mask())
         self.quick_mask.set_checked(canvas.quick_mask())
         self.load_selection.set_enabled(canvas.channel_count() > 0 and not previewing and not canvas.quick_mask())
         self.save_selection.set_enabled(selection and not previewing and not canvas.quick_mask())
         self.crop.set_enabled(selection)
-        self.layer_up.set_enabled(workspace.selected < layers - 1)
-        self.layer_down.set_enabled(workspace.selected > 0)
+        self.layer_up.set_enabled(workspace.layers.selected < layers - 1)
+        self.layer_down.set_enabled(workspace.layers.selected > 0)
         self.delete_layer.set_enabled(layers > 1)
         # Merge and Duplicate follow the selection: the Layers panel fits them (layer_ops).
-        let group = canvas.layer_is_group(workspace.selected)
-        self.toggle_mask_editing.set_enabled(canvas.layer_masked(workspace.selected))
-        self.toggle_mask_enabled.set_enabled(canvas.layer_masked(workspace.selected))
+        let group = canvas.layer_is_group(workspace.layers.selected)
+        self.toggle_mask_editing.set_enabled(canvas.layer_masked(workspace.layers.selected))
+        self.toggle_mask_enabled.set_enabled(canvas.layer_masked(workspace.layers.selected))
         self.toggle_mask.set_enabled(not group)
-        self.hide_all_mask.set_enabled(not group and not canvas.layer_masked(workspace.selected))
+        self.hide_all_mask.set_enabled(not group and not canvas.layer_masked(workspace.layers.selected))
         self.load_transparency.set_enabled(not group)
         self.ungroup.set_enabled(group)
-        self.toggle_clipped.set_enabled(workspace.selected > 0)
+        self.toggle_clipped.set_enabled(workspace.layers.selected > 0)
         for command in self.adjustments:
             command.set_enabled(not previewing)
         self.blur.set_enabled(not previewing and not group)
@@ -375,19 +375,19 @@ pub class Actions:
         for command in self.adjustment_layers:
             command.set_enabled(not previewing)
         # One transform at a time: the box, or a warp's mesh.
-        let warping = workspace.mesh_warp != none
+        let warping = workspace.transforms.mesh_warp != none
         self.free_transform.set_enabled(not previewing and not warping)
         for command in [self.transform_skew, self.transform_distort, self.transform_perspective]:
             command.set_enabled(not previewing and not warping)
-        self.transform_warp.set_enabled(not previewing and not warping and workspace.transform == none and not group)
-        self.puppet_warp.set_enabled(not previewing and not warping and workspace.transform == none and not group)
+        self.transform_warp.set_enabled(not previewing and not warping and workspace.transforms.transform == none and not group)
+        self.puppet_warp.set_enabled(not previewing and not warping and workspace.transforms.transform == none and not group)
         self.flip_horizontal.set_enabled(not previewing)
         self.flip_vertical.set_enabled(not previewing)
         self.flip_canvas_horizontal.set_enabled(not previewing)
         self.flip_canvas_vertical.set_enabled(not previewing)
         self.layer_style.set_enabled(not previewing)
         # Aligning needs a selected layer, distributing three: counted, not measured.
-        let chosen = workspace.selected_ids().length
+        let chosen = workspace.layers.selected_ids().length
         for command in self.aligns:
             let spreads = command.id().starts_with("align_distribute")
             command.set_enabled(not previewing and chosen >= (3 if spreads else 1))

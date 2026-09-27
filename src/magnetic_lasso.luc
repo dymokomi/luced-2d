@@ -30,7 +30,7 @@ pub class MagneticLasso:
         if not self.active and now - self.closed_at <= 400:
             return
         if not self.active:
-            let options = workspace.selecting
+            let options = workspace.tools.selecting
             canvas.begin_magnetic(x, y, view_level(zoom), options.magnetic_width, options.magnetic_contrast, options.magnetic_frequency)
             self.active = true
             self.mode = options.mode_for(shift, alt)
@@ -63,7 +63,7 @@ pub class MagneticLasso:
         if canvas.magnetic_count() < 3:
             canvas.cancel_magnetic()
             return
-        workspace.selecting.apply(canvas, false)
+        workspace.tools.selecting.apply(canvas, false)
         canvas.close_magnetic(self.mode)
         workspace.touch()
 
@@ -72,7 +72,7 @@ pub class MagneticLasso:
         let canvas = workspace.canvas
         if not self.active or not canvas.magnetic_active():
             return
-        let zoom = workspace.zoom
+        let zoom = workspace.viewport.zoom
         let count = canvas.magnetic_count()
         var index = 1
         while index < count:

@@ -37,44 +37,44 @@ pub class InfoPanel:
     pub func poll(self) -> unit!:
         let x = self.view.pointer_x
         let y = self.view.pointer_y
-        let revision = self.workspace.revision
+        let revision = self.workspace.live.revision
         if x == self.last_x and y == self.last_y and revision == self.last_revision:
             return
         self.last_x = x
         self.last_y = y
         self.last_revision = revision
         self.show_selection()
-        let w = self.workspace
-        let document_x = (x - w.offset_x) / w.zoom
-        let document_y = (y - w.offset_y) / w.zoom
-        let inside = self.view.pointer_inside and document_x >= 0.0 and document_y >= 0.0 and document_x < float(w.width()) and document_y < float(w.height())
+        let workspace = self.workspace
+        let document_x = (x - workspace.viewport.offset_x) / workspace.viewport.zoom
+        let document_y = (y - workspace.viewport.offset_y) / workspace.viewport.zoom
+        let inside = self.view.pointer_inside and document_x >= 0.0 and document_y >= 0.0 and document_x < float(workspace.canvas.width()) and document_y < float(workspace.canvas.height())
         if not inside:
             self.position.set_text("X —  Y —")
             self.color.set_text("R —  G —  B —")
             return
-        let per = pixels_per(w.units, w.canvas.resolution())
-        let suffix = unit_suffix(w.units)
-        self.position.set_text(f"X {measure(document_x / per, w.units)}{suffix}   Y {measure(document_y / per, w.units)}{suffix}")
-        if w.canvas.painting() or w.canvas.previewing():
+        let per = pixels_per(workspace.viewport.units, workspace.canvas.resolution())
+        let suffix = unit_suffix(workspace.viewport.units)
+        self.position.set_text(f"X {measure(document_x / per, workspace.viewport.units)}{suffix}   Y {measure(document_y / per, workspace.viewport.units)}{suffix}")
+        if workspace.canvas.painting() or workspace.canvas.previewing():
             return
-        w.canvas.pick(int(math.floor(document_x)), int(math.floor(document_y))) catch failure:
+        workspace.canvas.pick(int(math.floor(document_x)), int(math.floor(document_y))) catch failure:
             discard(failure)
             return
-        let red = w.canvas.picked_red()
-        let green = w.canvas.picked_green()
-        let blue = w.canvas.picked_blue()
-        let alpha = int(math.floor(math.max(0.0, math.min(1.0, w.canvas.picked_alpha())) * 100.0 + 0.5))
+        let red = workspace.canvas.picked_red()
+        let green = workspace.canvas.picked_green()
+        let blue = workspace.canvas.picked_blue()
+        let alpha = int(math.floor(math.max(0.0, math.min(1.0, workspace.canvas.picked_alpha())) * 100.0 + 0.5))
         self.color.set_text(f"R {byte(red)}  G {byte(green)}  B {byte(blue)}   {hex_of_linear(red, green, blue)}   {alpha}%")
 
     ## The selection's size in the rulers' units, or that there is none.
     func show_selection(self) -> unit!:
-        let w = self.workspace
-        if not w.canvas.has_selection():
+        let workspace = self.workspace
+        if not workspace.canvas.has_selection():
             self.selection.set_text("No selection")
             return
-        let per = pixels_per(w.units, w.canvas.resolution())
-        let suffix = unit_suffix(w.units)
-        self.selection.set_text(f"Selection  W {measure(float(w.canvas.selection_width()) / per, w.units)}{suffix}   H {measure(float(w.canvas.selection_height()) / per, w.units)}{suffix}")
+        let per = pixels_per(workspace.viewport.units, workspace.canvas.resolution())
+        let suffix = unit_suffix(workspace.viewport.units)
+        self.selection.set_text(f"Selection  W {measure(float(workspace.canvas.selection_width()) / per, workspace.viewport.units)}{suffix}   H {measure(float(workspace.canvas.selection_height()) / per, workspace.viewport.units)}{suffix}")
 
     pub func show(self) -> unit!:
         self.last_revision = -1

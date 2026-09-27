@@ -1,0 +1,246 @@
+## The open documents, one per tab, and which one is on screen. The one shown
+## lives in the workspace's parts (the canvas and file in `Live`, the zoom in
+## `Viewport`, the selected layer in `LayerPicking`); switching stashes those
+## into its `Document` record and restores the next one's. Opening, saving and
+## exporting act on the document shown.
+from canvas import Canvas
+from documents import Document, title_of, blank_canvas
+from live import Live
+from viewport import Viewport
+from layer_picking import LayerPicking
+from layer_commands import LayerCommands
+import paths
+
+pub class OpenDocuments:
+    let live: Live
+    let viewport: Viewport
+    let layers: LayerPicking
+    let edits: LayerCommands
+    ## Every open document's record, and which one is shown.
+    pub var records: list[Document]
+    pub var current: int = 0
+    ## Called before the shown document is left, to settle what is under way
+    ## on it, and after another is shown.
+    pub var leaving: func() -> unit!? = none
+    pub var arrived: func()? = none
+    ## How many bytes of tiles each document's undo history may hold beyond the
+    ## document itself (Settings › General › Undo memory).
+    var history_limit: int = 4 * 1024 * 1024 * 1024
+
+    pub func init(self, live: Live, viewport: Viewport, layers: LayerPicking, edits: LayerCommands) -> unit!:
+        self.live = live
+        self.viewport = viewport
+        self.layers = layers
+        self.edits = edits
+        self.records = [Document(live.canvas, "")]
+
+    ## Let every open document's undo history hold `limit` bytes of tiles; the
+    ## oldest steps go first when it would hold more.
+    pub func set_history_limit(self, limit: int) -> unit!:
+        self.history_limit = limit
+        for document in self.records:
+            document.canvas.set_history_limit(limit)
+
+    # -- Switching: the shown document's state is stashed and the next one's restored.
+
+    ## Copy the shown document's state into its record; what is under way on
+    ## it (a free transform, a live gradient) is settled first.
+    func stash(self) -> unit!:
+        if self.current < 0 or self.current >= self.records.length:
+            return
+        if let leaving = self.leaving:
+            leaving()
+        let document = self.records[self.current]
+        document.canvas = self.live.canvas
+        document.path = self.live.path
+        document.zoom = self.viewport.zoom
+        document.offset_x = self.viewport.offset_x
+        document.offset_y = self.viewport.offset_y
+        document.selected = self.layers.selected
+        document.fitted = self.viewport.fitted
+        document.next_name = self.edits.next_name
+
+    ## Make document `index` the shown one.
+    func restore(self, index: int) -> unit!:
+        let document = self.records[index]
+        self.current = index
+        self.live.canvas = document.canvas
+        self.live.canvas.set_history_limit(self.history_limit)
+        self.live.path = document.path
+        self.viewport.zoom = document.zoom
+        self.viewport.offset_x = document.offset_x
+        self.viewport.offset_y = document.offset_y
+        self.layers.selected = document.selected
+        self.layers.picked = []
+        self.layers.collapsed = []
+        self.viewport.fitted = document.fitted
+        self.edits.next_name = document.next_name
+        if let arrived = self.arrived:
+            arrived()
+        self.live.touch()
+
+    ## Add `document` as a new tab and switch to it — or, when the only open
+    ## document is the untouched untitled one, take its place, as Photoshop does.
+    func adopt(self, document: Document) -> unit!:
+        self.stash()
+        let canvas = self.live.canvas
+        if self.records.length == 1 and self.live.path == "" and not canvas.can_undo() and canvas.layer_count() == 1:
+            canvas.close()
+            self.records = [document]
+            self.restore(0)
+            return
+        self.records.append(document)
+        self.restore(self.records.length - 1)
+
+    pub func switch_to(self, index: int) -> unit!:
+        if index < 0 or index >= self.records.length or index == self.current:
+            return
+        self.stash()
+        self.restore(index)
+
+    ## Step to the next (or previous) tab, wrapping.
+    pub func step(self, step: int) -> unit!:
+        let count = self.records.length
+        self.switch_to(((self.current + step) % count + count) % count)
+
+    ## Close document `index`. The last one closing leaves a fresh untitled canvas.
+    pub func close(self, index: int) -> unit!:
+        if index < 0 or index >= self.records.length:
+            return
+        self.stash()
+        let closing = self.records[index]
+        var kept: list[Document] = []
+        var at = 0
+        for document in self.records:
+            if at != index:
+                kept.append(document)
+            at += 1
+        if kept.length == 0:
+            kept.append(Document(blank_canvas(closing.canvas.width(), closing.canvas.height()), ""))
+        closing.canvas.close()
+        self.records = kept
+        # The tab that was current stays current, unless it was the one closed: then its neighbor.
+        var next = self.current
+        if index < self.current:
+            next = self.current - 1
+        if next >= kept.length:
+            next = kept.length - 1
+        if next < 0:
+            next = 0
+        self.restore(next)
+
+    # -- What the tabs show.
+
+    pub func count(self) -> int:
+        return self.records.length
+
+    ## The tab name of document `index`, the shown one read live.
+    pub func title(self, index: int) -> str:
+        return title_of(self.live.path) if index == self.current else self.records[index].title()
+
+    ## A tab's label: the title, and while its picture opens, how far it has come.
+    pub func label(self, index: int) -> str:
+        let canvas = self.canvas_of(index)
+        let title = self.title(index)
+        return f"{title}  {canvas.opening_percent()}%" if canvas.is_opening() else title
+
+    ## Whether document `index` has unsaved work, the shown one read live.
+    pub func dirty(self, index: int) -> bool:
+        return self.live.canvas.modified() if index == self.current else self.records[index].dirty()
+
+    ## Document `index`'s canvas, the shown one's read live.
+    pub func canvas_of(self, index: int) -> Canvas:
+        return self.live.canvas if index == self.current else self.records[index].canvas
+
+    ## Pictures opening in tabs not on screen take in what has decoded (the
+    ## one on screen does as it draws), so every tab keeps loading; a
+    ## selection refining for Select and Mask's OK there is kept when in.
+    pub func continue_opening(self) -> unit!:
+        var index = 0
+        while index < self.records.length:
+            if index != self.current and self.records[index].canvas.is_opening():
+                self.records[index].canvas.continue_opening()
+            if index != self.current and self.records[index].canvas.refine_keeping():
+                self.records[index].canvas.continue_refine()
+            index += 1
+
+    # -- Files.
+
+    ## Open a new empty document in its own tab.
+    pub func create(self, width: int, height: int) -> unit!:
+        self.adopt(Document(blank_canvas(width, height), ""))
+
+    ## Open the picture or document at `path` in its own tab.
+    pub func open(self, path: str) -> unit!:
+        let document_path = path
+        # A document already open is shown, not opened a second time.
+        var index = 0
+        while index < self.records.length:
+            let open_path = self.live.path if index == self.current else self.records[index].path
+            if open_path == document_path:
+                self.switch_to(index)
+                return
+            index += 1
+        let opened = Canvas.open(path)
+        let document = Document(opened, document_path)
+        # The layer selected when it was saved, if the file says.
+        let chosen = opened.selected_layer()
+        if chosen >= 0 and chosen < opened.layer_count():
+            document.selected = chosen
+        self.adopt(document)
+
+    ## Save the document to `path` as an `.l2d` package, which keeps every
+    ## layer (a name without the extension gets it); it is the document's file
+    ## from now on. Flattened pictures are `export`ed instead, so a later Save
+    ## never overwrites a picture with the flattened document by surprise.
+    pub func save(self, path: str) -> unit!:
+        let package = path if path.lower().ends_with(".l2d") else path + ".l2d"
+        # The selected layer goes with it, to be selected again on opening.
+        self.live.canvas.set_selected_layer(self.layers.selected)
+        self.live.canvas.save_package(package)
+        self.live.path = package
+        self.live.touch()
+
+    ## File › Export: the flattened picture to `path`, its format by the
+    ## extension. JPEG has no transparency, so it is written at `quality`
+    ## (1..100) over the `matte` gray (0 black .. 1 white). The document keeps
+    ## its own file.
+    pub func export(self, path: str, quality: int = 90, matte: float = 1.0) -> unit!:
+        let lowered = path.lower()
+        let jpeg = lowered.ends_with(".jpg") or lowered.ends_with(".jpeg")
+        self.live.canvas.save(path, quality, matte if jpeg else -1.0, matte, matte)
+
+    ## A file name for an exported picture: the document's, its extension
+    ## replaced by `extension`.
+    pub func export_name(self, extension: str) -> str:
+        let pieces = title_of(self.live.path).split(".")
+        if pieces.length == 1:
+            return pieces[0] + extension
+        return pieces[..<(pieces.length - 1)].join(".") + extension
+
+    ## Whether `path` is a file luced-2d opens: a picture, a Photoshop document or
+    ## its own .l2d package.
+    pub func can_open(self, path: str) -> bool:
+        return self.can_place(path) or path.lower().ends_with(".psd") or path.lower().ends_with(".l2d")
+
+    ## Whether `path` is a picture that can become a layer.
+    pub func can_place(self, path: str) -> bool:
+        let lowered = path.lower()
+        # HEIC and camera raws open through luce-image, as the rest.
+        for suffix in [".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".svg", ".heic", ".heif",
+                       ".dng", ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".pef", ".raf"]:
+            if lowered.ends_with(suffix):
+                return true
+        return false
+
+    ## Put the picture at `path` on a new layer named after the file, centred on
+    ## document point (`x`, `y`), and select it. In the window the layer fills
+    ## in as the picture decodes, and edits wait until it is in; the layer
+    ## takes its place first, since moving it is one of them.
+    pub func place_file(self, path: str, x: float, y: float) -> unit!:
+        # One picture opens at a time: a drop of several waits for the one before.
+        self.live.canvas.finish_opening()
+        self.edits.as_one("Place", func () -> unit!:
+            let id = self.live.canvas.add_layer(paths.stem(path))
+            self.edits.place_above_selected(id)
+            self.live.canvas.place_layer(id, path, int(x), int(y)))

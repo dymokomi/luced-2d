@@ -73,12 +73,12 @@ pub class TrimDialog:
         # The sides not trimmed keep the canvas's edge.
         let left = canvas.content_left() if left_side else 0
         let top = canvas.content_top() if top_side else 0
-        let right = canvas.content_left() + canvas.content_width() if right_side else workspace.width()
-        let bottom = canvas.content_top() + canvas.content_height() if bottom_side else workspace.height()
-        if left == 0 and top == 0 and right == workspace.width() and bottom == workspace.height():
+        let right = canvas.content_left() + canvas.content_width() if right_side else workspace.canvas.width()
+        let bottom = canvas.content_top() + canvas.content_height() if bottom_side else workspace.canvas.height()
+        if left == 0 and top == 0 and right == workspace.canvas.width() and bottom == workspace.canvas.height():
             return false
-        workspace.as_one("Trim", func () -> unit!:
-            workspace.resize_canvas(right - left, bottom - top, -left, -top))
+        workspace.edits.as_one("Trim", func () -> unit!:
+            workspace.image.resize_canvas(right - left, bottom - top, -left, -top))
         return true
 
     func fail(self, message: str) -> unit!:

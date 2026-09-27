@@ -29,7 +29,7 @@ pub class GuideDrag:
 
     ## The guide at document point (`x`, `y`) within `reach` pixels, or -1.
     pub func hit(self, workspace: Workspace, x: float, y: float, reach: float) -> int!:
-        if not workspace.show_guides or workspace.lock_guides:
+        if not workspace.viewport.show_guides or workspace.viewport.lock_guides:
             return -1
         let canvas = workspace.canvas
         var index = canvas.guide_count() - 1
@@ -81,7 +81,7 @@ pub class GuideDrag:
     ## and offset place the document), and the one being dragged.
     pub func draw(self, painter: Painter, workspace: Workspace, width: float, height: float) -> unit!:
         let canvas = workspace.canvas
-        if workspace.show_guides:
+        if workspace.viewport.show_guides:
             var index = 0
             while index < canvas.guide_count():
                 if not (self.active and index == self.index):
@@ -92,8 +92,8 @@ pub class GuideDrag:
 
     func line(self, painter: Painter, workspace: Workspace, vertical: bool, position: float, width: float, height: float) -> unit!:
         if vertical:
-            let x = math.floor(position * workspace.zoom + workspace.offset_x) + 0.5
+            let x = math.floor(position * workspace.viewport.zoom + workspace.viewport.offset_x) + 0.5
             painter.line(Point(x, 0.0), Point(x, height), 1.0, guide_ink())
         else:
-            let y = math.floor(position * workspace.zoom + workspace.offset_y) + 0.5
+            let y = math.floor(position * workspace.viewport.zoom + workspace.viewport.offset_y) + 0.5
             painter.line(Point(0.0, y), Point(width, y), 1.0, guide_ink())

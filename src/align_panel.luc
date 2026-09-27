@@ -32,7 +32,7 @@ pub class AlignPanel:
 
     ## Say what the selected layers would line up against.
     pub func show(self) -> unit!:
-        let chosen = self.workspace.selected_ids().length
+        let chosen = self.workspace.layers.selected_ids().length
         var against = "the selected layers"
         if self.workspace.canvas.has_selection():
             against = "the selection"

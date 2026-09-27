@@ -71,8 +71,8 @@ pub class CanvasSizeDialog:
         if not self.kit.may_open(self.dialog):
             return
         let workspace = self.workspace
-        self.sizes.reset(workspace.width(), workspace.height(), workspace.canvas.resolution())
-        self.now_text.set_text(f"Now: {workspace.width()} × {workspace.height()} px")
+        self.sizes.reset(workspace.canvas.width(), workspace.canvas.height(), workspace.canvas.resolution())
+        self.now_text.set_text(f"Now: {workspace.canvas.width()} × {workspace.canvas.height()} px")
         self.choose_anchor(4)
         self.dialog.open()
 
@@ -106,13 +106,13 @@ pub class CanvasSizeDialog:
     ## row by row), new canvas filled as `extension` says; one undo step.
     pub func resize(self, width: int, height: int, anchor: int, extension: int) -> unit!:
         let workspace = self.workspace
-        let old_width = workspace.width()
-        let old_height = workspace.height()
+        let old_width = workspace.canvas.width()
+        let old_height = workspace.canvas.height()
         # The anchor's share of the change: none at the left, half in the middle, all at the right.
         let offset_x = (width - old_width) * (anchor % 3) // 2
         let offset_y = (height - old_height) * (anchor // 3) // 2
-        workspace.as_one("Canvas Size", func () -> unit!:
-            workspace.resize_canvas(width, height, offset_x, offset_y)
+        workspace.edits.as_one("Canvas Size", func () -> unit!:
+            workspace.image.resize_canvas(width, height, offset_x, offset_y)
             if extension > 0 and (width > old_width or height > old_height):
                 fill_extension(workspace, extension, offset_x, offset_y, old_width, old_height))
 
@@ -124,20 +124,20 @@ pub class CanvasSizeDialog:
 ## of its own at the bottom; the old canvas at (`left`, `top`) stays clear.
 func fill_extension(workspace: Workspace, extension: int, left: int, top: int, old_width: int, old_height: int) -> unit!:
     let canvas = workspace.canvas
-    var red = workspace.red
-    var green = workspace.green
-    var blue = workspace.blue
+    var red = workspace.colors.red
+    var green = workspace.colors.green
+    var blue = workspace.colors.blue
     if extension == 2:
-        red = workspace.back_red
-        green = workspace.back_green
-        blue = workspace.back_blue
+        red = workspace.colors.back_red
+        green = workspace.colors.back_green
+        blue = workspace.colors.back_blue
     elif extension >= 3:
         red = 0.0 if extension == 3 else 1.0
         green = red
         blue = red
     let layer = canvas.add_layer("Canvas Extension")
     canvas.move_into(layer, 0, 0)
-    canvas.select_rectangle(0, 0, workspace.width(), workspace.height(), 0)
+    canvas.select_rectangle(0, 0, workspace.canvas.width(), workspace.canvas.height(), 0)
     canvas.select_rectangle(left, top, old_width, old_height, 2)
     canvas.set_brush(10.0, 1.0, 1.0, 1.0, red, green, blue, false)
     canvas.fill(layer, false)

@@ -23,7 +23,7 @@ pub class MapColors:
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
         self.workspace = workspace
-        self.colors = workspace.colors_encoded()
+        self.colors = workspace.colors.colors_encoded()
         self.swatches = [Swatch(), Swatch()]
         var index = 0
         for swatch in self.swatches:
@@ -37,7 +37,7 @@ pub class MapColors:
 
     ## Take `colors` (six sRGB components), or the foreground and background when empty.
     pub func take(self, colors: list[float]) -> unit!:
-        self.colors = colors if colors.length == 6 else self.workspace.colors_encoded()
+        self.colors = colors if colors.length == 6 else self.workspace.colors.colors_encoded()
         self.show()
 
     func show(self) -> unit!:

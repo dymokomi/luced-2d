@@ -123,17 +123,17 @@ pub class GraphSnapshot:
 
     ## Read the graph again when the document or the selected layer changed.
     pub func refresh(self, workspace: Workspace) -> unit!:
-        let layer = workspace.selected_id() if workspace.selected < workspace.layer_count() else -1
-        if self.revision == workspace.revision and self.layer == layer:
+        let layer = workspace.layers.selected_id() if workspace.layers.selected < workspace.canvas.layer_count() else -1
+        if self.revision == workspace.live.revision and self.layer == layer:
             return
-        self.revision = workspace.revision
+        self.revision = workspace.live.revision
         self.layer = layer
         self.nodes = []
         self.links = []
         if not vector_layer(workspace):
             return
         let canvas = workspace.canvas
-        let index = workspace.selected
+        let index = workspace.layers.selected
         var node = 0
         while node < canvas.graph_node_count(index):
             self.nodes.append(GraphNode(int(canvas.graph_node_value(index, node, 0)), int(canvas.graph_node_value(index, node, 1)),
@@ -166,14 +166,14 @@ pub class GraphSnapshot:
 
 ## Value `slot` of node `id` of the selected layer's graph.
 pub func node_value(workspace: Workspace, place: int, slot: int) -> float!:
-    return workspace.canvas.graph_node_value(workspace.selected, place, 4 + slot)
+    return workspace.canvas.graph_node_value(workspace.layers.selected, place, 4 + slot)
 
 # mark: Edits =================================================================================
 # Each is one step on the selected layer; the caller refreshes.
 
 ## A node of `kind` at (`x`, `y`) in graph space; its id.
 pub func add_node(workspace: Workspace, kind: int, x: float, y: float) -> int!:
-    let made = workspace.canvas.add_graph_node(workspace.selected_id(), kind, x, y)
+    let made = workspace.canvas.add_graph_node(workspace.layers.selected_id(), kind, x, y)
     workspace.touch()
     return made
 
@@ -181,39 +181,39 @@ pub func add_node(workspace: Workspace, kind: int, x: float, y: float) -> int!:
 pub func delete_nodes(workspace: Workspace, ids: list[int]) -> unit!:
     if ids.length == 0:
         return
-    let layer = workspace.selected_id()
-    workspace.as_one("Delete Node", func () -> unit!:
+    let layer = workspace.layers.selected_id()
+    workspace.edits.as_one("Delete Node", func () -> unit!:
         for id in ids:
             workspace.canvas.delete_graph_node(layer, id))
     workspace.touch()
 
 ## Node `source`'s output wired into input `port` of node `target`.
 pub func connect(workspace: Workspace, source: int, target: int, port: int) -> unit!:
-    workspace.canvas.link_graph(workspace.selected_id(), source, target, port)
+    workspace.canvas.link_graph(workspace.layers.selected_id(), source, target, port)
     workspace.touch()
 
 pub func disconnect(workspace: Workspace, target: int, port: int) -> unit!:
-    workspace.canvas.unlink_graph(workspace.selected_id(), target, port)
+    workspace.canvas.unlink_graph(workspace.layers.selected_id(), target, port)
     workspace.touch()
 
 ## A wire picked up off input `port` of `target` and put into input `to_port`
 ## of `to` instead: one step.
 pub func rewire(workspace: Workspace, source: int, target: int, port: int, to: int, to_port: int) -> unit!:
-    let layer = workspace.selected_id()
-    workspace.as_one("Connect", func () -> unit!:
+    let layer = workspace.layers.selected_id()
+    workspace.edits.as_one("Connect", func () -> unit!:
         workspace.canvas.unlink_graph(layer, target, port)
         workspace.canvas.link_graph(layer, source, to, to_port))
     workspace.touch()
 
 ## Value `slot` of node `id` set; a drag of it coalesces into one step.
 pub func set_node_value(workspace: Workspace, id: int, slot: int, value: float) -> unit!:
-    workspace.canvas.set_graph_value(workspace.selected_id(), id, slot, value)
+    workspace.canvas.set_graph_value(workspace.layers.selected_id(), id, slot, value)
     workspace.touch()
 
 ## The nodes `ids` moved to their new places, as one step.
 pub func move_nodes(workspace: Workspace, ids: list[int], xs: list[float], ys: list[float]) -> unit!:
-    let layer = workspace.selected_id()
-    workspace.as_one("Move Node", func () -> unit!:
+    let layer = workspace.layers.selected_id()
+    workspace.edits.as_one("Move Node", func () -> unit!:
         var at = 0
         while at < ids.length:
             workspace.canvas.move_graph_node(layer, ids[at], xs[at], ys[at])

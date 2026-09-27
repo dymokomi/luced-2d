@@ -63,12 +63,12 @@ pub class ColorRangeDialog:
             return
         self.colors = []
         self.subtract = []
-        self.workspace.begin_color_range() catch failure:
+        self.workspace.selection.begin_color_range() catch failure:
             self.fail(f"Color Range: {failure.message}")
             return
         self.open_session = true
         self.choose(0)
-        self.workspace.range_sample_for = self.sampled
+        self.workspace.eyedroppers.range_sample_for = self.sampled
         self.dialog.open()
 
     func choose(self, range: int) -> unit!:
@@ -111,7 +111,7 @@ pub class ColorRangeDialog:
         self.pending = false
         if not self.open_session:
             return
-        self.workspace.preview_color_range(self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
+        self.workspace.selection.preview_color_range(self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
             self.fail(f"Color Range: {failure.message}")
             return
         self.refresh()
@@ -124,12 +124,12 @@ pub class ColorRangeDialog:
 
     ## Close the dialog: OK (`keep`) selects the range at full size as one step.
     func close(self, keep: bool) -> unit!:
-        self.workspace.range_sample_for = none
+        self.workspace.eyedroppers.range_sample_for = none
         self.dialog.hide()
         self.pending = false
         if self.open_session:
             self.open_session = false
-            self.workspace.finish_color_range(keep, self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
+            self.workspace.selection.finish_color_range(keep, self.range, self.fuzziness.value(), self.invert_box.is_checked(), self.colors, self.subtract) catch failure:
                 self.fail(f"Color Range: {failure.message}")
         self.refresh()
 

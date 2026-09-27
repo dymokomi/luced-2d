@@ -124,7 +124,7 @@ pub class NodePanel:
             return
         self.typing_node = node
         self.typing_slot = slot
-        let value = self.workspace.canvas.graph_node_value(self.workspace.selected, place, 4 + slot)
+        let value = self.workspace.canvas.graph_node_value(self.workspace.layers.selected, place, 4 + slot)
         self.value_field.set_text(f"{value}")
         let field_box = self.value_field.layout()
         let inspector = self.inspector.layout().bounds()

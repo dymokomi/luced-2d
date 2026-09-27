@@ -42,17 +42,17 @@ pub class Properties:
         self.layer_name = TextField("", font = font, placeholder = "Layer name", cells = 18.0)
         kit.keep(self.layer_name.on_commit(func (value: str) -> unit!:
             if value.trim() != "":
-                self.workspace.rename(value.trim())
+                self.workspace.edits.rename(value.trim())
             self.refresh()))
         self.opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font, show_value = false)
         self.opacity.layout().set_flex()
         self.opacity_field = NumberField(100.0, 0.0, 100.0, 1.0, suffix = "%", font = font, cells = 6.0)
         kit.keep(self.opacity.on_change(func (value: float) -> unit!:
-            self.workspace.set_opacity(value / 100.0)
+            self.workspace.edits.set_opacity(value / 100.0)
             self.opacity_field.set_value(value)
             self.notify()))
         kit.keep(self.opacity_field.on_change(func (value: float) -> unit!:
-            self.workspace.set_opacity(value / 100.0)
+            self.workspace.edits.set_opacity(value / 100.0)
             self.opacity.set_value(value)
             self.notify()))
         self.visible_box = kit.checkbox("Visible", toggle_visibility)
@@ -77,7 +77,7 @@ pub class Properties:
     pub func show(self) -> unit!:
         let workspace = self.workspace
         let canvas = workspace.canvas
-        let selected = workspace.selected
+        let selected = workspace.layers.selected
         if not self.layer_name.layout().is_focused():
             self.layer_name.set_text(canvas.layer_name(selected))
         self.blend_menu.set_text(Canvas.blend_mode_name(canvas.layer_blend(selected)) + " ▾")
@@ -86,15 +86,15 @@ pub class Properties:
         self.mask_box.set_checked(canvas.layer_masked(selected))
         var styled: list[str] = []
         if canvas.layer_styled(selected):
-            if workspace.style_value(0) != 0.0:
+            if workspace.previews.style_value(0) != 0.0:
                 styled.append("Shadow")
-            if workspace.style_value(8) != 0.0:
+            if workspace.previews.style_value(8) != 0.0:
                 styled.append("Stroke")
-            if workspace.style_value(14) != 0.0:
+            if workspace.previews.style_value(14) != 0.0:
                 styled.append("Glow")
-            if workspace.style_value(21) != 0.0:
+            if workspace.previews.style_value(21) != 0.0:
                 styled.append("Overlay")
-            if workspace.style_value(26) != 0.0:
+            if workspace.previews.style_value(26) != 0.0:
                 styled.append("Inner")
         self.styles_text.set_text(styled.join(" ") if styled.length > 0 else "None")
         self.opacity.set_value(canvas.layer_opacity(selected) * 100.0)
@@ -140,7 +140,7 @@ pub class Properties:
     func adjustment_changed(self) -> unit!:
         if self.adjustment_layer < 0:
             return
-        self.workspace.update_adjustment_layer(self.adjustment_layer, self.adjustment.numbers(self.adjustment.kind))
+        self.workspace.previews.update_adjustment_layer(self.adjustment_layer, self.adjustment.numbers(self.adjustment.kind))
         self.notify()
 
     func notify(self) -> unit!:

@@ -82,36 +82,36 @@ pub class ToolHeader:
         self.title = Text("Brush", font = font)
         self.title.layout().set_limits(Size(150.0, 0.0), Size(150.0, 16384.0))
         self.hint = Text("", font = font)
-        self.size_field = self.scrubber(workspace.brush.diameter, 1.0, max_brush, " px", func (value: float) -> unit!:
-            self.workspace.brush.diameter = value)
-        self.hardness_field = self.scrubber(workspace.brush.hardness * 100.0, 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.hardness = value / 100.0)
-        self.opacity_field = self.scrubber(workspace.brush.opacity * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.opacity = value / 100.0)
-        self.flow_field = self.scrubber(workspace.brush.flow * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.flow = value / 100.0)
+        self.size_field = self.scrubber(workspace.tools.brush.diameter, 1.0, max_brush, " px", func (value: float) -> unit!:
+            self.workspace.tools.brush.diameter = value)
+        self.hardness_field = self.scrubber(workspace.tools.brush.hardness * 100.0, 0.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.tools.brush.hardness = value / 100.0)
+        self.opacity_field = self.scrubber(workspace.tools.brush.opacity * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.tools.brush.opacity = value / 100.0)
+        self.flow_field = self.scrubber(workspace.tools.brush.flow * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.tools.brush.flow = value / 100.0)
         # Smudge keeps a spacing of its own; the field shows whichever is in use.
-        self.spacing_field = self.scrubber(workspace.brush.spacing * 100.0, 1.0, 500.0, "%", func (value: float) -> unit!:
+        self.spacing_field = self.scrubber(workspace.tools.brush.spacing * 100.0, 1.0, 500.0, "%", func (value: float) -> unit!:
             if self.smudging():
-                self.workspace.smudge_spacing = value / 100.0
+                self.workspace.tools.smudge_spacing = value / 100.0
             else:
-                self.workspace.brush.spacing = value / 100.0)
+                self.workspace.tools.brush.spacing = value / 100.0)
         var presets: list[Command] = []
         for name in preset_names():
             let chosen = name
             let command = Command(name, id = "preset_" + name)
             kit.bind(command, func () -> unit!:
-                self.workspace.apply_preset(chosen)
+                self.workspace.tools.apply_preset(chosen)
                 if let refresh = self.refreshed:
                     refresh())
             presets.append(command)
-        self.preset_menu = Menu(workspace.brush.preset + " ▾", presets, font = font)
+        self.preset_menu = Menu(workspace.tools.brush.preset + " ▾", presets, font = font)
         self.brush_controls = HStack([self.preset_menu, kit.labelled("Size", self.size_field), kit.labelled("Hardness", self.hardness_field),
                                       kit.labelled("Opacity", self.opacity_field), kit.labelled("Flow", self.flow_field),
                                       kit.labelled("Spacing", self.spacing_field), kit.button("Brush…", self.open_brush_settings)], spacing = 12.0)
-        self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tolerance, 1.0, font = font)
+        self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tools.tolerance, 1.0, font = font)
         kit.keep(self.tolerance_slider.on_change(func (value: float) -> unit!:
-            self.workspace.tolerance = value))
+            self.workspace.tools.tolerance = value))
         self.contiguous_button = kit.checkbox("Contiguous", self.toggle_contiguous)
         self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
         self.selection_controls = SelectionControls(workspace, kit, self.wand_controls)
@@ -120,9 +120,9 @@ pub class ToolHeader:
         self.type_controls = TypeControls(workspace, kit)
         self.text_controls = self.type_controls.row
         self.auto_select_box = kit.checkbox("Auto-Select", func () -> unit!:
-            self.workspace.auto_select = not self.workspace.auto_select)
+            self.workspace.tools.auto_select = not self.workspace.tools.auto_select)
         self.controls_box = kit.checkbox("Show Transform Controls", func () -> unit!:
-            self.workspace.show_transform_controls = not self.workspace.show_transform_controls
+            self.workspace.transforms.show_transform_controls = not self.workspace.transforms.show_transform_controls
             self.workspace.touch())
         self.move_controls = HStack([self.auto_select_box, self.controls_box], spacing = 12.0)
         self.transform_controls = TransformControls(workspace, kit)
@@ -137,60 +137,60 @@ pub class ToolHeader:
             self.finish(true))
         self.box_controls = HStack([cancel, apply], spacing = 8.0)
         self.aligned_box = kit.checkbox("Aligned", func () -> unit!:
-            self.workspace.clone_aligned = not self.workspace.clone_aligned)
+            self.workspace.tools.clone_aligned = not self.workspace.tools.clone_aligned)
         let this_layer = self.choice("This Layer", "clone_sample_layer", func () -> unit!:
-            self.workspace.clone_all = false)
+            self.workspace.tools.clone_all = false)
         let all_layers = self.choice("All Layers", "clone_sample_all", func () -> unit!:
-            self.workspace.clone_all = true)
+            self.workspace.tools.clone_all = true)
         self.sample_menu = Menu("This Layer ▾", [this_layer, all_layers], font = font)
         self.clone_controls = HStack([self.aligned_box, kit.labelled("Sample", self.sample_menu)], spacing = 12.0)
         let smudge = self.choice("Smudge", "smear_smudge", func () -> unit!:
-            self.workspace.smear_mode = 0)
+            self.workspace.tools.smear_mode = 0)
         let blur = self.choice("Blur", "smear_blur", func () -> unit!:
-            self.workspace.smear_mode = 1)
+            self.workspace.tools.smear_mode = 1)
         let liquify = self.choice("Liquify", "smear_liquify", func () -> unit!:
-            self.workspace.smear_mode = 2)
+            self.workspace.tools.smear_mode = 2)
         self.smear_menu = Menu("Smudge ▾", [smudge, blur, liquify], font = font)
         let linear = self.choice("Linear", "gradient_linear", func () -> unit!:
-            self.workspace.gradient_radial = false)
+            self.workspace.tools.gradient_radial = false)
         let radial = self.choice("Radial", "gradient_radial", func () -> unit!:
-            self.workspace.gradient_radial = true)
+            self.workspace.tools.gradient_radial = true)
         self.gradient_menu = Menu("Linear ▾", [linear, radial], font = font)
         self.reverse_box = kit.checkbox("Reverse", func () -> unit!:
-            self.workspace.gradient_reverse = not self.workspace.gradient_reverse)
+            self.workspace.tools.gradient_reverse = not self.workspace.tools.gradient_reverse)
         self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
-            self.workspace.gradient_transparent = not self.workspace.gradient_transparent)
+            self.workspace.tools.gradient_transparent = not self.workspace.tools.gradient_transparent)
         self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
         let shadows = self.choice("Shadows", "tone_shadows", func () -> unit!:
-            self.workspace.tone_range = 0)
+            self.workspace.tools.tone_range = 0)
         let midtones = self.choice("Midtones", "tone_midtones", func () -> unit!:
-            self.workspace.tone_range = 1)
+            self.workspace.tools.tone_range = 1)
         let highlights = self.choice("Highlights", "tone_highlights", func () -> unit!:
-            self.workspace.tone_range = 2)
+            self.workspace.tools.tone_range = 2)
         self.range_menu = Menu("Midtones ▾", [shadows, midtones, highlights], font = font)
-        let exposure = self.scrubber(workspace.tone_exposure * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.tone_exposure = value / 100.0)
+        let exposure = self.scrubber(workspace.tools.tone_exposure * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
+            self.workspace.tools.tone_exposure = value / 100.0)
         self.tone_row = HStack([kit.labelled("Range", self.range_menu), kit.labelled("Exposure", exposure)], spacing = 12.0)
-        self.weight_field = self.scrubber(workspace.shape_weight, 1.0, 1000.0, " px", func (value: float) -> unit!:
-            self.workspace.shape_weight = value
+        self.weight_field = self.scrubber(workspace.tools.shape_weight, 1.0, 1000.0, " px", func (value: float) -> unit!:
+            self.workspace.tools.shape_weight = value
             restyle_selected(self.workspace))
         self.weight_row = kit.labelled("Weight", self.weight_field)
-        self.sides_field = self.scrubber(float(workspace.shape_sides), 3.0, 64.0, "", func (value: float) -> unit!:
-            self.workspace.shape_sides = int(value)
+        self.sides_field = self.scrubber(float(workspace.tools.shape_sides), 3.0, 64.0, "", func (value: float) -> unit!:
+            self.workspace.tools.shape_sides = int(value)
             restyle_selected(self.workspace))
         self.sides_row = kit.labelled("Sides", self.sides_field)
         self.fill_box = kit.checkbox("Fill", func () -> unit!:
-            self.workspace.shape_fill = not self.workspace.shape_fill
+            self.workspace.tools.shape_fill = not self.workspace.tools.shape_fill
             restyle_selected(self.workspace))
         self.stroke_box = kit.checkbox("Stroke", func () -> unit!:
-            self.workspace.shape_stroke = not self.workspace.shape_stroke
+            self.workspace.tools.shape_stroke = not self.workspace.tools.shape_stroke
             restyle_selected(self.workspace))
-        self.stroke_width_field = self.scrubber(workspace.shape_stroke_width, 0.5, 500.0, " px", func (value: float) -> unit!:
-            self.workspace.shape_stroke_width = value
+        self.stroke_width_field = self.scrubber(workspace.tools.shape_stroke_width, 0.5, 500.0, " px", func (value: float) -> unit!:
+            self.workspace.tools.shape_stroke_width = value
             restyle_selected(self.workspace))
         self.paint_row = HStack([self.fill_box, self.stroke_box, self.stroke_width_field], spacing = 8.0)
-        self.radius_field = self.scrubber(workspace.shape_radius, 0.0, 1000.0, " px", func (value: float) -> unit!:
-            self.workspace.shape_radius = value
+        self.radius_field = self.scrubber(workspace.tools.shape_radius, 0.0, 1000.0, " px", func (value: float) -> unit!:
+            self.workspace.tools.shape_radius = value
             restyle_selected(self.workspace))
         self.radius_row = kit.labelled("Radius", self.radius_field)
         # A scaled shape's sizes are seldom whole pixels: show a tenth.
@@ -209,20 +209,20 @@ pub class ToolHeader:
         if selected_shape_options(workspace) == none:
             self.adopted = ""
         let values = selected_shape_options(workspace) else return
-        let key = f"{workspace.selected_id()} {values.fill} {values.stroke} {values.stroke_width} {values.radius} {values.sides}"
+        let key = f"{workspace.layers.selected_id()} {values.fill} {values.stroke} {values.stroke_width} {values.radius} {values.sides}"
         if key == self.adopted:
             return
         self.adopted = key
-        workspace.shape_sides = values.sides
+        workspace.tools.shape_sides = values.sides
         self.sides_field.set_value(float(values.sides))
         if values.line:
-            workspace.shape_weight = values.stroke_width
+            workspace.tools.shape_weight = values.stroke_width
             self.weight_field.set_value(values.stroke_width)
             return
-        workspace.shape_fill = values.fill
-        workspace.shape_stroke = values.stroke
-        workspace.shape_stroke_width = values.stroke_width
-        workspace.shape_radius = values.radius
+        workspace.tools.shape_fill = values.fill
+        workspace.tools.shape_stroke = values.stroke
+        workspace.tools.shape_stroke_width = values.stroke_width
+        workspace.tools.shape_radius = values.radius
         self.stroke_width_field.set_value(values.stroke_width)
         self.radius_field.set_value(values.radius)
 
@@ -235,7 +235,7 @@ pub class ToolHeader:
 
     ## Whether the Smudge tool is in Smudge mode, whose spacing is its own.
     func smudging(self) -> bool:
-        return self.workspace.tool == "smear" and self.workspace.smear_mode == 0
+        return self.workspace.tools.tool == "smear" and self.workspace.tools.smear_mode == 0
 
     func open_brush_settings(self) -> unit!:
         if let open = self.brush_settings:
@@ -255,28 +255,28 @@ pub class ToolHeader:
             done(keep)
 
     func toggle_contiguous(self) -> unit!:
-        self.workspace.contiguous = not self.workspace.contiguous
-        self.contiguous_button.set_checked(self.workspace.contiguous)
+        self.workspace.tools.contiguous = not self.workspace.tools.contiguous
+        self.contiguous_button.set_checked(self.workspace.tools.contiguous)
 
     ## Show the active tool's name, options and hint; `sampling` while the
     ## color picker takes clicks on the canvas.
     pub func show(self, sampling: bool) -> unit!:
         let workspace = self.workspace
-        let tool = workspace.tool
+        let tool = workspace.tools.tool
         let active = tool_by_id(tool)
         let on_mask = workspace.canvas.editing_mask() and (tool == "brush" or tool == "eraser")
         # A free transform or a warp takes over the header until it is applied or cancelled.
         var over = ""
-        if workspace.transform != none:
+        if workspace.transforms.transform != none:
             over = "Transform"
-        elif let warp = workspace.mesh_warp:
+        elif let warp = workspace.transforms.mesh_warp:
             over = "Puppet Warp" if warp.puppet else "Warp"
         let transforming = over != ""
         self.title.set_text(over if transforming else (active.title + " on mask" if on_mask else active.title))
         let retouching = tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
         self.brush_controls.layout().set_visible(not transforming and (tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or retouching))
         self.tone_row.layout().set_visible(not transforming and (tool == "dodge" or tool == "burn"))
-        self.range_menu.set_text(["Shadows ▾", "Midtones ▾", "Highlights ▾"][workspace.tone_range])
+        self.range_menu.set_text(["Shadows ▾", "Midtones ▾", "Highlights ▾"][workspace.tools.tone_range])
         self.weight_row.layout().set_visible(not transforming and tool == "line")
         self.sides_row.layout().set_visible(not transforming and tool == "shape_polygon")
         let filled_shape = tool == "rectangle" or tool == "shape_ellipse" or tool == "shape_polygon" or tool == "pen"
@@ -284,19 +284,19 @@ pub class ToolHeader:
         self.radius_row.layout().set_visible(not transforming and tool == "rectangle")
         if filled_shape or tool == "line":
             self.adopt_shape()
-        self.fill_box.set_checked(workspace.shape_fill)
-        self.stroke_box.set_checked(workspace.shape_stroke)
+        self.fill_box.set_checked(workspace.tools.shape_fill)
+        self.stroke_box.set_checked(workspace.tools.shape_stroke)
         self.clone_controls.layout().set_visible(not transforming and tool == "clone")
         self.smear_menu.layout().set_visible(not transforming and tool == "smear")
-        self.aligned_box.set_checked(workspace.clone_aligned)
-        self.sample_menu.set_text("All Layers ▾" if workspace.clone_all else "This Layer ▾")
-        self.smear_menu.set_text(["Smudge ▾", "Blur ▾", "Liquify ▾"][workspace.smear_mode])
+        self.aligned_box.set_checked(workspace.tools.clone_aligned)
+        self.sample_menu.set_text("All Layers ▾" if workspace.tools.clone_all else "This Layer ▾")
+        self.smear_menu.set_text(["Smudge ▾", "Blur ▾", "Liquify ▾"][workspace.tools.smear_mode])
         self.gradient_controls.layout().set_visible(not transforming and tool == "gradient")
-        self.gradient_menu.set_text("Radial ▾" if workspace.gradient_radial else "Linear ▾")
-        self.reverse_box.set_checked(workspace.gradient_reverse)
-        self.transparent_box.set_checked(workspace.gradient_transparent)
+        self.gradient_menu.set_text("Radial ▾" if workspace.tools.gradient_radial else "Linear ▾")
+        self.reverse_box.set_checked(workspace.tools.gradient_reverse)
+        self.transparent_box.set_checked(workspace.tools.gradient_transparent)
         # The wand's option as the workspace has it (it is kept between runs).
-        self.contiguous_button.set_checked(workspace.contiguous)
+        self.contiguous_button.set_checked(workspace.tools.contiguous)
         let selecting = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "magnetic" or tool == "wand"
         self.selection_controls.row.layout().set_visible(not transforming and selecting)
         self.selection_controls.show(tool)
@@ -307,19 +307,19 @@ pub class ToolHeader:
         if tool == "text":
             self.type_controls.show()
         self.move_controls.layout().set_visible(not transforming and tool == "move")
-        self.controls_box.set_checked(workspace.show_transform_controls)
-        self.transform_controls.row.layout().set_visible(workspace.transform != none)
+        self.controls_box.set_checked(workspace.transforms.show_transform_controls)
+        self.transform_controls.row.layout().set_visible(workspace.transforms.transform != none)
         self.transform_controls.show()
         self.warp_controls.row.layout().set_visible(over == "Warp")
         self.warp_controls.show()
-        self.box_controls.layout().set_visible(transforming or workspace.crop_box != none or workspace.gradient != none)
-        self.auto_select_box.set_checked(workspace.auto_select)
-        self.size_field.set_value(workspace.brush.diameter)
-        self.hardness_field.set_value(workspace.brush.hardness * 100.0)
-        self.opacity_field.set_value(workspace.brush.opacity * 100.0)
-        self.flow_field.set_value(workspace.brush.flow * 100.0)
-        self.spacing_field.set_value((workspace.smudge_spacing if self.smudging() else workspace.brush.spacing) * 100.0)
-        self.preset_menu.set_text(workspace.brush.preset + " ▾")
+        self.box_controls.layout().set_visible(transforming or workspace.image.crop_box != none or workspace.painting.gradient != none)
+        self.auto_select_box.set_checked(workspace.tools.auto_select)
+        self.size_field.set_value(workspace.tools.brush.diameter)
+        self.hardness_field.set_value(workspace.tools.brush.hardness * 100.0)
+        self.opacity_field.set_value(workspace.tools.brush.opacity * 100.0)
+        self.flow_field.set_value(workspace.tools.brush.flow * 100.0)
+        self.spacing_field.set_value((workspace.tools.smudge_spacing if self.smudging() else workspace.tools.brush.spacing) * 100.0)
+        self.preset_menu.set_text(workspace.tools.brush.preset + " ▾")
         if over == "Warp":
             self.hint.set_text("Drag a corner, a handle or inside the mesh to bend it · a style bends it at once · Enter applies · Esc cancels")
         elif over == "Puppet Warp":

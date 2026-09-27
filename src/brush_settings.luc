@@ -47,7 +47,7 @@ pub class BrushSettings:
         self.texture_menu = Menu("None ▾", self.texture_commands(), font = kit.font)
         self.mode_menu = Menu("Multiply ▾", self.mode_commands(), font = kit.font)
         self.invert_box = kit.checkbox("Invert", func () -> unit!:
-            self.workspace.brush.texture_invert = not self.workspace.brush.texture_invert
+            self.workspace.tools.brush.texture_invert = not self.workspace.tools.brush.texture_invert
             self.workspace.touch())
         self.tip_editor = MaskEditor(kit, self.take_tip, [kit.button("From Selection", self.tip_from_selection)])
         self.texture_editor = MaskEditor(kit, self.take_texture, [])
@@ -57,50 +57,50 @@ pub class BrushSettings:
             editor.set_edited(self.workspace.touch)
         var tip: list[Widget] = [self.tip_editor.content]
         tip.append(self.row("Spacing", 1.0, 500.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.spacing = value / 100.0))
+            self.workspace.tools.brush.spacing = value / 100.0))
         tip.append(self.row("Angle", -180.0, 180.0, "°", func (value: float) -> unit!:
-            self.workspace.brush.angle = value))
+            self.workspace.tools.brush.angle = value))
         tip.append(self.row("Roundness", 5.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.roundness = value / 100.0))
+            self.workspace.tools.brush.roundness = value / 100.0))
         tip.append(self.row("Smoothing", 0.0, 100.0, " px", func (value: float) -> unit!:
-            self.workspace.brush.smoothing = value))
+            self.workspace.tools.brush.smoothing = value))
         var shape: list[Widget] = []
         shape.append(self.row("Size Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.size_jitter = value / 100.0))
+            self.workspace.tools.brush.size_jitter = value / 100.0))
         self.mapping(shape, "Size", true)
         shape.append(self.row("Angle Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.angle_jitter = value / 100.0))
+            self.workspace.tools.brush.angle_jitter = value / 100.0))
         self.mapping(shape, "Angle", false)
         shape.append(self.row("Roundness Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.roundness_jitter = value / 100.0))
+            self.workspace.tools.brush.roundness_jitter = value / 100.0))
         self.mapping(shape, "Roundness", true)
         var scattering: list[Widget] = []
         scattering.append(self.row("Scatter", 0.0, 1000.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.scatter = value / 100.0))
+            self.workspace.tools.brush.scatter = value / 100.0))
         self.mapping(scattering, "Scatter", true)
         scattering.append(self.row("Count", 1.0, 16.0, "", func (value: float) -> unit!:
-            self.workspace.brush.scatter_count = int(value)))
+            self.workspace.tools.brush.scatter_count = int(value)))
         var texture: list[Widget] = [kit.dialog_row("Pattern", self.texture_menu), self.texture_editor.content]
         texture.append(self.row("Scale", 10.0, 1000.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.texture_scale = value / 100.0))
+            self.workspace.tools.brush.texture_scale = value / 100.0))
         texture.append(self.row("Depth", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.texture_depth = value / 100.0))
+            self.workspace.tools.brush.texture_depth = value / 100.0))
         self.mapping(texture, "Depth", true)
         texture.append(kit.dialog_row("Mode", self.mode_menu))
         texture.append(self.invert_box)
         var color_rows: list[Widget] = []
         color_rows.append(self.row("Hue Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.hue_jitter = value / 100.0))
+            self.workspace.tools.brush.hue_jitter = value / 100.0))
         self.mapping(color_rows, "Hue", true)
         color_rows.append(self.row("Saturation Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.saturation_jitter = value / 100.0))
+            self.workspace.tools.brush.saturation_jitter = value / 100.0))
         self.mapping(color_rows, "Saturation", true)
         color_rows.append(self.row("Brightness Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.brightness_jitter = value / 100.0))
+            self.workspace.tools.brush.brightness_jitter = value / 100.0))
         self.mapping(color_rows, "Brightness", true)
         var transfer: list[Widget] = []
         transfer.append(self.row("Flow Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
-            self.workspace.brush.flow_jitter = value / 100.0))
+            self.workspace.tools.brush.flow_jitter = value / 100.0))
         self.mapping(transfer, "Flow", true)
         self.mapping(transfer, "Opacity", true)
         var sections: list[Widget] = []
@@ -155,7 +155,7 @@ pub class BrushSettings:
             let chosen = kind
             let command = Command(name, id = f"texture_{kind}")
             self.kit.bind(command, func () -> unit!:
-                self.workspace.brush.texture = chosen
+                self.workspace.tools.brush.texture = chosen
                 self.workspace.touch()
                 self.show())
             kinds.append(command)
@@ -169,7 +169,7 @@ pub class BrushSettings:
             let chosen = mode
             let command = Command(name, id = f"texture_mode_{mode}")
             self.kit.bind(command, func () -> unit!:
-                self.workspace.brush.texture_mode = chosen
+                self.workspace.tools.brush.texture_mode = chosen
                 self.workspace.touch()
                 self.show())
             modes.append(command)
@@ -178,14 +178,14 @@ pub class BrushSettings:
 
     ## The tip editor's image as the brush's tip (none: the round tip).
     func take_tip(self, mask: BrushMask?) -> unit!:
-        self.workspace.brush.tip = mask
+        self.workspace.tools.brush.tip = mask
         self.workspace.touch()
 
     ## The texture editor's image as the brush's texture, which then uses it.
     func take_texture(self, mask: BrushMask?) -> unit!:
-        self.workspace.brush.texture_image = mask
+        self.workspace.tools.brush.texture_image = mask
         if mask != none:
-            self.workspace.brush.texture = 4
+            self.workspace.tools.brush.texture = 4
         self.workspace.touch()
         self.show()
 
@@ -208,7 +208,7 @@ pub class BrushSettings:
 
     ## Show the workspace's brush, in the rows' order.
     pub func show(self) -> unit!:
-        let b = self.workspace.brush
+        let b = self.workspace.tools.brush
         let values = [b.spacing * 100.0, b.angle, b.roundness * 100.0, b.smoothing,
                       b.size_jitter * 100.0, b.angle_jitter * 100.0, b.roundness_jitter * 100.0,
                       b.scatter * 100.0, float(b.scatter_count), b.texture_scale * 100.0, b.texture_depth * 100.0,
@@ -252,7 +252,7 @@ pub class BrushSettings:
 ## The selected pixels of the whole picture (all of it without a selection)
 ## as a brush image: Define Brush Preset's tip.
 pub func define_tip(workspace: Workspace) -> BrushMask!:
-    let picture = workspace.canvas.selection_image(workspace.selected_id(), merged = true)
+    let picture = workspace.canvas.selection_image(workspace.layers.selected_id(), merged = true)
     return BrushMask.from_image(picture)
 
 ## The names, in their index order.

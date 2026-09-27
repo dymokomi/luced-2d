@@ -38,7 +38,7 @@ pub func run_headless(arguments: list[str]) -> int!:
     let anchor = Canvas(1, 1)
     anchor.bind_headless()
     for path in documents:
-        workspace.open(path)
+        workspace.documents.open(path)
         workspace.canvas.bind_beside(anchor)
     workspace.canvas.bind_beside(anchor)
     # The window's panels, never shown: menu commands (`luced.run`) work headless too.

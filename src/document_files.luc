@@ -39,15 +39,15 @@ pub class DocumentFiles:
         if let app = self.app:
             let what = "Open an .l2d document, a Photoshop .psd, or a PNG, JPEG, TIFF, EXR or SVG picture"
             let chosen = app.open_file(what) catch failure:
-                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.path, "Open")
+                self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.live.path, "Open")
                 return
             if chosen != "":
-                self.workspace.open(chosen) catch failure:
+                self.workspace.documents.open(chosen) catch failure:
                     self.prompts.ask("open", f"Could not open: {failure.message}", chosen, "Open")
                     return
                 self.refresh()
             return
-        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.path, "Open")
+        self.prompts.ask("open", "Open a PSD, PNG, JPEG, TIFF, EXR or SVG file", self.workspace.live.path, "Open")
 
     ## File › Import Image…: a picture chosen in the open panel becomes a new
     ## layer of this document, centred, as a picture dropped on Layers does.
@@ -88,18 +88,18 @@ pub class DocumentFiles:
     ## Save to the document's own `.l2d`; one that has none (new, or opened
     ## from a picture) is asked for a name. Whether it was saved.
     pub func save_document(self) -> bool!:
-        if not self.workspace.path.lower().ends_with(".l2d"):
+        if not self.workspace.live.path.lower().ends_with(".l2d"):
             return self.save_document_as()
-        self.workspace.save(self.workspace.path)
+        self.workspace.documents.save(self.workspace.live.path)
         self.refresh()
         return true
 
     pub func save_document_as(self) -> bool!:
-        let chosen = self.choose_file("save", "Save the document with its layers as .l2d", self.workspace.export_name(".l2d")) catch failure:
+        let chosen = self.choose_file("save", "Save the document with its layers as .l2d", self.workspace.documents.export_name(".l2d")) catch failure:
             return false
         if chosen == "":
             return false
-        self.workspace.save(chosen) catch failure:
+        self.workspace.documents.save(chosen) catch failure:
             self.prompts.ask("save", f"Could not save: {failure.message}", chosen, "Save")
             return false
         self.refresh()
@@ -115,7 +115,7 @@ pub class DocumentFiles:
     pub func export_png(self) -> unit!:
         self.prompts.export_quality = 90
         self.prompts.export_matte = 1.0
-        self.export_to(self.choose_file("export", "Export the flattened picture as PNG", self.workspace.export_name(".png")), ".png", 90, 1.0)
+        self.export_to(self.choose_file("export", "Export the flattened picture as PNG", self.workspace.documents.export_name(".png")), ".png", 90, 1.0)
 
     ## File › Export JPEG…: the quality and matte first, then the file.
     pub func export_jpeg(self) -> unit!:
@@ -124,14 +124,14 @@ pub class DocumentFiles:
     func export_jpeg_with(self, quality: int, matte: float) -> unit!:
         self.prompts.export_quality = quality
         self.prompts.export_matte = matte
-        self.export_to(self.choose_file("export", "Export the flattened picture as JPEG", self.workspace.export_name(".jpg")), ".jpg", quality, matte)
+        self.export_to(self.choose_file("export", "Export the flattened picture as JPEG", self.workspace.documents.export_name(".jpg")), ".jpg", quality, matte)
 
     func export_to(self, path: str, extension: str, quality: int, matte: float) -> unit!:
         if path == "":
             return
         let lowered = path.lower()
         let named = path if lowered.ends_with(extension) or (extension == ".jpg" and lowered.ends_with(".jpeg")) else path + extension
-        self.workspace.export(named, quality, matte) catch failure:
+        self.workspace.documents.export(named, quality, matte) catch failure:
             self.prompts.tell(f"Could not export: {failure.message}")
             return
         self.refresh()
@@ -151,16 +151,16 @@ pub class DocumentFiles:
     # -- Closing.
 
     pub func close_document(self) -> unit!:
-        self.close_document_at(self.workspace.current)
+        self.close_document_at(self.workspace.documents.current)
 
     ## Close tab `index`, asking first when it has unsaved changes.
     pub func close_document_at(self, index: int) -> unit!:
-        if self.workspace.previewing():
-            self.workspace.end_preview(false)
-        if self.workspace.document_dirty(index):
+        if self.workspace.previews.previewing():
+            self.workspace.previews.end_preview(false)
+        if self.workspace.documents.dirty(index):
             self.ask(index, false)
             return
-        self.workspace.close_document(index)
+        self.workspace.documents.close(index)
         self.refresh()
 
     ## The window's close button and Quit: close now when nothing is unsaved;
@@ -173,8 +173,8 @@ pub class DocumentFiles:
                 app.stop()
 
     pub func can_quit(self) -> bool!:
-        if self.workspace.previewing():
-            self.workspace.end_preview(false)
+        if self.workspace.previews.previewing():
+            self.workspace.previews.end_preview(false)
         let index = self.first_dirty()
         if index < 0:
             return true
@@ -183,8 +183,8 @@ pub class DocumentFiles:
 
     func first_dirty(self) -> int:
         var index = 0
-        while index < self.workspace.document_count():
-            if self.workspace.document_dirty(index):
+        while index < self.workspace.documents.count():
+            if self.workspace.documents.dirty(index):
                 return index
             index += 1
         return -1
@@ -192,7 +192,7 @@ pub class DocumentFiles:
     func ask(self, index: int, quitting: bool) -> unit!:
         self.asking = index
         self.quitting = quitting
-        let title = self.workspace.document_title(index)
+        let title = self.workspace.documents.title(index)
         let when = "quitting" if quitting else "closing"
         self.confirm.open(f"Save changes to “{title}” before {when}?", "Save", "Don't Save")
 
@@ -203,14 +203,14 @@ pub class DocumentFiles:
         let quitting = self.quitting
         self.asking = -1
         self.quitting = false
-        if role == 2 or index < 0 or index >= self.workspace.document_count():
+        if role == 2 or index < 0 or index >= self.workspace.documents.count():
             return
         if role == 0:
-            self.workspace.switch_document(index)
+            self.workspace.documents.switch_to(index)
             if not self.save_document():
                 self.refresh()
                 return
-        self.workspace.close_document(index)
+        self.workspace.documents.close(index)
         self.refresh()
         if quitting:
             if self.can_quit():

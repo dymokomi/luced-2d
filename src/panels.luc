@@ -291,10 +291,10 @@ pub class Panels:
         kit.bind(actions.close_document, self.files.close_document)
         kit.bind(actions.exit_app, self.files.quit)
         kit.bind(actions.next_document, func () -> unit!:
-            self.workspace.next_document(1)
+            self.workspace.documents.step(1)
             self.refresh())
         kit.bind(actions.previous_document, func () -> unit!:
-            self.workspace.next_document(-1)
+            self.workspace.documents.step(-1)
             self.refresh())
         kit.bind(actions.document_settings, func () -> unit!:
             if kit.may_open(self.document_settings.dialog):
@@ -304,22 +304,22 @@ pub class Panels:
                 self.settings_dialog.open())
         kit.bind(actions.undo, func () -> unit!:
             # During a free transform or a live gradient, undo drops it, as nothing is kept yet.
-            if self.workspace.transform != none:
-                self.workspace.finish_transform(false)
-            elif self.workspace.mesh_warp != none:
-                self.workspace.finish_mesh_warp(false)
-            elif self.workspace.gradient != none:
-                self.workspace.finish_gradient(false)
+            if self.workspace.transforms.transform != none:
+                self.workspace.transforms.finish_transform(false)
+            elif self.workspace.transforms.mesh_warp != none:
+                self.workspace.transforms.finish_mesh_warp(false)
+            elif self.workspace.painting.gradient != none:
+                self.workspace.painting.finish_gradient(false)
             else:
                 self.workspace.undo()
             self.refresh())
         kit.bind(actions.redo, self.then_refresh(self.workspace.redo))
         kit.bind(actions.fill, func () -> unit!:
-            self.workspace.fill_selection(false)
+            self.workspace.painting.fill_selection(false)
             self.refresh())
         kit.bind(actions.define_brush, self.define_brush)
         kit.bind(actions.fill_background, func () -> unit!:
-            self.workspace.fill_selection(false, true)
+            self.workspace.painting.fill_selection(false, true)
             self.refresh())
         kit.bind(actions.next_document_tab, func () -> unit!:
             actions.next_document.trigger())
@@ -336,13 +336,13 @@ pub class Panels:
             if self.view.polygon.active:
                 self.view.polygon.take_back()
             else:
-                self.workspace.fill_selection(true)
+                self.workspace.painting.fill_selection(true)
             self.refresh())
-        kit.bind(actions.swap_colors, self.then_refresh(self.workspace.swap_colors))
-        kit.bind(actions.reset_colors, self.then_refresh(self.workspace.reset_colors))
-        kit.bind(actions.select_all, self.then_refresh(self.workspace.select_all))
-        kit.bind(actions.deselect, self.then_refresh(self.workspace.deselect))
-        kit.bind(actions.inverse, self.then_refresh(self.workspace.invert_selection))
+        kit.bind(actions.swap_colors, self.then_refresh(self.workspace.colors.swap_colors))
+        kit.bind(actions.reset_colors, self.then_refresh(self.workspace.colors.reset_colors))
+        kit.bind(actions.select_all, self.then_refresh(self.workspace.selection.select_all))
+        kit.bind(actions.deselect, self.then_refresh(self.workspace.selection.deselect))
+        kit.bind(actions.inverse, self.then_refresh(self.workspace.selection.invert_selection))
         kit.bind(actions.expand, func () -> unit!:
             self.prompts.ask("expand", "Expand the selection by, in pixels (1..512)", "4", "Expand"))
         kit.bind(actions.contract, func () -> unit!:
@@ -354,14 +354,14 @@ pub class Panels:
         kit.bind(actions.smooth, func () -> unit!:
             self.prompts.ask("smooth", "Smooth the selection over, in pixels (1..100)", "2", "Smooth"))
         kit.bind(actions.grow, self.then_refresh(func () -> unit!:
-            self.workspace.grow_selection(true)))
+            self.workspace.selection.grow_selection(true)))
         kit.bind(actions.similar, self.then_refresh(func () -> unit!:
-            self.workspace.grow_selection(false)))
+            self.workspace.selection.grow_selection(false)))
         kit.bind(actions.transform_selection, self.transform_selection)
-        kit.bind(actions.quick_mask, self.then_refresh(self.workspace.toggle_quick_mask))
+        kit.bind(actions.quick_mask, self.then_refresh(self.workspace.selection.toggle_quick_mask))
         kit.bind(actions.crop, self.crop)
         kit.bind(actions.reveal_all, func () -> unit!:
-            if not self.workspace.reveal_all():
+            if not self.workspace.image.reveal_all():
                 self.status.set_text("Nothing lies past the canvas")
             self.refresh())
         kit.bind(actions.blur, self.adjust.blur)
@@ -384,13 +384,13 @@ pub class Panels:
         kit.bind(actions.puppet_warp, func () -> unit!:
             self.mesh_warp(true))
         kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
-            self.workspace.flip_layer(true)))
+            self.workspace.transforms.flip_layer(true)))
         kit.bind(actions.flip_vertical, self.then_refresh(func () -> unit!:
-            self.workspace.flip_layer(false)))
+            self.workspace.transforms.flip_layer(false)))
         kit.bind(actions.flip_canvas_horizontal, self.then_refresh(func () -> unit!:
-            self.workspace.flip_canvas(true)))
+            self.workspace.image.flip_canvas(true)))
         kit.bind(actions.flip_canvas_vertical, self.then_refresh(func () -> unit!:
-            self.workspace.flip_canvas(false)))
+            self.workspace.image.flip_canvas(false)))
         kit.bind(actions.layer_style, self.style.open)
         kit.bind(actions.add_noise, self.adjust.add_noise)
         var layer_kinds: list[int] = []
@@ -411,13 +411,13 @@ pub class Panels:
                 self.copy_or_cut(false)))
         kit.bind(actions.copy_merged, func () -> unit!:
             self.attempt("Copy Merged", func () -> unit!:
-                self.workspace.copy_selection(true, false)))
+                self.workspace.edits.copy_selection(true, false)))
         kit.bind(actions.paste_in_place, func () -> unit!:
             self.attempt("Paste in Place", func () -> unit!:
                 if layers_to_paste():
                     paste_layers(self.workspace, true)
                 else:
-                    self.workspace.paste_in_place()
+                    self.workspace.edits.paste_in_place()
                 self.refresh()))
         kit.bind(actions.paste, func () -> unit!:
             self.attempt("Paste", func () -> unit!:
@@ -427,89 +427,89 @@ pub class Panels:
                     return
                 # Paste lands in the middle of the view, as Photoshop's does.
                 let bounds = self.view.layout().bounds()
-                let x = (bounds.width * 0.5 - self.workspace.offset_x) / self.workspace.zoom
-                let y = (bounds.height * 0.5 - self.workspace.offset_y) / self.workspace.zoom
-                self.workspace.paste(x, y)))
+                let x = (bounds.width * 0.5 - self.workspace.viewport.offset_x) / self.workspace.viewport.zoom
+                let y = (bounds.height * 0.5 - self.workspace.viewport.offset_y) / self.workspace.viewport.zoom
+                self.workspace.edits.paste(x, y)))
         kit.bind(actions.layer_via_copy, func () -> unit!:
             self.attempt("Layer via Copy", func () -> unit!:
-                self.workspace.layer_via_copy(false)))
+                self.workspace.edits.layer_via_copy(false)))
         kit.bind(actions.layer_via_cut, func () -> unit!:
             self.attempt("Layer via Cut", func () -> unit!:
-                self.workspace.layer_via_copy(true)))
+                self.workspace.edits.layer_via_copy(true)))
         kit.bind(actions.layer_up, func () -> unit!:
-            self.workspace.reorder(1)
+            self.workspace.edits.reorder(1)
             self.refresh())
         kit.bind(actions.layer_down, func () -> unit!:
-            self.workspace.reorder(-1)
+            self.workspace.edits.reorder(-1)
             self.refresh())
         kit.bind(actions.toggle_mask, self.toggle_mask)
         kit.bind(actions.hide_all_mask, self.attempting("Add Mask", func () -> unit!:
-            self.workspace.toggle_mask(true)))
-        kit.bind(actions.toggle_mask_enabled, self.attempting("Mask", self.workspace.toggle_mask_enabled))
-        kit.bind(actions.toggle_mask_link, self.attempting("Mask", self.workspace.toggle_mask_link))
-        kit.bind(actions.copy_mask, self.attempting("Copy Mask", self.workspace.copy_mask))
+            self.workspace.edits.toggle_mask(true)))
+        kit.bind(actions.toggle_mask_enabled, self.attempting("Mask", self.workspace.edits.toggle_mask_enabled))
+        kit.bind(actions.toggle_mask_link, self.attempting("Mask", self.workspace.edits.toggle_mask_link))
+        kit.bind(actions.copy_mask, self.attempting("Copy Mask", self.workspace.edits.copy_mask))
         kit.bind(actions.toggle_preview, self.adjust.toggle_preview)
-        kit.bind(actions.paste_mask, self.attempting("Paste Mask", self.workspace.paste_mask))
-        kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.load_transparency))
-        kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.toggle_mask_editing))
+        kit.bind(actions.paste_mask, self.attempting("Paste Mask", self.workspace.edits.paste_mask))
+        kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.edits.load_transparency))
+        kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.edits.toggle_mask_editing))
         kit.bind(actions.toggle_visibility, self.toggle_visibility)
         kit.bind(actions.show_guides, func () -> unit!:
-            self.workspace.show_guides = not self.workspace.show_guides
+            self.workspace.viewport.show_guides = not self.workspace.viewport.show_guides
             self.view_changed())
         kit.bind(actions.snap, func () -> unit!:
-            self.workspace.snap = not self.workspace.snap
+            self.workspace.viewport.snap = not self.workspace.viewport.snap
             self.view_changed())
         kit.bind(actions.lock_guides, func () -> unit!:
-            self.workspace.lock_guides = not self.workspace.lock_guides
+            self.workspace.viewport.lock_guides = not self.workspace.viewport.lock_guides
             self.view_changed())
         kit.bind(actions.clear_guides, self.attempting("Clear Guides", func () -> unit!:
             self.workspace.canvas.clear_guides()
             self.workspace.touch()))
         kit.bind(actions.show_transform_controls, func () -> unit!:
-            self.workspace.show_transform_controls = not self.workspace.show_transform_controls
+            self.workspace.transforms.show_transform_controls = not self.workspace.transforms.show_transform_controls
             self.workspace.touch()
             self.refresh())
         kit.bind(actions.show_rulers, func () -> unit!:
-            self.workspace.show_rulers = not self.workspace.show_rulers
+            self.workspace.viewport.show_rulers = not self.workspace.viewport.show_rulers
             self.view_changed())
         kit.bind(actions.show_grid, func () -> unit!:
-            self.workspace.show_grid = not self.workspace.show_grid
+            self.workspace.viewport.show_grid = not self.workspace.viewport.show_grid
             self.view_changed())
         var unit_index = 0
         for unit_name in unit_ids():
             let chosen = unit_name
             kit.bind(actions.units[unit_index], func () -> unit!:
-                self.workspace.units = chosen
+                self.workspace.viewport.units = chosen
                 self.view_changed())
             unit_index += 1
         kit.bind(actions.fit, func () -> unit!:
-            self.workspace.fitted = false
+            self.workspace.viewport.fitted = false
             self.refresh())
         kit.bind(actions.actual_size, func () -> unit!:
             let bounds = self.view.layout().bounds()
-            self.workspace.actual_size(bounds.width, bounds.height)
+            self.workspace.viewport.actual_size(bounds.width, bounds.height)
             self.refresh())
         kit.bind(actions.zoom_in, func () -> unit!:
             self.zoom_by(1))
         kit.bind(actions.zoom_out, func () -> unit!:
             self.zoom_by(-1))
         kit.bind(actions.bigger, func () -> unit!:
-            self.workspace.scale_brush(1.25)
+            self.workspace.tools.scale_brush(1.25)
             self.refresh())
         kit.bind(actions.smaller, func () -> unit!:
-            self.workspace.scale_brush(0.8)
+            self.workspace.tools.scale_brush(0.8)
             self.refresh())
         kit.bind(actions.harder, func () -> unit!:
-            self.workspace.harden_brush(0.25)
+            self.workspace.tools.harden_brush(0.25)
             self.refresh())
         kit.bind(actions.softer, func () -> unit!:
-            self.workspace.harden_brush(-0.25)
+            self.workspace.tools.harden_brush(-0.25)
             self.refresh())
         kit.bind(actions.next_blend, func () -> unit!:
-            self.workspace.cycle_blend(1)
+            self.workspace.edits.cycle_blend(1)
             self.refresh())
         kit.bind(actions.previous_blend, func () -> unit!:
-            self.workspace.cycle_blend(-1)
+            self.workspace.edits.cycle_blend(-1)
             self.refresh())
         var kind = 0
         for command in actions.adjustments:
@@ -526,7 +526,7 @@ pub class Panels:
         for command in actions.tools:
             let tool = command.id()
             kit.bind(command, func () -> unit!:
-                self.choose_tool(next_in_cycle(tool, self.workspace.tool)))
+                self.choose_tool(next_in_cycle(tool, self.workspace.tools.tool)))
 
     ## `change` to the workspace, then refresh the window.
     func then_refresh(self, change: func() -> unit!) -> func() -> unit!:
@@ -541,11 +541,11 @@ pub class Panels:
     ## Photoshop's spring-loaded tools do. A tap keeps the new tool.
     pub func spring_back(self, key: Key) -> unit!:
         let workspace = self.workspace
-        if not workspace.tool_used or workspace.tool_before == workspace.tool:
+        if not workspace.tools.tool_used or workspace.tools.tool_before == workspace.tools.tool:
             return
         for command in self.actions.tools:
-            if command.id() == workspace.tool and command.shortcut().key == key:
-                self.choose_tool(workspace.tool_before)
+            if command.id() == workspace.tools.tool and command.shortcut().key == key:
+                self.choose_tool(workspace.tools.tool_before)
                 return
 
     pub func choose_tool(self, tool: str) -> unit!:
@@ -611,7 +611,7 @@ pub class Panels:
         self.choose_mask_color(1.0)
 
     func choose_mask_color(self, value: float) -> unit!:
-        self.workspace.set_palette(value, value, value, self.mask_background)
+        self.workspace.colors.set_palette(value, value, value, self.mask_background)
         self.mask_prompt.hide()
         self.refresh()
 
@@ -634,7 +634,7 @@ pub class Panels:
     pub func adjust_kind(self, kind: int) -> unit!:
         if applies_at_once(kind):
             self.attempt("Adjust", func () -> unit!:
-                self.workspace.adjust(kind, []))
+                self.workspace.previews.adjust(kind, []))
             return
         self.adjust.open(kind)
 
@@ -644,18 +644,18 @@ pub class Panels:
         let spec = adjustments()[kind]
         var numbers = spec.engine(spec.defaults())
         if kind == gradient_map:
-            numbers = numbers + self.workspace.colors_encoded()
+            numbers = numbers + self.workspace.colors.colors_encoded()
         # A new Curves layer starts straight, whatever a dialog last staged.
         if kind == curves_adjustment:
             var channel = 0
             while channel < 4:
                 self.workspace.canvas.reset_curve(channel)
                 channel += 1
-        discard(self.workspace.add_adjustment_layer(kind, spec.name, numbers))
+        discard(self.workspace.previews.add_adjustment_layer(kind, spec.name, numbers))
 
     ## Edit › Free Transform: the box goes up around the layer's pixels on the canvas.
     pub func free_transform(self) -> unit!:
-        let started = self.workspace.begin_transform() catch failure:
+        let started = self.workspace.transforms.begin_transform() catch failure:
             self.prompts.tell(f"Cannot transform: {failure.message}")
             return
         if not started:
@@ -667,7 +667,7 @@ pub class Panels:
     ## Edit › Transform › Skew, Distort or Perspective: the free-transform box
     ## (up already, or put up now) with its handles in that mode.
     func transform_mode(self, mode: int) -> unit!:
-        let started = self.workspace.begin_transform_mode(mode) catch failure:
+        let started = self.workspace.transforms.begin_transform_mode(mode) catch failure:
             self.prompts.tell(f"Cannot transform: {failure.message}")
             return
         if not started:
@@ -678,7 +678,7 @@ pub class Panels:
     ## Edit › Transform › Warp or Edit › Puppet Warp on the selected layer.
     func mesh_warp(self, puppet: bool) -> unit!:
         let name = "Puppet Warp" if puppet else "Warp"
-        let started = self.workspace.begin_mesh_warp(puppet) catch failure:
+        let started = self.workspace.transforms.begin_mesh_warp(puppet) catch failure:
             self.prompts.tell(f"Cannot {name.lower()}: {failure.message}")
             return
         if not started:
@@ -688,7 +688,7 @@ pub class Panels:
 
     ## Select › Transform Selection: the box goes up around the selection, moving its outline.
     pub func transform_selection(self) -> unit!:
-        let started = self.workspace.begin_selection_transform() catch failure:
+        let started = self.workspace.transforms.begin_selection_transform() catch failure:
             self.prompts.tell(f"Cannot transform the selection: {failure.message}")
             return
         if not started:
@@ -698,18 +698,18 @@ pub class Panels:
 
     ## The header's Apply or Cancel: the free transform, or the Crop tool's box.
     pub func finish_box(self, keep: bool) -> unit!:
-        if self.workspace.gradient != none:
-            self.workspace.finish_gradient(keep)
-        elif self.workspace.transform != none:
-            self.workspace.finish_transform(keep)
-        elif self.workspace.mesh_warp != none:
-            self.workspace.finish_mesh_warp(keep)
+        if self.workspace.painting.gradient != none:
+            self.workspace.painting.finish_gradient(keep)
+        elif self.workspace.transforms.transform != none:
+            self.workspace.transforms.finish_transform(keep)
+        elif self.workspace.transforms.mesh_warp != none:
+            self.workspace.transforms.finish_mesh_warp(keep)
         else:
-            self.workspace.finish_crop(keep)
+            self.workspace.image.finish_crop(keep)
         self.refresh()
 
     pub func crop(self) -> unit!:
-        self.workspace.crop() catch failure:
+        self.workspace.image.crop() catch failure:
             self.prompts.tell(f"Cannot crop: {failure.message}")
             return
         self.refresh()
@@ -731,29 +731,29 @@ pub class Panels:
     # -- Layers.
 
     pub func select_layer(self, index: int) -> unit!:
-        self.workspace.select(index)
+        self.workspace.layers.select(index)
         self.refresh()
 
     pub func toggle_visibility(self) -> unit!:
-        self.workspace.toggle_visibility()
+        self.workspace.edits.toggle_visibility()
         self.refresh()
 
     pub func toggle_mask(self) -> unit!:
         self.attempt("Mask", func () -> unit!:
-            self.workspace.toggle_mask())
+            self.workspace.edits.toggle_mask())
 
     pub func toggle_clipped(self) -> unit!:
-        self.workspace.toggle_clipped()
+        self.workspace.edits.toggle_clipped()
         self.refresh()
 
     pub func set_blend(self, mode: int) -> unit!:
-        self.workspace.set_blend(mode)
+        self.workspace.edits.set_blend(mode)
         self.refresh()
 
     # -- Documents.
 
     pub func switch_document(self, index: int) -> unit!:
-        self.workspace.switch_document(index)
+        self.workspace.documents.switch_to(index)
         self.refresh()
 
     ## Copy (Cut with `cut`): the selected pixels, or with none selected the
@@ -761,7 +761,7 @@ pub class Panels:
     func copy_or_cut(self, cut: bool) -> unit!:
         if self.workspace.canvas.has_selection():
             Canvas.forget_copied_layers()
-            self.workspace.copy_selection(false, cut)
+            self.workspace.edits.copy_selection(false, cut)
         else:
             copy_layers(self.workspace, cut)
         self.refresh()
@@ -770,7 +770,7 @@ pub class Panels:
     ## (`x`, `y`): onto another document's tab, they go there.
     func layers_dropped(self, x: float, y: float) -> unit!:
         let index = self.tabs.tab_at(x, y)
-        if index >= 0 and index != self.workspace.current:
+        if index >= 0 and index != self.workspace.documents.current:
             send_layers(self.workspace, index)
             self.refresh()
 
@@ -788,13 +788,13 @@ pub class Panels:
     ## A zoom typed in the status bar, in percent, about the view's middle.
     func type_zoom(self, percent: float) -> unit!:
         let bounds = self.view.layout().bounds()
-        self.workspace.zoom_about(percent / 100.0 / self.workspace.zoom, bounds.width * 0.5, bounds.height * 0.5)
+        self.workspace.viewport.zoom_about(percent / 100.0 / self.workspace.viewport.zoom, bounds.width * 0.5, bounds.height * 0.5)
         self.refresh()
 
     ## Zoom In or Out: the next step, about the view's middle.
     func zoom_by(self, direction: int) -> unit!:
         let bounds = self.view.layout().bounds()
-        self.workspace.zoom_step(direction, bounds.width * 0.5, bounds.height * 0.5)
+        self.workspace.viewport.zoom_step(direction, bounds.width * 0.5, bounds.height * 0.5)
         self.refresh()
 
     ## The document's pixels changed without a structural change: redraw the
@@ -810,7 +810,7 @@ pub class Panels:
     ## one after another.
     pub func show_opening(self) -> unit!:
         let workspace = self.workspace
-        workspace.continue_opening()
+        workspace.documents.continue_opening()
         self.files.pump()
         let canvas = workspace.canvas
         canvas.continue_refine() catch failure:
@@ -828,9 +828,9 @@ pub class Panels:
         if shown == self.shown_opening:
             return
         self.shown_opening = shown
-        let name = workspace.path if workspace.path != "" else "Untitled"
+        let name = workspace.live.path if workspace.live.path != "" else "Untitled"
         let doing = f"Refining… {percent}%  |  edits wait until the selection is in" if refining else (queued if queued != "" else f"Opening… {percent}%") + "  |  edits wait until the picture is in"
-        self.status.set_text(f"{doing}  |  {workspace.width()} × {workspace.height()} px  |  {name}")
+        self.status.set_text(f"{doing}  |  {workspace.canvas.width()} × {workspace.canvas.height()} px  |  {name}")
         self.tabs.layout().invalidate()
         self.layers.layout().invalidate()
 
@@ -838,13 +838,13 @@ pub class Panels:
     ## (a stroke let go, a key's edit), show it — not mid-stroke, when every
     ## frame changes it. Menus and shortcuts then offer what is possible now.
     pub func refresh_if_changed(self) -> unit!:
-        if self.workspace.revision == self.shown_revision or self.workspace.canvas.painting():
+        if self.workspace.live.revision == self.shown_revision or self.workspace.canvas.painting():
             return
         self.refresh()
 
     pub func refresh(self) -> unit!:
         let workspace = self.workspace
-        self.shown_revision = workspace.revision
+        self.shown_revision = workspace.live.revision
         self.header.show(self.picker.is_open())
         self.palette.layout().invalidate()
         self.picker.sync()
@@ -856,11 +856,11 @@ pub class Panels:
         for entry in panel_entries():
             self.actions.windows[window_index].set_checked(self.catalog.is_open(entry.id))
             window_index += 1
-        let name = workspace.path if workspace.path != "" else "Untitled"
-        let percent = int(workspace.zoom * 100.0 + 0.5)
+        let name = workspace.live.path if workspace.live.path != "" else "Untitled"
+        let percent = int(workspace.viewport.zoom * 100.0 + 0.5)
         let dpi = int(math.floor(workspace.canvas.resolution() + 0.5))
         self.zoom_field.set_value(float(percent))
-        self.status.set_text(f"{workspace.width()} × {workspace.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
+        self.status.set_text(f"{workspace.canvas.width()} × {workspace.canvas.height()} px  |  {dpi} px/in  |  {workspace.canvas.profile()}  |  {name}")
         if workspace.canvas.is_opening() or workspace.canvas.refine_keeping():
             # The next frame puts the progress back.
             self.shown_opening = -2
@@ -868,20 +868,20 @@ pub class Panels:
         self.rail.show(workspace)
         self.actions.update(workspace)
         # The view aids, with their state in the View menu.
-        self.ruler_row.layout().set_visible(workspace.show_rulers)
-        self.left_ruler_menu.layout().set_visible(workspace.show_rulers)
+        self.ruler_row.layout().set_visible(workspace.viewport.show_rulers)
+        self.left_ruler_menu.layout().set_visible(workspace.viewport.show_rulers)
         self.top_ruler.layout().invalidate()
         self.left_ruler.layout().invalidate()
-        self.actions.show_rulers.set_checked(workspace.show_rulers)
-        self.actions.show_guides.set_checked(workspace.show_guides)
-        self.actions.snap.set_checked(workspace.snap)
-        self.actions.lock_guides.set_checked(workspace.lock_guides)
+        self.actions.show_rulers.set_checked(workspace.viewport.show_rulers)
+        self.actions.show_guides.set_checked(workspace.viewport.show_guides)
+        self.actions.snap.set_checked(workspace.viewport.snap)
+        self.actions.lock_guides.set_checked(workspace.viewport.lock_guides)
         self.actions.clear_guides.set_enabled(workspace.canvas.guide_count() > 0)
-        self.actions.show_transform_controls.set_checked(workspace.show_transform_controls)
-        self.actions.show_grid.set_checked(workspace.show_grid)
+        self.actions.show_transform_controls.set_checked(workspace.transforms.show_transform_controls)
+        self.actions.show_grid.set_checked(workspace.viewport.show_grid)
         var shown = 0
         for unit_name in unit_ids():
-            self.actions.units[shown].set_checked(workspace.units == unit_name)
+            self.actions.units[shown].set_checked(workspace.viewport.units == unit_name)
             shown += 1
         self.layers.layout().invalidate()
         self.tabs.layout().invalidate()
@@ -894,8 +894,8 @@ pub class Panels:
         self.document_settings.close()
         self.size_dialogs.close()
         self.text_editing.close_all()
-        if self.workspace.previewing():
-            self.workspace.end_preview(false) catch failure:
+        if self.workspace.previews.previewing():
+            self.workspace.previews.end_preview(false) catch failure:
                 discard(failure)
         self.kit.close()
 

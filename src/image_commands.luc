@@ -1,0 +1,100 @@
+## The whole image: its size (Canvas Size, Image Size, Reveal All), Flip
+## Canvas, how its colors blend, and cropping — Image › Crop and the Crop tool's box. Each change of
+## size lets the view fit the document again.
+from live import Live
+from viewport import Viewport
+from crop_box import CropBox
+
+pub class ImageCommands:
+    let live: Live
+    let viewport: Viewport
+    ## The Crop tool's box while the tool is active.
+    pub var crop_box: CropBox? = none
+    ## Width over height the Crop tool keeps (the header's ratio), 0 for any.
+    pub var crop_ratio: float = 0.0
+
+    pub func init(self, live: Live, viewport: Viewport):
+        self.live = live
+        self.viewport = viewport
+
+    pub func crop(self) -> unit!:
+        self.live.canvas.crop()
+        self.resized()
+
+    ## The canvas `width` by `height`, the old one's top-left at (`offset_x`, `offset_y`).
+    pub func resize_canvas(self, width: int, height: int, offset_x: int, offset_y: int) -> unit!:
+        self.live.canvas.resize_canvas(width, height, offset_x, offset_y)
+        self.resized()
+
+    ## Image › Reveal All: the canvas grown to hold every layer's pixels,
+    ## those moved past it included; false when nothing lies past it.
+    pub func reveal_all(self) -> bool!:
+        if not self.live.canvas.reveal_all():
+            return false
+        self.resized()
+        return true
+
+    ## Every layer resampled to `width` by `height`.
+    pub func resize_image(self, width: int, height: int, smooth: bool = true) -> unit!:
+        self.live.canvas.resize_image(width, height, smooth)
+        self.resized()
+
+    ## Image › Flip Canvas: every layer mirrored about the canvas's middle.
+    pub func flip_canvas(self, horizontal: bool) -> unit!:
+        self.live.canvas.flip_canvas(horizontal)
+        self.live.touch()
+
+    ## Color Settings' "Blend RGB Colors Using Gamma 1.0" for the document:
+    ## on, colors mix in linear light; off (the default), as sRGB-encoded
+    ## values, as Photoshop's do. One undo step.
+    pub func set_linear_blend(self, on: bool) -> unit!:
+        self.live.canvas.set_linear_blend(on)
+        self.live.touch()
+
+    func resized(self):
+        self.viewport.fitted = false
+        self.live.touch()
+
+    # -- The Crop tool.
+
+    ## The Crop tool's box goes with the tool: it starts around the selection
+    ## or the whole canvas when the tool is chosen, and goes when another is.
+    pub func follow_tool(self, tool: str):
+        if tool == "crop":
+            if self.crop_box == none:
+                self.crop_box = self.fresh_crop_box()
+        else:
+            self.crop_box = none
+
+    ## A document switch: the box, if up, goes around the document now shown.
+    pub func refresh_crop_box(self):
+        if self.crop_box != none:
+            self.crop_box = self.fresh_crop_box()
+
+    ## Crop to the Crop tool's box (Enter), or put it back around the whole
+    ## canvas (Esc). Past the canvas's edges the canvas grows, transparent.
+    pub func finish_crop(self, keep: bool) -> unit!:
+        if let box = self.crop_box:
+            if keep:
+                box.end()
+                self.live.canvas.resize_canvas(box.width(), box.height(), -int(box.left), -int(box.top))
+                self.viewport.fitted = false
+            self.crop_box = self.fresh_crop_box()
+            self.live.touch()
+
+    ## Keep `ratio` (width over height, 0 for any) in the Crop tool's box.
+    pub func set_crop_ratio(self, ratio: float):
+        self.crop_ratio = ratio
+        if let box = self.crop_box:
+            box.set_ratio(ratio)
+        self.live.touch()
+
+    ## A Crop tool box around the selection, or else the whole canvas, in the
+    ## header's ratio.
+    func fresh_crop_box(self) -> CropBox:
+        let canvas = self.live.canvas
+        var box = CropBox(float(canvas.width()), float(canvas.height()))
+        if canvas.has_selection() and canvas.selection_width() > 0 and canvas.selection_height() > 0:
+            box = CropBox(float(canvas.selection_width()), float(canvas.selection_height()), float(canvas.selection_left()), float(canvas.selection_top()))
+        box.set_ratio(self.crop_ratio)
+        return box

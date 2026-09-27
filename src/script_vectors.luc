@@ -25,12 +25,12 @@ pub func apply_vector(workspace: Workspace, action: str, fields: list[str]) -> u
     if action == "add_vector":
         let kind = kind_named(field(fields, 0))
         let line = kind == 2
-        workspace.as_one("Shape", func () -> unit!:
+        workspace.edits.as_one("Shape", func () -> unit!:
             ensure_vector_layer(workspace)
-            canvas.add_shape(workspace.selected_id(), kind, decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4),
-                             workspace.shape_sides, workspace.shape_radius, workspace.shape_fill and not line, workspace.red, workspace.green, workspace.blue,
-                             workspace.shape_stroke or line, workspace.red if line else workspace.back_red, workspace.green if line else workspace.back_green,
-                             workspace.blue if line else workspace.back_blue, workspace.shape_weight if line else workspace.shape_stroke_width))
+            canvas.add_shape(workspace.layers.selected_id(), kind, decimal(fields, 1), decimal(fields, 2), decimal(fields, 3), decimal(fields, 4),
+                             workspace.tools.shape_sides, workspace.tools.shape_radius, workspace.tools.shape_fill and not line, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                             workspace.tools.shape_stroke or line, workspace.colors.red if line else workspace.colors.back_red, workspace.colors.green if line else workspace.colors.back_green,
+                             workspace.colors.blue if line else workspace.colors.back_blue, workspace.tools.shape_weight if line else workspace.tools.shape_stroke_width))
     elif action == "add_path":
         if fields.length < 5:
             error(ui.invalid, "a path takes two points or more")
@@ -42,14 +42,14 @@ pub func apply_vector(workspace: Workspace, action: str, fields: list[str]) -> u
                 discard(repeat)
                 canvas.add_point(decimal(fields, at), decimal(fields, at + 1))
             at += 2
-        workspace.as_one("Path", func () -> unit!:
+        workspace.edits.as_one("Path", func () -> unit!:
             ensure_vector_layer(workspace)
-            canvas.add_path(workspace.selected_id(), bool(field(fields, 0)), workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
-                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width))
+            canvas.add_path(workspace.layers.selected_id(), bool(field(fields, 0)), workspace.tools.shape_fill, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                            workspace.tools.shape_stroke, workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue, workspace.tools.shape_stroke_width))
     elif action == "new_path":
-        workspace.as_one("New Path", func () -> unit!:
+        workspace.edits.as_one("New Path", func () -> unit!:
             ensure_vector_layer(workspace)
-            canvas.add_empty_path(workspace.selected_id(), field(fields, 0)))
+            canvas.add_empty_path(workspace.layers.selected_id(), field(fields, 0)))
     elif action == "select_vector":
         let element = number(fields, 0)
         activate(workspace, -1 if element < 0 else checked(workspace, element))
@@ -66,7 +66,7 @@ pub func apply_vector(workspace: Workspace, action: str, fields: list[str]) -> u
     elif action == "vector_selection":
         select_element(workspace, checked(workspace, number(fields, 0)), number(fields, 1))
     else:
-        canvas.transform_element(workspace.selected_id(), checked(workspace, number(fields, 0)), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3),
+        canvas.transform_element(workspace.layers.selected_id(), checked(workspace, number(fields, 0)), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3),
                                  decimal(fields, 4), decimal(fields, 5), decimal(fields, 6), decimal(fields, 7))
     workspace.touch()
 

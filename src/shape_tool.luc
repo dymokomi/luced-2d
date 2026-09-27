@@ -112,7 +112,7 @@ pub class ShapeDrag:
         let box = self.box()
         if self.tool == "rectangle":
             return [Point(box[0], box[1]), Point(box[0] + box[2], box[1]), Point(box[0] + box[2], box[1] + box[3]), Point(box[0], box[1] + box[3]), Point(box[0], box[1])]
-        let sides = 48 if self.tool == "shape_ellipse" else workspace.shape_sides
+        let sides = 48 if self.tool == "shape_ellipse" else workspace.tools.shape_sides
         return ring(box, sides)
 
 ## `sides` corners around the ellipse in `box`, the first at the top, closed.
@@ -135,17 +135,17 @@ pub func draw_shape(workspace: Workspace, tool: str, x: float, y: float, width: 
     let kind = 0 if tool == "rectangle" else (1 if tool == "shape_ellipse" else 3)
     let canvas = workspace.canvas
     if vector_layer(workspace):
-        canvas.add_shape(workspace.selected_id(), kind, x, y, width, height, workspace.shape_sides, workspace.shape_radius,
-                         workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
-                         workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
+        canvas.add_shape(workspace.layers.selected_id(), kind, x, y, width, height, workspace.tools.shape_sides, workspace.tools.shape_radius,
+                         workspace.tools.shape_fill, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                         workspace.tools.shape_stroke, workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue, workspace.tools.shape_stroke_width)
         workspace.touch()
         return
-    workspace.as_one(name, func () -> unit!:
-        workspace.add_layer()
-        workspace.rename(name)
-        canvas.set_shape(workspace.selected_id(), kind, x, y, width, height, workspace.shape_sides, workspace.shape_radius,
-                         workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
-                         workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width))
+    workspace.edits.as_one(name, func () -> unit!:
+        workspace.edits.add_layer()
+        workspace.edits.rename(name)
+        canvas.set_shape(workspace.layers.selected_id(), kind, x, y, width, height, workspace.tools.shape_sides, workspace.tools.shape_radius,
+                         workspace.tools.shape_fill, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                         workspace.tools.shape_stroke, workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue, workspace.tools.shape_stroke_width))
     workspace.touch()
 
 ## A straight line of the header's weight in the foreground color, on a new
@@ -153,15 +153,15 @@ pub func draw_shape(workspace: Workspace, tool: str, x: float, y: float, width: 
 pub func draw_line(workspace: Workspace, x0: float, y0: float, x1: float, y1: float) -> unit!:
     let canvas = workspace.canvas
     if vector_layer(workspace):
-        canvas.add_shape(workspace.selected_id(), 2, x0, y0, x1 - x0, y1 - y0, workspace.shape_sides, 0.0,
-                         false, 0.0, 0.0, 0.0, true, workspace.red, workspace.green, workspace.blue, workspace.shape_weight)
+        canvas.add_shape(workspace.layers.selected_id(), 2, x0, y0, x1 - x0, y1 - y0, workspace.tools.shape_sides, 0.0,
+                         false, 0.0, 0.0, 0.0, true, workspace.colors.red, workspace.colors.green, workspace.colors.blue, workspace.tools.shape_weight)
         workspace.touch()
         return
-    workspace.as_one("Line", func () -> unit!:
-        workspace.add_layer()
-        workspace.rename("Line")
-        canvas.set_shape(workspace.selected_id(), 2, x0, y0, x1 - x0, y1 - y0, workspace.shape_sides, 0.0,
-                         false, 0.0, 0.0, 0.0, true, workspace.red, workspace.green, workspace.blue, workspace.shape_weight))
+    workspace.edits.as_one("Line", func () -> unit!:
+        workspace.edits.add_layer()
+        workspace.edits.rename("Line")
+        canvas.set_shape(workspace.layers.selected_id(), 2, x0, y0, x1 - x0, y1 - y0, workspace.tools.shape_sides, 0.0,
+                         false, 0.0, 0.0, 0.0, true, workspace.colors.red, workspace.colors.green, workspace.colors.blue, workspace.tools.shape_weight))
     workspace.touch()
 
 ## A selected shape layer's options, as the header shows them: the stroke
@@ -185,8 +185,8 @@ pub class ShapeOptions:
 ## The selected layer's shape options; none when it is not a shape layer.
 pub func selected_shape_options(workspace: Workspace) -> ShapeOptions?:
     let canvas = workspace.canvas
-    let index = workspace.selected
-    if index < 0 or index >= workspace.layer_count():
+    let index = workspace.layers.selected
+    if index < 0 or index >= workspace.canvas.layer_count():
         return none
     let options = read_shape_options(canvas, index) catch _:
         return none
@@ -213,17 +213,17 @@ func round_tenth(value: float) -> float:
 ## The header's shape options changed: the selected shape layer takes them.
 pub func restyle_selected(workspace: Workspace) -> unit!:
     let canvas = workspace.canvas
-    let index = workspace.selected
-    if index < 0 or index >= workspace.layer_count() or not canvas.layer_shaped(index):
+    let index = workspace.layers.selected
+    if index < 0 or index >= workspace.canvas.layer_count() or not canvas.layer_shaped(index):
         return
     let scale = shape_scale(canvas, index)
-    let radius = workspace.shape_radius / scale if scale > 1e-9 else workspace.shape_radius
+    let radius = workspace.tools.shape_radius / scale if scale > 1e-9 else workspace.tools.shape_radius
     let line = canvas.layer_shape_value(index, 0) == 2.0
     if line:
-        canvas.restyle_shape(workspace.selected_id(), false, 0.0, 0.0, 0.0, true, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
-                             canvas.layer_shape_value(index, 14), workspace.shape_weight, 0.0, workspace.shape_sides)
+        canvas.restyle_shape(workspace.layers.selected_id(), false, 0.0, 0.0, 0.0, true, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
+                             canvas.layer_shape_value(index, 14), workspace.tools.shape_weight, 0.0, workspace.tools.shape_sides)
     else:
-        canvas.restyle_shape(workspace.selected_id(), workspace.shape_fill, canvas.layer_shape_value(index, 8), canvas.layer_shape_value(index, 9),
-                             canvas.layer_shape_value(index, 10), workspace.shape_stroke, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
-                             canvas.layer_shape_value(index, 14), workspace.shape_stroke_width, radius, workspace.shape_sides)
+        canvas.restyle_shape(workspace.layers.selected_id(), workspace.tools.shape_fill, canvas.layer_shape_value(index, 8), canvas.layer_shape_value(index, 9),
+                             canvas.layer_shape_value(index, 10), workspace.tools.shape_stroke, canvas.layer_shape_value(index, 12), canvas.layer_shape_value(index, 13),
+                             canvas.layer_shape_value(index, 14), workspace.tools.shape_stroke_width, radius, workspace.tools.shape_sides)
     workspace.touch()

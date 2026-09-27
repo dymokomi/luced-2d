@@ -94,19 +94,19 @@ pub class ScriptCommands:
         let action = line.action
         let fields = line.fields
         if action == "new_document":
-            workspace.create(number(fields, 0), number(fields, 1))
+            workspace.documents.create(number(fields, 0), number(fields, 1))
             self.bind_new()
         elif action == "open":
-            workspace.open(field(fields, 0))
+            workspace.documents.open(field(fields, 0))
             self.bind_new()
             # The script's next line acts on the picture: it waits for it.
             workspace.canvas.finish_opening()
         elif action == "save":
-            workspace.save(field(fields, 0))
+            workspace.documents.save(field(fields, 0))
         elif action == "export":
-            workspace.export(field(fields, 0), number(fields, 1))
+            workspace.documents.export(field(fields, 0), number(fields, 1))
         elif action == "place":
-            workspace.place_file(field(fields, 0), float(workspace.width()) * 0.5, float(workspace.height()) * 0.5)
+            workspace.documents.place_file(field(fields, 0), float(workspace.canvas.width()) * 0.5, float(workspace.canvas.height()) * 0.5)
             workspace.canvas.finish_opening()
         elif action == "undo":
             workspace.undo()
@@ -128,67 +128,67 @@ pub class ScriptCommands:
     func apply_layers(self, action: str, fields: list[str]) -> unit!:
         let workspace = self.workspace
         if action == "add_layer":
-            workspace.add_layer()
-            workspace.rename(field(fields, 0))
+            workspace.edits.add_layer()
+            workspace.edits.rename(field(fields, 0))
         elif action == "select_layer":
             let index = number(fields, 0)
-            if index < 0 or index >= workspace.layer_count():
+            if index < 0 or index >= workspace.canvas.layer_count():
                 error(ui.invalid, f"there is no layer {index}")
-            workspace.select(index)
+            workspace.layers.select(index)
         elif action == "select_layer_named":
-            workspace.select(self.layer_named(field(fields, 0)))
+            workspace.layers.select(self.layer_named(field(fields, 0)))
         elif action == "rename_layer":
-            workspace.rename(field(fields, 0))
+            workspace.edits.rename(field(fields, 0))
         elif action == "delete_layer":
-            workspace.delete_layer()
+            workspace.edits.delete_layer()
         elif action == "duplicate_layer":
-            workspace.duplicate()
+            workspace.edits.duplicate()
         elif action == "merge_down":
-            workspace.merge_down()
+            workspace.edits.merge_down()
         elif action == "reorder":
             let steps = number(fields, 0)
             var moved = 0
             while moved < (steps if steps > 0 else -steps):
-                workspace.reorder(1 if steps > 0 else -1)
+                workspace.edits.reorder(1 if steps > 0 else -1)
                 moved += 1
         elif action == "set_opacity":
-            workspace.set_opacity(decimal(fields, 0))
+            workspace.edits.set_opacity(decimal(fields, 0))
         elif action == "set_blend":
-            workspace.set_blend(blend_named(field(fields, 0)))
+            workspace.edits.set_blend(blend_named(field(fields, 0)))
         elif action == "set_visible":
-            if workspace.canvas.layer_visible(workspace.selected) != flag(fields, 0):
-                workspace.toggle_visibility()
+            if workspace.canvas.layer_visible(workspace.layers.selected) != flag(fields, 0):
+                workspace.edits.toggle_visibility()
         elif action == "move_by":
-            workspace.move_layer(number(fields, 0), number(fields, 1))
+            workspace.edits.move_layer(number(fields, 0), number(fields, 1))
         elif action == "add_mask":
-            if not workspace.canvas.layer_masked(workspace.selected):
-                workspace.toggle_mask()
+            if not workspace.canvas.layer_masked(workspace.layers.selected):
+                workspace.edits.toggle_mask()
         else:
             self.apply_painting(action, fields)
 
     func apply_painting(self, action: str, fields: list[str]) -> unit!:
         let workspace = self.workspace
         if action == "set_color":
-            workspace.set_palette(linear(fields, 0), linear(fields, 1), linear(fields, 2), false)
+            workspace.colors.set_palette(linear(fields, 0), linear(fields, 1), linear(fields, 2), false)
         elif action == "set_background":
-            workspace.set_palette(linear(fields, 0), linear(fields, 1), linear(fields, 2), true)
+            workspace.colors.set_palette(linear(fields, 0), linear(fields, 1), linear(fields, 2), true)
         elif action == "set_brush":
-            workspace.brush.diameter = decimal(fields, 0)
-            workspace.brush.hardness = decimal(fields, 1)
-            workspace.brush.opacity = decimal(fields, 2)
+            workspace.tools.brush.diameter = decimal(fields, 0)
+            workspace.tools.brush.hardness = decimal(fields, 1)
+            workspace.tools.brush.opacity = decimal(fields, 2)
         elif action == "stroke":
             self.stroke(flag(fields, 0), fields)
         elif action == "fill":
-            workspace.fill_selection(false)
+            workspace.painting.fill_selection(false)
         elif action == "clear":
-            workspace.fill_selection(true)
+            workspace.painting.fill_selection(true)
         elif action == "gradient":
-            let radial = workspace.gradient_radial
-            workspace.gradient_radial = flag(fields, 4)
-            workspace.fill_gradient(decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3)) catch failure:
-                workspace.gradient_radial = radial
+            let radial = workspace.tools.gradient_radial
+            workspace.tools.gradient_radial = flag(fields, 4)
+            workspace.painting.fill_gradient(decimal(fields, 0), decimal(fields, 1), decimal(fields, 2), decimal(fields, 3)) catch failure:
+                workspace.tools.gradient_radial = radial
                 error(failure.code, failure.message)
-            workspace.gradient_radial = radial
+            workspace.tools.gradient_radial = radial
         elif action == "text":
             self.text_layer(decimal(fields, 0), decimal(fields, 1), field(fields, 2), decimal(fields, 3))
         elif action == "select_rectangle":
@@ -196,24 +196,24 @@ pub class ScriptCommands:
         elif action == "select_ellipse":
             workspace.canvas.select_ellipse(number(fields, 0), number(fields, 1), number(fields, 2), number(fields, 3), number(fields, 4))
         elif action == "select_all":
-            workspace.select_all()
+            workspace.selection.select_all()
         elif action == "deselect":
-            workspace.deselect()
+            workspace.selection.deselect()
         elif action == "invert_selection":
-            workspace.invert_selection()
+            workspace.selection.invert_selection()
         elif action == "modify_selection":
-            workspace.adjust_selection(number(fields, 0), number(fields, 1))
+            workspace.selection.adjust_selection(number(fields, 0), number(fields, 1))
         elif action == "border_selection":
-            workspace.border_selection(number(fields, 0))
+            workspace.selection.border_selection(number(fields, 0))
         elif action == "smooth_selection":
-            workspace.smooth_selection(number(fields, 0))
+            workspace.selection.smooth_selection(number(fields, 0))
         elif action == "grow_selection":
-            let tolerance = workspace.tolerance
-            workspace.tolerance = decimal(fields, 1)
-            workspace.grow_selection(flag(fields, 0)) catch failure:
-                workspace.tolerance = tolerance
+            let tolerance = workspace.tools.tolerance
+            workspace.tools.tolerance = decimal(fields, 1)
+            workspace.selection.grow_selection(flag(fields, 0)) catch failure:
+                workspace.tools.tolerance = tolerance
                 error(failure.code, failure.message)
-            workspace.tolerance = tolerance
+            workspace.tools.tolerance = tolerance
         elif action == "magnetic_lasso":
             let canvas = workspace.canvas
             if fields.length < 10:
@@ -225,17 +225,17 @@ pub class ScriptCommands:
                     canvas.cancel_magnetic()
                     error(failure.code, failure.message)
                 at += 2
-            workspace.selecting.apply(canvas, false)
+            workspace.tools.selecting.apply(canvas, false)
             canvas.close_magnetic(number(fields, 3))
             workspace.touch()
         elif action == "select_and_mask":
-            workspace.begin_refine()
-            workspace.finish_refine(true, number(fields, 0), number(fields, 1), number(fields, 2), decimal(fields, 3), decimal(fields, 4)) catch failure:
-                workspace.finish_refine(false, 0, 0, 0, 0.0, 0.0)
+            workspace.selection.begin_refine()
+            workspace.selection.finish_refine(true, number(fields, 0), number(fields, 1), number(fields, 2), decimal(fields, 3), decimal(fields, 4)) catch failure:
+                workspace.selection.finish_refine(false, 0, 0, 0, 0.0, 0.0)
                 error(failure.code, failure.message)
         elif action == "quick_mask":
             if flag(fields, 0) != workspace.canvas.quick_mask():
-                workspace.toggle_quick_mask()
+                workspace.selection.toggle_quick_mask()
         elif action == "save_selection":
             discard(save_selection(workspace, field(fields, 0)))
         elif action == "load_selection":
@@ -256,7 +256,7 @@ pub class ScriptCommands:
                 colors = colors + [decimal(fields, at), decimal(fields, at + 1), decimal(fields, at + 2)]
                 subtract.append(flag(fields, at + 3))
                 at += 4
-            workspace.select_color_range(number(fields, 0), decimal(fields, 1), flag(fields, 2), colors, subtract)
+            workspace.selection.select_color_range(number(fields, 0), decimal(fields, 1), flag(fields, 2), colors, subtract)
         else:
             self.apply_pixels(action, fields)
 
@@ -267,23 +267,23 @@ pub class ScriptCommands:
             let spec = find(adjustments(), field(fields, 0))
             var numbers = spec.engine(settings(spec, fields))
             if spec.kind == gradient_map:
-                numbers = numbers + workspace.colors_encoded()
+                numbers = numbers + workspace.colors.colors_encoded()
             if action == "adjust":
-                workspace.adjust(spec.kind, numbers)
+                workspace.previews.adjust(spec.kind, numbers)
             else:
-                discard(workspace.add_adjustment_layer(spec.kind, spec.name, numbers))
+                discard(workspace.previews.add_adjustment_layer(spec.kind, spec.name, numbers))
         elif action == "filter":
             self.filter(field(fields, 0), fields)
         elif action == "resize_image":
-            workspace.resize_image(number(fields, 0), number(fields, 1))
+            workspace.image.resize_image(number(fields, 0), number(fields, 1))
         elif action == "resize_canvas":
-            workspace.resize_canvas(number(fields, 0), number(fields, 1), number(fields, 2), number(fields, 3))
+            workspace.image.resize_canvas(number(fields, 0), number(fields, 1), number(fields, 2), number(fields, 3))
         elif action == "crop":
-            workspace.resize_canvas(number(fields, 2), number(fields, 3), -number(fields, 0), -number(fields, 1))
+            workspace.image.resize_canvas(number(fields, 2), number(fields, 3), -number(fields, 0), -number(fields, 1))
         elif action == "flip_canvas":
-            workspace.flip_canvas(flag(fields, 0))
+            workspace.image.flip_canvas(flag(fields, 0))
         elif action == "set_linear_blend":
-            workspace.set_linear_blend(flag(fields, 0))
+            workspace.image.set_linear_blend(flag(fields, 0))
         elif is_transform_action(action):
             apply_transform(workspace, action, fields)
         elif is_vector_action(action):
@@ -313,34 +313,34 @@ pub class ScriptCommands:
         let workspace = self.workspace
         if fields.length < 3:
             error(ui.invalid, "a stroke needs at least one point")
-        let tool = workspace.tool
-        let erasing = workspace.erasing
-        workspace.tool = "eraser" if erase else "brush"
-        workspace.erasing = erase
+        let tool = workspace.tools.tool
+        let erasing = workspace.tools.erasing
+        workspace.tools.tool = "eraser" if erase else "brush"
+        workspace.tools.erasing = erase
         self.draw(fields) catch failure:
-            workspace.tool = tool
-            workspace.erasing = erasing
+            workspace.tools.tool = tool
+            workspace.tools.erasing = erasing
             error(failure.code, failure.message)
-        workspace.tool = tool
-        workspace.erasing = erasing
+        workspace.tools.tool = tool
+        workspace.tools.erasing = erasing
 
     func draw(self, fields: list[str]) -> unit!:
         let workspace = self.workspace
-        workspace.begin_stroke(decimal(fields, 1), decimal(fields, 2))
+        workspace.painting.begin_stroke(decimal(fields, 1), decimal(fields, 2))
         var index = 3
         while index + 1 < fields.length:
-            workspace.extend_stroke(decimal(fields, index), decimal(fields, index + 1))
+            workspace.painting.extend_stroke(decimal(fields, index), decimal(fields, index + 1))
             index += 2
-        workspace.end_stroke()
+        workspace.painting.end_stroke()
 
     ## A text layer of `words` at (`x`, `y`), `size` points, in the foreground color.
     func text_layer(self, x: float, y: float, words: str, size: float) -> unit!:
         let workspace = self.workspace
-        let options = workspace.typing
-        workspace.as_one("Add Text", func () -> unit!:
-            workspace.add_layer()
-            workspace.canvas.set_type(workspace.selected_id(), words, options.family, options.style, size, workspace.red, workspace.green, workspace.blue, x, y)
-            workspace.rename(words))
+        let options = workspace.tools.typing
+        workspace.edits.as_one("Add Text", func () -> unit!:
+            workspace.edits.add_layer()
+            workspace.canvas.set_type(workspace.layers.selected_id(), words, options.family, options.style, size, workspace.colors.red, workspace.colors.green, workspace.colors.blue, x, y)
+            workspace.edits.rename(words))
 
     ## A filter by its dialog's name, with its settings as the dialog shows them.
     func filter(self, name: str, fields: list[str]) -> unit!:
@@ -349,18 +349,18 @@ pub class ScriptCommands:
         let values = settings(spec, fields)
         let numbers = spec.engine(values)
         if spec.kind == blur_kind:
-            workspace.blur(values[0])
+            workspace.previews.blur(values[0])
         elif spec.kind == noise_kind:
-            workspace.canvas.add_noise(workspace.selected_id(), numbers[0], values[1] != 0.0, 1, values[2] != 0.0)
+            workspace.canvas.add_noise(workspace.layers.selected_id(), numbers[0], values[1] != 0.0, 1, values[2] != 0.0)
             workspace.touch()
         else:
             let padded = numbers + [0.0, 0.0]
-            workspace.canvas.filter_layer(workspace.selected_id(), spec.kind - first_filter_kind, padded[0], padded[1], padded[2])
+            workspace.canvas.filter_layer(workspace.layers.selected_id(), spec.kind - first_filter_kind, padded[0], padded[1], padded[2])
             workspace.touch()
 
     ## The topmost layer called `name`.
     func layer_named(self, name: str) -> int!:
-        var index = self.workspace.layer_count() - 1
+        var index = self.workspace.canvas.layer_count() - 1
         while index >= 0:
             if self.workspace.canvas.layer_name(index) == name:
                 return index

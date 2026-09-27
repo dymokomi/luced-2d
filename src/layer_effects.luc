@@ -79,7 +79,7 @@ pub class EffectRows:
         let canvas = workspace.canvas
         let effect = self.kinds[kind]
         let target = canvas.layer_id(to_index)
-        workspace.as_one("Copy Effect", func () -> unit!:
+        workspace.edits.as_one("Copy Effect", func () -> unit!:
             var field = effect.first
             while field <= effect.last:
                 canvas.set_style_value(target, field, canvas.style_value(from_index, field))

@@ -267,10 +267,10 @@ pub class SettingsDialog:
 
     pub func remember(self, hex: str) -> unit!:
         var recent: list[str] = [hex]
-        for other in self.workspace.recent:
+        for other in self.workspace.colors.recent:
             if other != hex and recent.length < 16:
                 recent.append(other)
-        self.workspace.recent = recent
+        self.workspace.colors.recent = recent
         var joined = ""
         for item in recent:
             joined = joined + (" " if joined != "" else "") + item
@@ -279,17 +279,17 @@ pub class SettingsDialog:
 
     ## The view aids changed: keep them for the next launch.
     pub func remember_view(self) -> unit!:
-        self.settings.rulers = self.workspace.show_rulers
-        self.settings.grid = self.workspace.show_grid
-        self.settings.units = self.workspace.units
+        self.settings.rulers = self.workspace.viewport.show_rulers
+        self.settings.grid = self.workspace.viewport.show_grid
+        self.settings.units = self.workspace.viewport.units
         self.store.save(self.settings)
 
     ## Apply the live settings: the look, the window theme, every shortcut, the picker's history.
     pub func apply(self) -> unit!:
-        self.workspace.show_rulers = self.settings.rulers
-        self.workspace.show_grid = self.settings.grid
-        self.workspace.units = self.settings.units
-        self.workspace.set_history_limit(int(self.settings.undo_memory * 1073741824.0))
+        self.workspace.viewport.show_rulers = self.settings.rulers
+        self.workspace.viewport.show_grid = self.settings.grid
+        self.workspace.viewport.units = self.settings.units
+        self.workspace.documents.set_history_limit(int(self.settings.undo_memory * 1073741824.0))
         self.workspace.set_memory_usage(self.settings.memory_usage / 100.0)
         # A folder that is not there keeps the default rather than failing the rest.
         self.workspace.set_scratch_folder(self.settings.scratch) catch failure:
@@ -300,7 +300,7 @@ pub class SettingsDialog:
         for item in self.settings.recent.split(" "):
             if item.length == 7 and recent.length < 16:
                 recent.append(item)
-        self.workspace.recent = recent
+        self.workspace.colors.recent = recent
         if let app = self.app:
             app.set_theme(theme.editor_theme(look))
         for command in self.commands:

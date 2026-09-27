@@ -21,8 +21,8 @@ func refine_in_background() -> unit!:
     let actions = Actions()
     let panels = Panels(workspace, actions, Font())
     workspace.canvas.select_rectangle(100, 100, 300, 200, 0)
-    workspace.begin_refine()
-    workspace.finish_refine(true, 0, 5, 40, 0.0, 0.0, background = true)
+    workspace.selection.begin_refine()
+    workspace.selection.finish_refine(true, 0, 5, 40, 0.0, 0.0, background = true)
     assert(workspace.canvas.refine_keeping() and workspace.canvas.undo_name() != "Select and Mask")
     panels.refresh()
     assert(not actions.fill.is_enabled() and not actions.undo.is_enabled())
@@ -50,31 +50,31 @@ func queued_pictures(folder: str) -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     # Changed, so opening a picture does not replace this tab.
-    workspace.add_layer()
+    workspace.edits.add_layer()
     var pictures: list[str] = []
     for name in ["first", "second", "third"]:
         let path = paths.join(folder, f"queued-{name}.png")
-        workspace.export(path)
+        workspace.documents.export(path)
         pictures.append(path)
     let files = panels.files
     files.open_files(pictures)
-    assert(workspace.document_count() == 2 and files.queue.busy())
+    assert(workspace.documents.count() == 2 and files.queue.busy())
     assert(files.queue.status(40) == "Opening 1 of 3… 40%")
     files.pump()
-    assert(workspace.document_count() == 2)
+    assert(workspace.documents.count() == 2)
     files.pump()
-    assert(workspace.document_count() == 3 and files.queue.status(7) == "Opening 2 of 3… 7%")
+    assert(workspace.documents.count() == 3 and files.queue.status(7) == "Opening 2 of 3… 7%")
     # A drop on Layers while they open waits its turn, on the document it was dropped on.
-    let layers = workspace.layer_count()
+    let layers = workspace.canvas.layer_count()
     files.place_files([pictures[0]])
-    assert(workspace.layer_count() == layers)
+    assert(workspace.canvas.layer_count() == layers)
     var frames = 0
     while files.queue.busy() and frames < 100:
         files.pump()
         frames += 1
-    assert(not files.queue.busy() and workspace.document_count() == 4 and files.queue.status(0) == "")
-    workspace.switch_document(2)
-    assert(workspace.layer_count() == layers + 1)
+    assert(not files.queue.busy() and workspace.documents.count() == 4 and files.queue.status(0) == "")
+    workspace.documents.switch_to(2)
+    assert(workspace.canvas.layer_count() == layers + 1)
     panels.close()
 
 ## A step recorded without the window refreshing shows in History the next frame.

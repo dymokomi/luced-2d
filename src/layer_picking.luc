@@ -1,0 +1,181 @@
+## Which layers are selected: `selected` is the stack index the tools act on,
+## `picked` the ids selected beside it (Cmd- and Shift-click in Layers), and
+## `collapsed` the groups folded shut in the Layers panel. It also finds layers
+## by id and under a point, and the layers a move takes.
+from live import Live
+import math
+
+pub class LayerPicking:
+    let live: Live
+    pub var selected: int = 0
+    ## Layers selected besides `selected`, by id; the groups folded shut, by id.
+    pub var picked: list[int]
+    pub var collapsed: list[int]
+
+    pub func init(self, live: Live):
+        self.live = live
+        self.picked = []
+        self.collapsed = []
+
+    ## The selected layer's id, which the canvas's setters take.
+    pub func selected_id(self) -> int!:
+        return self.live.canvas.layer_id(self.selected)
+
+    ## Select the layer at stack index `index`; leaving a layer without a mask
+    ## leaves mask editing too.
+    pub func select(self, index: int) -> unit!:
+        let canvas = self.live.canvas
+        if index >= 0 and index < canvas.layer_count():
+            self.selected = index
+            self.picked = []
+            if not canvas.layer_masked(index):
+                canvas.edit_mask(false)
+            self.live.touch()
+
+    ## Select the layer whose id is `id`.
+    pub func select_id(self, id: int) -> unit!:
+        let index = self.index_of(id)
+        if index >= 0:
+            self.select(index)
+
+    ## The stack index of the layer whose id is `id`, or -1.
+    pub func index_of(self, id: int) -> int!:
+        let canvas = self.live.canvas
+        var index = 0
+        while index < canvas.layer_count():
+            if canvas.layer_id(index) == id:
+                return index
+            index += 1
+        return -1
+
+    ## Whether the layer at `index` is selected, alone or with others.
+    pub func is_selected(self, index: int) -> bool!:
+        if index == self.selected:
+            return true
+        let id = self.live.canvas.layer_id(index)
+        for picked in self.picked:
+            if picked == id:
+                return true
+        return false
+
+    ## Every selected layer's id, bottom to top.
+    pub func selected_ids(self) -> list[int]!:
+        var ids: list[int] = []
+        var index = 0
+        while index < self.live.canvas.layer_count():
+            if self.is_selected(index):
+                ids.append(self.live.canvas.layer_id(index))
+            index += 1
+        return ids
+
+    ## Cmd-click in Layers: add the layer to the selection, or take it out; it
+    ## becomes the one the tools act on.
+    pub func toggle_picked(self, index: int) -> unit!:
+        let canvas = self.live.canvas
+        let id = canvas.layer_id(index)
+        if self.is_selected(index) and index != self.selected:
+            var kept: list[int] = []
+            for picked in self.picked:
+                if picked != id:
+                    kept.append(picked)
+            self.picked = kept
+        elif index != self.selected:
+            let before = canvas.layer_id(self.selected)
+            var kept = self.picked
+            kept.append(before)
+            self.selected = index
+            self.picked = kept
+        self.live.touch()
+
+    ## Shift-click in Layers: select every layer from the selected one to `index`.
+    pub func pick_range(self, index: int) -> unit!:
+        let low = self.selected if self.selected < index else index
+        let high = index if self.selected < index else self.selected
+        var ids: list[int] = []
+        var at = low
+        while at <= high:
+            if at != index:
+                ids.append(self.live.canvas.layer_id(at))
+            at += 1
+        self.selected = index
+        self.picked = ids
+        self.live.touch()
+
+    ## Select the top visible layer with pixels at a document point, if any;
+    ## with `add` it joins the selection (or leaves it), as Cmd-Shift-click.
+    pub func pick_layer(self, x: float, y: float, add: bool = false) -> unit!:
+        let index = self.live.canvas.layer_at(int(math.floor(x)), int(math.floor(y)))
+        if index < 0 or index == self.selected:
+            return
+        if add:
+            self.toggle_picked(index)
+        else:
+            self.select(index)
+
+    ## The top visible text layer whose box holds document point (`x`, `y`),
+    ## `reach` pixels about it counting too; -1 when none. Its box, not its
+    ## ink: a click between letters edits the text as well.
+    pub func text_layer_at(self, x: float, y: float, reach: float) -> int!:
+        let canvas = self.live.canvas
+        var index = canvas.layer_count() - 1
+        while index >= 0:
+            if canvas.layer_visible(index) and canvas.layer_typed(index) and canvas.measure_content(canvas.layer_id(index)):
+                let left = float(canvas.content_left()) - reach
+                let top = float(canvas.content_top()) - reach
+                var right = float(canvas.content_left() + canvas.content_width()) + reach
+                let bottom = float(canvas.content_top() + canvas.content_height()) + reach
+                # Box text reaches its box's width, however short its lines.
+                let box = canvas.layer_type_value(index, 6)
+                if box > 0.0:
+                    right = math.max(right, canvas.layer_type_value(index, 4) + box + reach)
+                if x >= left and x <= right and y >= top and y <= bottom:
+                    return index
+            index -= 1
+        return -1
+
+    ## The pixel layers a move takes: the selected ones and those inside
+    ## selected groups, each once, bottom to top. One pass over the stack
+    ## gathers the ids and where each sits, so a layer's groups are looked up,
+    ## not searched for.
+    pub func moving_ids(self) -> list[int]!:
+        let canvas = self.live.canvas
+        let count = canvas.layer_count()
+        var place: map[int, int] = {}
+        var index = 0
+        while index < count:
+            place[canvas.layer_id(index)] = index
+            index += 1
+        var ids: list[int] = []
+        index = 0
+        while index < count:
+            if not canvas.layer_is_group(index) and self.inside_selection(index, place):
+                ids.append(canvas.layer_id(index))
+            index += 1
+        return ids
+
+    ## Whether the layer at `index` is selected or inside a selected group;
+    ## `place` maps each layer's id to its stack index.
+    func inside_selection(self, index: int, place: map[int, int]) -> bool!:
+        if self.is_selected(index):
+            return true
+        var parent = self.live.canvas.layer_parent(index)
+        while parent != 0:
+            let holder = place[parent] else return false
+            if self.is_selected(holder):
+                return true
+            parent = self.live.canvas.layer_parent(holder)
+        return false
+
+    ## After undo or redo: keep the picked layers that are still there, and
+    ## the selected index in range.
+    pub func keep_present(self) -> unit!:
+        var kept: list[int] = []
+        for id in self.picked:
+            if self.index_of(id) >= 0:
+                kept.append(id)
+        self.picked = kept
+        let count = self.live.canvas.layer_count()
+        if self.selected >= count:
+            self.selected = count - 1
+        if self.selected < 0:
+            self.selected = 0

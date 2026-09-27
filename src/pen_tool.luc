@@ -182,23 +182,23 @@ pub class PenTool:
         # The Vector panel's New Path waits, active and empty, for this path.
         if into_empty_path(workspace):
             stage(canvas, anchors)
-            canvas.set_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
-                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
+            canvas.set_path(workspace.layers.selected_id(), closed, workspace.tools.shape_fill, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                            workspace.tools.shape_stroke, workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue, workspace.tools.shape_stroke_width)
             workspace.touch()
             return
         # On a vector layer the path is one more of its elements.
         if vector_layer(workspace):
             stage(canvas, anchors)
-            canvas.add_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
-                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
+            canvas.add_path(workspace.layers.selected_id(), closed, workspace.tools.shape_fill, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                            workspace.tools.shape_stroke, workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue, workspace.tools.shape_stroke_width)
             workspace.touch()
             return
-        workspace.as_one("Path", func () -> unit!:
-            workspace.add_layer()
-            workspace.rename("Path")
+        workspace.edits.as_one("Path", func () -> unit!:
+            workspace.edits.add_layer()
+            workspace.edits.rename("Path")
             stage(canvas, anchors)
-            canvas.set_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
-                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width))
+            canvas.set_path(workspace.layers.selected_id(), closed, workspace.tools.shape_fill, workspace.colors.red, workspace.colors.green, workspace.colors.blue,
+                            workspace.tools.shape_stroke, workspace.colors.back_red, workspace.colors.back_green, workspace.colors.back_blue, workspace.tools.shape_stroke_width))
         workspace.touch()
 
     ## Drop what is being drawn.
@@ -219,8 +219,8 @@ pub class PenTool:
         self.anchors = []
         self.edited = -1
         let canvas = workspace.canvas
-        let index = workspace.selected
-        if index < 0 or index >= workspace.layer_count():
+        let index = workspace.layers.selected
+        if index < 0 or index >= workspace.canvas.layer_count():
             return
         let count = canvas.layer_path_count(index)
         if count == 0:
@@ -235,7 +235,7 @@ pub class PenTool:
             self.anchors.append(anchor)
             at += 1
         self.closed = canvas.layer_path_closed(index)
-        self.edited = workspace.selected_id()
+        self.edited = workspace.layers.selected_id()
 
     ## Take hold of what is under (`x`, `y`): a handle, an anchor, or the
     ## curve, where a new anchor goes in. False when nothing is there.
@@ -272,7 +272,7 @@ pub class PenTool:
     ## The edited anchors back on their layer, styled as it was: one step.
     func commit_edit(self, workspace: Workspace) -> unit!:
         let canvas = workspace.canvas
-        let index = workspace.index_of(self.edited)
+        let index = workspace.layers.index_of(self.edited)
         stage(canvas, self.anchors)
         canvas.set_path(self.edited, self.closed, canvas.layer_shape_value(index, 7) != 0.0, canvas.layer_shape_value(index, 8),
                         canvas.layer_shape_value(index, 9), canvas.layer_shape_value(index, 10), canvas.layer_shape_value(index, 11) != 0.0,
@@ -288,7 +288,7 @@ pub class PenTool:
     pub func draw(self, painter: Painter, workspace: Workspace, zoom: float, left: float, top: float, ink: Color, backing: Color) -> unit!:
         if not self.drawing and not self.pressing:
             # The selected path as it is now, for editing.
-            if workspace.tool != "pen":
+            if workspace.tools.tool != "pen":
                 return
             self.load(workspace)
         if self.anchors.length == 0:
@@ -324,7 +324,7 @@ func into_empty_path(workspace: Workspace) -> bool!:
     if element < 0:
         return false
     let canvas = workspace.canvas
-    return canvas.element_value(workspace.selected, element, 0) == 4.0 and canvas.element_value(workspace.selected, element, 22) == 0.0
+    return canvas.element_value(workspace.layers.selected, element, 0) == 4.0 and canvas.element_value(workspace.layers.selected, element, 22) == 0.0
 
 ## Drag a handle of `anchor` (the one going out when `outgoing`) to (`x`,
 ## `y`): the other turns to stay opposite it, keeping its own length, unless

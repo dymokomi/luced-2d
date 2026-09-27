@@ -37,8 +37,8 @@ pub class DocumentTabs: Widget:
         return Size(200.0, self.height)
 
     func tab_width(self, index: int) -> float!:
-        let dot = self.font.advance() * 2.0 if self.workspace.document_dirty(index) else 0.0
-        return self.font.measure(self.workspace.tab_label(index)) + dot + self.padding * 2.0 + self.cross
+        let dot = self.font.advance() * 2.0 if self.workspace.documents.dirty(index) else 0.0
+        return self.font.measure(self.workspace.documents.label(index)) + dot + self.padding * 2.0 + self.cross
 
     pub func draw(self, target: RenderTarget) -> unit!:
         let painter = Painter(target)
@@ -47,14 +47,14 @@ pub class DocumentTabs: Widget:
         var x = 0.0
         var index = 0
         let text_y = math.max(0.0, (self.height - self.font.height()) * 0.5)
-        while index < self.workspace.document_count():
+        while index < self.workspace.documents.count():
             let width = self.tab_width(index)
-            let current = index == self.workspace.current
+            let current = index == self.workspace.documents.current
             if current:
                 painter.rounded_rectangle(Rect(x, 2.0, width, self.height - 2.0), theme.surface(), 6.0, 1.0, 3)
             let ink = theme.text() if current else theme.text_muted()
-            var title = self.workspace.tab_label(index)
-            if self.workspace.document_dirty(index):
+            var title = self.workspace.documents.label(index)
+            if self.workspace.documents.dirty(index):
                 title = title + " •"
             painter.text(title, x + self.padding, text_y, ink, self.font)
             # The close cross, right of the name.
@@ -78,7 +78,7 @@ pub class DocumentTabs: Widget:
             return -1
         var left = bounds.x
         var index = 0
-        while index < self.workspace.document_count():
+        while index < self.workspace.documents.count():
             let width = self.tab_width(index)
             if x >= left and x < left + width:
                 return index
@@ -91,7 +91,7 @@ pub class DocumentTabs: Widget:
             return
         var x = 0.0
         var index = 0
-        while index < self.workspace.document_count():
+        while index < self.workspace.documents.count():
             let width = self.tab_width(index)
             if event.x >= x and event.x < x + width:
                 if event.x >= x + width - self.cross - 4.0:

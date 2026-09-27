@@ -153,16 +153,16 @@ pub class ScriptHost:
 pub func snapshot(workspace: Workspace) -> str!:
     var names = ""
     var index = 0
-    while index < workspace.layer_count():
+    while index < workspace.canvas.layer_count():
         names = names + (", " if index > 0 else "") + quoted(workspace.canvas.layer_name(index))
         index += 1
     var text = "## The document when the script started; written by the editor for each run.\n"
-    text = text + f"pub func width() -> int:\n    return {workspace.width()}\n\n"
-    text = text + f"pub func height() -> int:\n    return {workspace.height()}\n\n"
+    text = text + f"pub func width() -> int:\n    return {workspace.canvas.width()}\n\n"
+    text = text + f"pub func height() -> int:\n    return {workspace.canvas.height()}\n\n"
     text = text + "pub func layers() -> list[str]:\n    return [" + names + "]\n\n"
-    text = text + f"pub func selected() -> int:\n    return {workspace.selected}\n\n"
+    text = text + f"pub func selected() -> int:\n    return {workspace.layers.selected}\n\n"
     text = text + "pub func linear_blend() -> bool:\n    return " + ("true" if workspace.canvas.linear_blend() else "false") + "\n\n"
-    text = text + "pub func path() -> str:\n    return " + quoted(workspace.path) + "\n"
+    text = text + "pub func path() -> str:\n    return " + quoted(workspace.live.path) + "\n"
     return text
 
 ## `text` as a Luce string literal.
