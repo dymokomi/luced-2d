@@ -1,0 +1,252 @@
+## What the pointer and keys do in the Node Editor: a press on a node selects
+## it (Shift adds or takes away) and a drag moves every selected node, one step
+## when let go; a drag from a port draws a wire to a port of the other side and
+## a type that fits; a drag from an input that is wired picks its wire up, to
+## put it elsewhere or drop it off; a drag on the empty grid selects the nodes
+## its box touches; Delete deletes them. Space, Alt or the middle button drag
+## the view; scrolling pans it, and a wheel, a pinch or scrolling with Cmd
+## zooms about the pointer, as on the canvas.
+from ui import Event, Point
+from input import EventKind, Key, ScrollUnit
+from node_layout import NodeLayout, node_width
+from node_graph import GraphLink, connect, disconnect, rewire, move_nodes, delete_nodes, ports_fit
+import math
+
+## What a drag is doing.
+let idle: int = 0
+let panning: int = 1
+let moving: int = 2
+let wiring: int = 3
+let boxing: int = 4
+
+pub class NodeGestures:
+    pub var mode: int = 0
+    var press_x: float = 0.0
+    var press_y: float = 0.0
+    var last_x: float = 0.0
+    var last_y: float = 0.0
+    ## Where the pointer is, in view points, for a wire or box being drawn.
+    pub var pointer_x: float = 0.0
+    pub var pointer_y: float = 0.0
+    ## A wire being drawn: from node `wire_node`'s output (`from_output`) or into
+    ## its input `wire_port`.
+    pub var wire_node: int = -1
+    pub var wire_port: int = -1
+    pub var from_output: bool = true
+    ## A wire picked up off an input: its ends, or -1.
+    pub var lifted_source: int = -1
+    pub var lifted_target: int = -1
+    pub var lifted_port: int = -1
+    var space_held: bool = false
+
+    pub func init(self):
+        self.mode = idle
+
+    ## Whether `link` is the wire picked up, which is drawn following the pointer instead.
+    pub func lifted(self, link: GraphLink) -> bool:
+        return self.mode == wiring and link.source == self.lifted_source and link.target == self.lifted_target and link.port == self.lifted_port
+
+    ## Whether a wire or a box is being drawn.
+    pub func drawing_wire(self) -> bool:
+        return self.mode == wiring
+
+    pub func drawing_box(self) -> bool:
+        return self.mode == boxing
+
+    ## The box being dragged out, in view points: left, top, right, bottom.
+    pub func box(self) -> list[float]:
+        return [math.min(self.press_x, self.pointer_x), math.min(self.press_y, self.pointer_y), math.max(self.press_x, self.pointer_x), math.max(self.press_y, self.pointer_y)]
+
+    ## Handle `event`; whether the selection or the graph changed.
+    pub func event(self, layout: NodeLayout, event: Event) -> bool!:
+        let kind = event.kind
+        if kind == EventKind.key_down or kind == EventKind.key_up:
+            if event.key == Key.space:
+                self.space_held = kind == EventKind.key_down
+                return false
+            if kind == EventKind.key_down and (event.key == Key.backspace or event.key == Key.delete) and layout.selected.length > 0:
+                delete_nodes(layout.workspace, layout.selected)
+                layout.selected = []
+                return true
+            return false
+        if kind == EventKind.scroll or kind == EventKind.magnify:
+            self.scroll(layout, event)
+            return false
+        if kind == EventKind.pointer_down and event.inside:
+            return self.press(layout, event)
+        if kind == EventKind.pointer_moved:
+            self.pointer_x = event.x
+            self.pointer_y = event.y
+            self.drag(layout, event)
+            return false
+        if kind == EventKind.pointer_up:
+            self.pointer_x = event.x
+            self.pointer_y = event.y
+            return self.release(layout, event)
+        if event.cancelled:
+            self.cancel(layout)
+        return false
+
+    func scroll(self, layout: NodeLayout, event: Event):
+        if event.kind == EventKind.magnify:
+            layout.zoom_about(1.0 + event.scroll_y, event.x, event.y)
+        elif event.scroll_unit == ScrollUnit.lines or event.meta or event.control:
+            let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
+            layout.zoom_about(math.pow(1.0025, event.scroll_y * step), event.x, event.y)
+        else:
+            layout.pan_x += event.scroll_x
+            layout.pan_y += event.scroll_y
+
+    func press(self, layout: NodeLayout, event: Event) -> bool!:
+        self.press_x = event.x
+        self.press_y = event.y
+        self.last_x = event.x
+        self.last_y = event.y
+        self.pointer_x = event.x
+        self.pointer_y = event.y
+        if event.button == 2 or (event.button == 0 and (self.space_held or event.alt)):
+            self.mode = panning
+            return false
+        if event.button != 0:
+            return false
+        if let port = layout.port_at(event.x, event.y):
+            let node = layout.graph.nodes[port[0]]
+            self.mode = wiring
+            if port[1] < 0:
+                self.from_output = true
+                self.wire_node = node.id
+                return false
+            let wired = layout.graph.link_into(node.id, port[1])
+            if wired >= 0:
+                # Picked up: it now leaves its source for wherever it is put down.
+                let link = layout.graph.links[wired]
+                self.from_output = true
+                self.wire_node = link.source
+                self.lifted_source = link.source
+                self.lifted_target = link.target
+                self.lifted_port = link.port
+                return false
+            self.from_output = false
+            self.wire_node = node.id
+            self.wire_port = port[1]
+            return false
+        let place = layout.node_at(event.x, event.y)
+        if place >= 0:
+            let id = layout.graph.nodes[place].id
+            if event.shift:
+                if layout.is_selected(id):
+                    var kept: list[int] = []
+                    for each in layout.selected:
+                        if each != id:
+                            kept.append(each)
+                    layout.selected = kept
+                    return true
+                layout.selected.append(id)
+            elif not layout.is_selected(id):
+                layout.selected = [id]
+            else:
+                # Pressed again, it is the one the parameters show.
+                var kept: list[int] = []
+                for each in layout.selected:
+                    if each != id:
+                        kept.append(each)
+                kept.append(id)
+                layout.selected = kept
+            self.mode = moving
+            layout.move_x = 0.0
+            layout.move_y = 0.0
+            return true
+        self.mode = boxing
+        if not event.shift:
+            layout.selected = []
+        return true
+
+    func drag(self, layout: NodeLayout, event: Event):
+        if self.mode == panning:
+            layout.pan_x += event.x - self.last_x
+            layout.pan_y += event.y - self.last_y
+        elif self.mode == moving:
+            if math.abs(event.x - self.press_x) + math.abs(event.y - self.press_y) > 3.0:
+                layout.dragging = true
+            layout.move_x = (event.x - self.press_x) / layout.zoom
+            layout.move_y = (event.y - self.press_y) / layout.zoom
+        self.last_x = event.x
+        self.last_y = event.y
+
+    func release(self, layout: NodeLayout, event: Event) -> bool!:
+        let mode = self.mode
+        self.mode = idle
+        if mode == moving and layout.dragging:
+            layout.dragging = false
+            var ids: list[int] = []
+            var xs: list[float] = []
+            var ys: list[float] = []
+            for id in layout.selected:
+                let place = layout.graph.place_of(id)
+                if place >= 0:
+                    ids.append(id)
+                    xs.append(math.round(layout.graph.nodes[place].x + layout.move_x))
+                    ys.append(math.round(layout.graph.nodes[place].y + layout.move_y))
+            layout.move_x = 0.0
+            layout.move_y = 0.0
+            move_nodes(layout.workspace, ids, xs, ys)
+            return true
+        layout.dragging = false
+        if mode == wiring:
+            return self.finish_wire(layout, event)
+        if mode == boxing:
+            let box = self.box()
+            var picked = layout.selected
+            for node in layout.graph.nodes:
+                let a = layout.to_screen(Point(node.x, node.y))
+                let b = layout.to_screen(Point(node.x + node_width, node.y + layout.node_height(node)))
+                if a.x <= box[2] and b.x >= box[0] and a.y <= box[3] and b.y >= box[1] and not layout.is_selected(node.id):
+                    picked.append(node.id)
+            layout.selected = picked
+            return true
+        return false
+
+    ## A wire let go at the pointer: joined to a port of the other side whose
+    ## type fits, or, picked up and let go anywhere else, dropped.
+    func finish_wire(self, layout: NodeLayout, event: Event) -> bool!:
+        let lifted = self.lifted_target >= 0
+        let lifted_target = self.lifted_target
+        let lifted_port = self.lifted_port
+        self.lifted_source = -1
+        self.lifted_target = -1
+        self.lifted_port = -1
+        let workspace = layout.workspace
+        let source_place = layout.graph.place_of(self.wire_node)
+        if source_place < 0:
+            return false
+        let own = layout.graph.nodes[source_place]
+        if let port = layout.port_at(event.x, event.y):
+            let other = layout.graph.nodes[port[0]]
+            if self.from_output and port[1] >= 0 and other.id != own.id:
+                if lifted and other.id == lifted_target and port[1] == lifted_port:
+                    return false
+                if not ports_fit(layout.info(own).output, layout.info(other).inputs[port[1]].port_type):
+                    return false
+                if lifted:
+                    rewire(workspace, own.id, lifted_target, lifted_port, other.id, port[1])
+                else:
+                    connect(workspace, own.id, other.id, port[1])
+                return true
+            if not self.from_output and port[1] < 0 and other.id != own.id:
+                if not ports_fit(layout.info(other).output, layout.info(own).inputs[self.wire_port].port_type):
+                    return false
+                connect(workspace, other.id, own.id, self.wire_port)
+                return true
+        if lifted:
+            disconnect(workspace, lifted_target, lifted_port)
+            return true
+        return false
+
+    pub func cancel(self, layout: NodeLayout):
+        self.mode = idle
+        layout.dragging = false
+        layout.move_x = 0.0
+        layout.move_y = 0.0
+        self.lifted_source = -1
+        self.lifted_target = -1
+        self.lifted_port = -1

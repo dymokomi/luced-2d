@@ -1,0 +1,212 @@
+## The Node Editor's parameters: the selected node's values beside the graph,
+## a row each. A number is dragged sideways to change it (Shift for fine
+## steps), each drag one undo step, the canvas drawn again as it goes; a click
+## on it types a value instead. A toggle flips on a click; a color's swatch
+## opens the picker. A value a wire drives says so and waits for the wire.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from gpu import RenderTarget, Rect, Color
+from input import EventKind, Cursor
+from workspace import Workspace
+from node_layout import NodeLayout
+from node_graph import KindInfo, ParamInfo, node_value, set_node_value, shown_number, param_whole, param_toggle, param_color
+from hex_color import hex_of_linear, linear_of_hex
+import theme
+import math
+
+let row_height: float = 26.0
+## Where a row's value starts, from the left.
+let value_left: float = 150.0
+
+pub class NodeInspector: Widget:
+    let box: Layout
+    let workspace: Workspace
+    let state: NodeLayout
+    let font: Font
+    ## A number being dragged: its parameter's row, the value it started from and where.
+    var scrub_row: int = -1
+    var scrub_start: float = 0.0
+    var scrub_x: float = 0.0
+    var scrubbed: bool = false
+    ## A value changed: the window draws the canvas again.
+    pub var on_changed: func() -> unit!? = none
+    pub var on_failed: func(str) -> unit!? = none
+    ## Open the picker: a title, the "#rrggbb" to start from, and where each change goes.
+    pub var pick_color: func(str, str, func(str) -> unit!) -> unit!? = none
+    ## Type a value for value slot `slot` of node `id`, the field at (x, y).
+    pub var on_type: func(int, int, float, float) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, state: NodeLayout, font: Font) -> unit!:
+        self.workspace = workspace
+        self.state = state
+        self.font = font
+        self.box = Layout()
+        self.box.set_interactive(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_limits(Size(290.0, 120.0), Size(290.0, 16384.0))
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(290.0, 260.0)
+
+    ## The node shown, its place and kind; none when no node is selected.
+    func shown(self) -> list[int]?:
+        let id = self.state.focused_node()
+        let place = self.state.graph.place_of(id)
+        if id < 0 or place < 0:
+            return none
+        return [id, place, self.state.graph.nodes[place].kind]
+
+    func info(self, kind: int) -> KindInfo:
+        return self.state.kinds[kind]
+
+    ## Where row `row` (0 the first parameter) starts.
+    pub func row_top(self, row: int) -> float:
+        return 34.0 + row_height * float(row)
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
+        painter.rectangle(Rect(0.0, 0.0, 1.0, size.height), theme.border())
+        if let node = self.shown():
+            self.draw_rows(painter, node, size.width)
+        else:
+            painter.text("Select a node to see its settings", 12.0, 12.0, theme.text_muted(), self.font)
+        painter.close()
+
+    func draw_rows(self, painter: Painter, node: list[int], width: float) -> unit!:
+        let info = self.info(node[2])
+        painter.text(info.title, 12.0, 10.0, theme.text(), self.font)
+        painter.rectangle(Rect(0.0, 30.0, width, 1.0), theme.border())
+        if info.params.length == 0:
+            painter.text("No settings", 12.0, self.row_top(0) + 6.0, theme.text_muted(), self.font)
+        var row = 0
+        while row < info.params.length:
+            self.draw_row(painter, info, info.params[row], node[0], node[1], self.row_top(row), width)
+            row += 1
+
+    func draw_row(self, painter: Painter, info: KindInfo, param: ParamInfo, id: int, place: int, top: float, width: float) -> unit!:
+        let driven = self.driven(info, id, param.slot)
+        painter.text(param.name, 12.0, top + 6.0, theme.text_muted() if driven else theme.text(), self.font)
+        let area = Rect(value_left, top + 3.0, width - value_left - 10.0, row_height - 6.0)
+        if driven:
+            painter.text("wired", area.x + 6.0, top + 6.0, theme.text_muted(), self.font)
+            return
+        let value = node_value(self.workspace, place, param.slot)
+        if param.kind == param_toggle:
+            painter.rectangle(Rect(area.x, area.y + 2.0, 16.0, 16.0), theme.border())
+            painter.rectangle(Rect(area.x + 1.0, area.y + 3.0, 14.0, 14.0), theme.surface_raised())
+            if value != 0.0:
+                painter.rectangle(Rect(area.x + 4.0, area.y + 6.0, 8.0, 8.0), self.workspace.look.accent)
+            return
+        if param.kind == param_color:
+            painter.rectangle(area, theme.border())
+            painter.rectangle(Rect(area.x + 1.0, area.y + 1.0, area.width - 2.0, area.height - 2.0),
+                              Color(value, node_value(self.workspace, place, param.slot + 1), node_value(self.workspace, place, param.slot + 2)))
+            return
+        # A number: its field, filled as far as it is along a range worth showing.
+        painter.rectangle(area, theme.grey(40.0))
+        let span = param.high - param.low
+        if span > 0.0 and span <= 1000.0:
+            let fraction = math.clamp((value - param.low) / span, 0.0, 1.0)
+            painter.rectangle(Rect(area.x, area.y, area.width * fraction, area.height), self.workspace.look.selection_inactive)
+        let text = shown_number(value, param.kind == param_whole)
+        painter.text(text, area.x + 6.0, top + 6.0, theme.text(), self.font)
+        if info.kind == 5 and param.slot == 14:
+            # A Path node names the element it takes.
+            let element = int(value)
+            let index = self.workspace.selected
+            if element >= 0 and element < self.workspace.canvas.element_count(index):
+                painter.text(self.workspace.canvas.element_name(index, element), area.x + 40.0, top + 6.0, theme.text_muted(), self.font)
+
+    ## Whether an input wired into node `id` drives parameter slot `slot`.
+    func driven(self, info: KindInfo, id: int, slot: int) -> bool:
+        var port = 0
+        while port < info.inputs.length:
+            if info.inputs[port].slot == slot and self.state.graph.link_into(id, port) >= 0:
+                return true
+            port += 1
+        return false
+
+    ## The parameter row at `y`, or -1.
+    func row_at(self, y: float, count: int) -> int:
+        let row = int(math.floor((y - self.row_top(0)) / row_height))
+        return row if y >= self.row_top(0) and row < count else -1
+
+    pub func event(self, event: Event) -> unit!:
+        let node = self.shown() else return
+        let info = self.info(node[2])
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            let row = self.row_at(event.y, info.params.length)
+            if row < 0 or event.x < value_left:
+                return
+            let param = info.params[row]
+            if self.driven(info, node[0], param.slot):
+                return
+            let value = node_value(self.workspace, node[1], param.slot)
+            if param.kind == param_toggle:
+                self.attempt(func () -> unit!:
+                    self.workspace.canvas.separate_next_step()
+                    set_node_value(self.workspace, node[0], param.slot, 0.0 if value != 0.0 else 1.0))
+                return
+            if param.kind == param_color:
+                self.pick(node[0], node[1], param)
+                return
+            self.scrub_row = row
+            self.scrub_start = value
+            self.scrub_x = event.x
+            self.scrubbed = false
+            self.workspace.canvas.separate_next_step()
+        elif event.kind == EventKind.pointer_moved and self.scrub_row >= 0:
+            if math.abs(event.x - self.scrub_x) < 3.0 and not self.scrubbed:
+                return
+            self.scrubbed = true
+            let param = info.params[self.scrub_row]
+            let value = self.scrub_start + (event.x - self.scrub_x) * step_of(param, self.scrub_start) * (0.1 if event.shift else 1.0)
+            self.attempt(func () -> unit!:
+                set_node_value(self.workspace, node[0], param.slot, value))
+        elif event.kind == EventKind.pointer_up and self.scrub_row >= 0:
+            let row = self.scrub_row
+            self.scrub_row = -1
+            if not self.scrubbed:
+                # A click, not a drag: the value is typed.
+                if let typing = self.on_type:
+                    typing(node[0], info.params[row].slot, value_left, self.row_top(row) + 2.0)
+        elif event.cancelled:
+            self.scrub_row = -1
+
+    func pick(self, id: int, place: int, param: ParamInfo) -> unit!:
+        let pick = self.pick_color else return
+        let red = node_value(self.workspace, place, param.slot)
+        let green = node_value(self.workspace, place, param.slot + 1)
+        let blue = node_value(self.workspace, place, param.slot + 2)
+        self.workspace.canvas.separate_next_step()
+        pick(param.name, hex_of_linear(red, green, blue), func (hex: str) -> unit!:
+            let color = linear_of_hex(hex) else return
+            let workspace = self.workspace
+            self.attempt(func () -> unit!:
+                workspace.as_one("Node Setting", func () -> unit!:
+                    set_node_value(workspace, id, param.slot, color[0])
+                    set_node_value(workspace, id, param.slot + 1, color[1])
+                    set_node_value(workspace, id, param.slot + 2, color[2]))))
+
+    func attempt(self, change: func() -> unit!) -> unit!:
+        change() catch failure:
+            if let failed = self.on_failed:
+                failed(failure.message)
+            return
+        self.box.invalidate()
+        if let changed = self.on_changed:
+            changed()
+
+## How much a point of drag moves a number: a whole number one per six points,
+## a small range across about two hundred points, a large one a unit a point.
+func step_of(param: ParamInfo, value: float) -> float:
+    if param.kind == param_whole:
+        return 1.0 / 6.0
+    let span = param.high - param.low
+    if span <= 10.0:
+        return span / 200.0
+    return math.max(0.05, math.min(1.0, math.abs(value) * 0.01))

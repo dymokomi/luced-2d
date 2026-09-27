@@ -76,6 +76,25 @@ pub func ensure_vector_layer(workspace: Workspace) -> unit!:
         workspace.add_layer()
         workspace.rename("Vector")
 
+## Layer › New Vector Layer: a vector layer above the selected one, its node
+## graph a star cloned round a circle so something shows at once; selected.
+pub func new_vector_layer(workspace: Workspace) -> unit!:
+    var number = 1
+    while layer_named(workspace, f"Vector {number}"):
+        number += 1
+    let name = f"Vector {number}"
+    workspace.as_one("New Vector Layer", func () -> unit!:
+        workspace.place_above_selected(workspace.canvas.add_vector_layer(name)))
+    workspace.touch()
+
+func layer_named(workspace: Workspace, name: str) -> bool!:
+    var index = 0
+    while index < workspace.layer_count():
+        if workspace.canvas.layer_name(index) == name:
+            return true
+        index += 1
+    return false
+
 ## Whether the selected layer is a pixel layer with nothing painted.
 func empty_pixel_layer(workspace: Workspace) -> bool!:
     let canvas = workspace.canvas

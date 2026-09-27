@@ -1,0 +1,116 @@
+## A script's node-graph calls (scripting/luced.luc's "Node graphs"): a vector
+## layer made, and nodes added, wired, set and deleted on the selected layer's
+## graph, each one step within the run's. A script cannot read back the ids the
+## editor gives, so it names each node it adds and uses the name after; a new
+## vector layer's own nodes are "star", "circle", "clone" and "output", and a
+## number is a node's id.
+from workspace import Workspace
+from vectors import vector_layer, new_vector_layer
+from node_graph import KindInfo, node_catalog, kind_named, add_node, connect, disconnect, set_node_value, param_color
+import transfer
+import ui
+
+## The names a run gave its nodes, and the ids they stand for.
+pub class NodeNames:
+    var names: list[str]
+    var ids: list[int]
+
+    pub func init(self):
+        self.names = []
+        self.ids = []
+
+    pub func remember(self, name: str, id: int):
+        self.names.append(name.lower())
+        self.ids.append(id)
+
+    ## The node `reference` names: a name this run gave, a new layer's own, or an id.
+    pub func find(self, reference: str) -> int!:
+        let wanted = reference.lower()
+        var at = self.names.length - 1
+        while at >= 0:
+            if self.names[at] == wanted:
+                return self.ids[at]
+            at -= 1
+        let defaults = ["star", "circle", "clone", "output"]
+        at = 0
+        while at < defaults.length:
+            if defaults[at] == wanted:
+                return at + 1
+            at += 1
+        return int(reference) catch _:
+            error(ui.invalid, f"no node is called {reference}")
+
+pub func is_node_action(action: str) -> bool:
+    return action in ["new_vector_layer", "add_node", "link_nodes", "unlink_node", "set_node", "set_node_color", "delete_node"]
+
+pub func apply_node(workspace: Workspace, names: NodeNames, action: str, fields: list[str]) -> unit!:
+    if action == "new_vector_layer":
+        new_vector_layer(workspace)
+        return
+    if not vector_layer(workspace):
+        error(ui.invalid, "the selected layer is no vector layer: new_vector_layer() makes one")
+    let kinds = node_catalog(workspace.canvas)
+    if action == "add_node":
+        let kind = kind_named(kinds, field(fields, 0))
+        if kind < 0:
+            error(ui.invalid, f"no node kind is called {field(fields, 0)}")
+        names.remember(field(fields, 1), add_node(workspace, kind, decimal(fields, 2), decimal(fields, 3)))
+    elif action == "link_nodes":
+        let target = names.find(field(fields, 1))
+        connect(workspace, names.find(field(fields, 0)), target, input_of(workspace, kinds, target, field(fields, 2)))
+    elif action == "unlink_node":
+        let target = names.find(field(fields, 0))
+        disconnect(workspace, target, input_of(workspace, kinds, target, field(fields, 1)))
+    elif action == "set_node":
+        let node = names.find(field(fields, 0))
+        set_node_value(workspace, node, slot_of(workspace, kinds, node, field(fields, 1), false), decimal(fields, 2))
+    elif action == "set_node_color":
+        let node = names.find(field(fields, 0))
+        let slot = slot_of(workspace, kinds, node, field(fields, 1), true)
+        workspace.as_one("Node Setting", func () -> unit!:
+            var channel = 0
+            while channel < 3:
+                set_node_value(workspace, node, slot + channel, transfer.srgb_decode(decimal(fields, 2 + channel)))
+                channel += 1)
+    elif action == "delete_node":
+        workspace.canvas.delete_graph_node(workspace.selected_id(), names.find(field(fields, 0)))
+        workspace.touch()
+
+## The kind of node `id` on the selected layer.
+func kind_of(workspace: Workspace, kinds: list[KindInfo], id: int) -> KindInfo!:
+    let canvas = workspace.canvas
+    var place = 0
+    while place < canvas.graph_node_count(workspace.selected):
+        if int(canvas.graph_node_value(workspace.selected, place, 0)) == id:
+            return kinds[int(canvas.graph_node_value(workspace.selected, place, 1))]
+        place += 1
+    error(ui.invalid, f"the graph has no node {id}")
+
+## Input `name` (or its number) of node `id`.
+func input_of(workspace: Workspace, kinds: list[KindInfo], id: int, name: str) -> int!:
+    let info = kind_of(workspace, kinds, id)
+    var port = 0
+    while port < info.inputs.length:
+        if info.inputs[port].name.lower() == name.lower():
+            return port
+        port += 1
+    return int(name) catch _:
+        error(ui.invalid, f"a {info.title} has no input {name}")
+
+## The value slot of parameter `name` of node `id`, a color's when `color`.
+func slot_of(workspace: Workspace, kinds: list[KindInfo], id: int, name: str, color: bool) -> int!:
+    let info = kind_of(workspace, kinds, id)
+    for param in info.params:
+        if param.name.lower() == name.lower():
+            if (param.kind == param_color) != color:
+                error(ui.invalid, f"{param.name} is " + ("no color: set_node sets it" if color else "a color: set_node_color sets it"))
+            return param.slot
+    error(ui.invalid, f"a {info.title} has no setting {name}")
+
+func field(fields: list[str], index: int) -> str!:
+    if index >= fields.length:
+        error(ui.invalid, f"field {index + 1} is missing")
+    return fields[index]
+
+func decimal(fields: list[str], index: int) -> float!:
+    return float(field(fields, index))

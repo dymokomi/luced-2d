@@ -207,6 +207,11 @@ pub class LayerList: Widget:
                 canvas.draw_layer(target, index, Rect(x, ty, tw, th), false)
                 if index == workspace.selected and not canvas.editing_mask():
                     self.frame(painter, Rect(x - 2.0, ty - 2.0, tw + 4.0, th + 4.0), self.workspace.look.accent)
+                if canvas.layer_shaped(index):
+                    # A vector layer: the pen's badge on the thumbnail's corner.
+                    let badge = Rect(x + tw - 11.0, ty + th - 11.0, 13.0, 13.0)
+                    painter.rectangle(badge, theme.grey(20.0))
+                    draw_icon(target, "pen-tool", Rect(badge.x + 1.0, badge.y + 1.0, 11.0, 11.0), self.workspace.look.accent)
                 x += thumb + 8.0
             if masked:
                 # Linked, a chain between the thumbnails, as Photoshop shows it; a click there unlinks.
@@ -243,6 +248,8 @@ pub class LayerList: Widget:
                 subtitle = f"Adjustment · {opacity}%"
             elif clipped:
                 subtitle = f"Clipped · {workspace.blend_name(index)} · {opacity}%"
+            elif canvas.layer_shaped(index):
+                subtitle = f"Vector · {workspace.blend_name(index)} · {opacity}%"
             painter.text(subtitle, x, top + 30.0, soft, self.font)
             self.draw_effects(painter, target, index, top + self.row_height, size.width)
             painter.rectangle(Rect(0.0, tops[row + 1] - 1.0, size.width, 1.0), theme.border())

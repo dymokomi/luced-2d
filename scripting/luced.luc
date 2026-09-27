@@ -380,6 +380,42 @@ pub func vector_selection(index: int, mode: int = 0):
 pub func transform_vector(index: int, scale_x: float, scale_y: float, angle: float = 0.0, dx: float = 0.0, dy: float = 0.0, pivot_x: float = 0.0, pivot_y: float = 0.0):
     send("transform_vector", [str(index), str(scale_x), str(scale_y), str(angle), str(dx), str(dy), str(pivot_x), str(pivot_y)])
 
+# mark: Node graphs ==========================================================================
+
+## A new vector layer above the selected one, selected: its node graph a star
+## cloned round a circle, whose nodes are called "star", "circle", "clone" and
+## "output".
+pub func new_vector_layer():
+    send("new_vector_layer", [])
+
+## A node of `kind` — "Rectangle", "Ellipse", "Polygon", "Star", "Path",
+## "Grid", "Circle", "Line", "Random Scatter", "Points of Shape", "Clone",
+## "Transform", "Merge", "Number", "Random", "Color Gradient" or "Output" — in
+## the selected vector layer's graph, called `name` from here on, at (`x`, `y`)
+## in the Node Editor.
+pub func add_node(kind: str, name: str, x: float = 0.0, y: float = 0.0):
+    send("add_node", [kind, name, str(x), str(y)])
+
+## Node `source`'s output wired into input `input` of node `target` (its name,
+## as the node shows it — "Shapes", "Points", "Count" — or its number).
+pub func link_nodes(source: str, target: str, input: str):
+    send("link_nodes", [source, target, input])
+
+pub func unlink_node(target: str, input: str):
+    send("unlink_node", [target, input])
+
+## Setting `setting` of node `node` (as the Node Editor names it: "Count",
+## "Radius", "Jitter Rotation", ...); a toggle is 1 or 0.
+pub func set_node(node: str, setting: str, value: float):
+    send("set_node", [node, setting, str(value)])
+
+## A color setting ("Fill Color", "Start", ...), sRGB 0..1 a channel.
+pub func set_node_color(node: str, setting: str, red: float, green: float, blue: float):
+    send("set_node_color", [node, setting, str(red), str(green), str(blue)])
+
+pub func delete_node(node: str):
+    send("delete_node", [node])
+
 # mark: The canvas ===========================================================================
 
 ## Scale the whole document to `width` by `height` pixels.

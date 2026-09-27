@@ -1,0 +1,157 @@
+## Where the Node Editor puts things: each node's box and ports in graph space,
+## the pan and zoom that show graph space in the view, what is selected, and a
+## drag of nodes under way (drawn moved before the move is a step). The view
+## draws from it and the gestures hit-test through it.
+from ui import Point
+from workspace import Workspace
+from node_graph import GraphSnapshot, GraphNode, KindInfo, node_catalog
+import math
+
+## A node's size in graph space: its width, its title bar and a row an input.
+pub let node_width: float = 176.0
+pub let title_height: float = 26.0
+pub let row_height: float = 20.0
+## How near a press must be to a port to take it, in view points.
+pub let port_reach: float = 9.0
+
+pub class NodeLayout:
+    pub let workspace: Workspace
+    pub let graph: GraphSnapshot
+    pub let kinds: list[KindInfo]
+    ## Graph space to the view: a point (x, y) shows at (x · zoom + pan_x, y · zoom + pan_y).
+    pub var zoom: float = 1.0
+    pub var pan_x: float = 24.0
+    pub var pan_y: float = 24.0
+    ## Selected nodes, by id.
+    pub var selected: list[int]
+    ## The selected nodes being dragged, and by how much in graph space.
+    pub var dragging: bool = false
+    pub var move_x: float = 0.0
+    pub var move_y: float = 0.0
+    ## The layer the graph was last read for; a new layer is framed whole the
+    ## next time the view is drawn, at the size it is drawn.
+    var framed_layer: int = -1
+    pub var needs_frame: bool = true
+
+    pub func init(self, workspace: Workspace) -> unit!:
+        self.workspace = workspace
+        self.graph = GraphSnapshot()
+        self.kinds = node_catalog(workspace.canvas)
+        self.selected = []
+
+    pub func info(self, node: GraphNode) -> KindInfo:
+        return self.kinds[node.kind] if node.kind >= 0 and node.kind < self.kinds.length else self.kinds[0]
+
+    pub func is_selected(self, id: int) -> bool:
+        for each in self.selected:
+            if each == id:
+                return true
+        return false
+
+    ## Where node `node` is drawn, a drag under way included.
+    pub func node_x(self, node: GraphNode) -> float:
+        return node.x + (self.move_x if self.dragging and self.is_selected(node.id) else 0.0)
+
+    pub func node_y(self, node: GraphNode) -> float:
+        return node.y + (self.move_y if self.dragging and self.is_selected(node.id) else 0.0)
+
+    pub func node_height(self, node: GraphNode) -> float:
+        let rows = self.info(node).inputs.length
+        return title_height + row_height * float(rows if rows > 0 else 1) + 6.0
+
+    ## A node's output port's middle, on its right edge by the first row.
+    pub func output_at(self, node: GraphNode) -> Point:
+        return Point(self.node_x(node) + node_width, self.node_y(node) + title_height + row_height * 0.5)
+
+    ## Input `port`'s middle, on the left edge by its row.
+    pub func input_at(self, node: GraphNode, port: int) -> Point:
+        return Point(self.node_x(node), self.node_y(node) + title_height + row_height * (float(port) + 0.5))
+
+    pub func to_screen(self, point: Point) -> Point:
+        return Point(point.x * self.zoom + self.pan_x, point.y * self.zoom + self.pan_y)
+
+    pub func to_graph(self, x: float, y: float) -> Point:
+        return Point((x - self.pan_x) / self.zoom, (y - self.pan_y) / self.zoom)
+
+    ## The node under view point (`x`, `y`), topmost first; -1 for none.
+    pub func node_at(self, x: float, y: float) -> int:
+        let at = self.to_graph(x, y)
+        var place = self.graph.nodes.length - 1
+        while place >= 0:
+            let node = self.graph.nodes[place]
+            let left = self.node_x(node)
+            let top = self.node_y(node)
+            if at.x >= left and at.x <= left + node_width and at.y >= top and at.y <= top + self.node_height(node):
+                return place
+            place -= 1
+        return -1
+
+    ## The port under view point (`x`, `y`) as the node's place and the port
+    ## (-1 the output); none when there is none.
+    pub func port_at(self, x: float, y: float) -> list[int]?:
+        var place = self.graph.nodes.length - 1
+        while place >= 0:
+            let node = self.graph.nodes[place]
+            if self.info(node).output >= 0 and self.near(self.output_at(node), x, y):
+                return [place, -1]
+            var port = 0
+            while port < self.info(node).inputs.length:
+                if self.near(self.input_at(node, port), x, y):
+                    return [place, port]
+                port += 1
+            place -= 1
+        return none
+
+    func near(self, point: Point, x: float, y: float) -> bool:
+        let shown = self.to_screen(point)
+        return math.abs(shown.x - x) <= port_reach and math.abs(shown.y - y) <= port_reach
+
+    ## The whole graph framed in a view `width` by `height`, at most at 100%.
+    pub func frame_all(self, width: float, height: float):
+        if self.graph.nodes.length == 0:
+            self.zoom = 1.0
+            self.pan_x = 24.0
+            self.pan_y = 24.0
+            return
+        var left = 1.0e12
+        var top = 1.0e12
+        var right = -1.0e12
+        var bottom = -1.0e12
+        for node in self.graph.nodes:
+            left = math.min(left, node.x)
+            top = math.min(top, node.y)
+            right = math.max(right, node.x + node_width)
+            bottom = math.max(bottom, node.y + self.node_height(node))
+        let margin = 32.0
+        self.zoom = math.clamp(math.min((width - margin * 2.0) / math.max(1.0, right - left), (height - margin * 2.0) / math.max(1.0, bottom - top)), 0.2, 1.0)
+        # Nearly fitting, it stays large enough to read, its edges a little out.
+        if self.zoom > 0.6:
+            self.zoom = math.max(self.zoom, 0.8)
+        self.pan_x = (width - (right - left) * self.zoom) * 0.5 - left * self.zoom
+        self.pan_y = (height - (bottom - top) * self.zoom) * 0.5 - top * self.zoom
+
+    ## Zoom by `factor` about view point (`x`, `y`), within 10%..300%.
+    pub func zoom_about(self, factor: float, x: float, y: float):
+        let before = self.zoom
+        self.zoom = math.clamp(self.zoom * factor, 0.1, 3.0)
+        self.pan_x = x - (x - self.pan_x) * self.zoom / before
+        self.pan_y = y - (y - self.pan_y) * self.zoom / before
+
+    ## The graph read again when the document changed; a newly selected layer
+    ## starts with nothing selected, to be framed whole.
+    pub func refresh(self) -> unit!:
+        self.graph.refresh(self.workspace)
+        if self.graph.layer != self.framed_layer:
+            self.framed_layer = self.graph.layer
+            self.selected = []
+            self.needs_frame = true
+        # Nodes gone (undone, deleted) leave the selection.
+        var kept: list[int] = []
+        for id in self.selected:
+            if self.graph.place_of(id) >= 0:
+                kept.append(id)
+        self.selected = kept
+
+    ## The node the parameters show: the last selected, or -1.
+    pub func focused_node(self) -> int:
+        return self.selected[self.selected.length - 1] if self.selected.length > 0 else -1

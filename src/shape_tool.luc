@@ -10,6 +10,7 @@ from ui import Painter, Point
 from gpu import Color
 from workspace import Workspace
 from canvas import Canvas
+from vectors import vector_layer
 import math
 
 ## The shape tools' ids, in the group's order.
@@ -128,10 +129,17 @@ func ring(box: list[float], sides: int) -> list[Point]:
 ## new shape layer named after it, as one undo step: a vector layer that
 ## stays crisp however it is moved or scaled, filled with the foreground
 ## color and stroked, when the header says so, with the background color.
+## With a vector layer selected it is one more element of that layer instead.
 pub func draw_shape(workspace: Workspace, tool: str, x: float, y: float, width: float, height: float) -> unit!:
     let name = "Rectangle" if tool == "rectangle" else ("Ellipse" if tool == "shape_ellipse" else "Polygon")
     let kind = 0 if tool == "rectangle" else (1 if tool == "shape_ellipse" else 3)
     let canvas = workspace.canvas
+    if vector_layer(workspace):
+        canvas.add_shape(workspace.selected_id(), kind, x, y, width, height, workspace.shape_sides, workspace.shape_radius,
+                         workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
+                         workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
+        workspace.touch()
+        return
     workspace.as_one(name, func () -> unit!:
         workspace.add_layer()
         workspace.rename(name)
@@ -141,9 +149,14 @@ pub func draw_shape(workspace: Workspace, tool: str, x: float, y: float, width: 
     workspace.touch()
 
 ## A straight line of the header's weight in the foreground color, on a new
-## shape layer.
+## shape layer, or on the selected vector layer.
 pub func draw_line(workspace: Workspace, x0: float, y0: float, x1: float, y1: float) -> unit!:
     let canvas = workspace.canvas
+    if vector_layer(workspace):
+        canvas.add_shape(workspace.selected_id(), 2, x0, y0, x1 - x0, y1 - y0, workspace.shape_sides, 0.0,
+                         false, 0.0, 0.0, 0.0, true, workspace.red, workspace.green, workspace.blue, workspace.shape_weight)
+        workspace.touch()
+        return
     workspace.as_one("Line", func () -> unit!:
         workspace.add_layer()
         workspace.rename("Line")

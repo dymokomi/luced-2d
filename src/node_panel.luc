@@ -1,0 +1,176 @@
+## The Node Editor panel (Window › Node Editor): the selected vector layer's
+## graph on the left (node_view.luc), the selected node's settings on the
+## right (node_inspector.luc). Nodes are added from the right-click menu, from
+## Tab's search (type part of a name, Enter) or the footer's +; they land where
+## the pointer last pressed. The graph's output is the layer's art: every
+## change draws the canvas again, only where its shapes changed.
+from ui import Panel, VStack, HStack, Shelf, Spacer, Size, ContextMenu, TextField, Command, CommandPalette
+from workspace import Workspace
+from kit import Kit
+from menus import divider
+from node_view import NodeView
+from node_inspector import NodeInspector
+from node_graph import add_node, delete_nodes, set_node_value, kind_order
+from vectors import vector_layer
+
+pub class NodePanel:
+    pub let panel: Panel
+    pub let view: NodeView
+    pub let inspector: NodeInspector
+    let menu: ContextMenu
+    let search: CommandPalette
+    let value_field: TextField
+    ## One add command a kind, in `kind_order`, and the menu's others.
+    pub let add_commands: list[Command]
+    let delete_command: Command
+    let frame_command: Command
+    ## The value being typed: its node and slot, or -1.
+    var typing_node: int = -1
+    var typing_slot: int = -1
+    let workspace: Workspace
+    ## After a change the window refreshes; what failed is said in a prompt; a
+    ## color is picked with the picker.
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+    pub var pick_color: func(str, str, func(str) -> unit!) -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
+        self.workspace = workspace
+        let font = kit.font
+        self.view = NodeView(workspace, font)
+        self.view.on_changed = self.changed
+        self.view.on_failed = self.fail
+        self.view.on_search = self.open_search
+        self.inspector = NodeInspector(workspace, self.view.layout_state, font)
+        self.inspector.on_changed = self.refresh
+        self.inspector.on_failed = self.fail
+        self.inspector.on_type = self.begin_typing
+        self.inspector.pick_color = func (title: str, hex: str, changed: func(str) -> unit!) -> unit!:
+            if let pick = self.pick_color:
+                pick(title, hex, changed)
+        self.add_commands = []
+        for kind in kind_order():
+            let chosen = kind
+            let command = Command(self.view.layout_state.kinds[kind].title, id = f"node_add_{kind}")
+            kit.bind(command, func () -> unit!:
+                self.add_at_menu(chosen))
+            self.add_commands.append(command)
+        self.delete_command = Command("Delete Selected Nodes", id = "node_delete")
+        kit.bind(self.delete_command, self.attempting(self.delete_selected))
+        self.frame_command = Command("Frame All", id = "node_frame")
+        kit.bind(self.frame_command, self.frame_all)
+        self.menu = ContextMenu(self.view, self.add_commands + [divider(), self.frame_command, self.delete_command], font = font)
+        kit.keep(self.menu.on_open(self.fit_menu))
+        self.search = CommandPalette(self.add_commands, font = font)
+        # A value is typed where it is shown; Enter or a click away keeps it.
+        self.value_field = TextField("", font = font, cells = 9.0)
+        let field_box = self.value_field.layout()
+        field_box.set_popup(true)
+        field_box.set_modal(false)
+        field_box.set_visible(false)
+        kit.keep(self.value_field.on_commit(self.finish_typing))
+        let body = HStack([self.menu, self.inspector], spacing = 0.0)
+        body.layout().set_flex()
+        let content = VStack([body, self.value_field, self.search], spacing = 0.0)
+        content.layout().set_flex()
+        let shelf = Shelf([kit.shelf_button("plus", self.open_search), kit.shelf_button("zoom-in", self.frame_all),
+                           Spacer(), kit.shelf_button("trash", self.attempting(self.delete_selected))])
+        self.panel = Panel("Node Editor", content, minimum = Size(560.0, 260.0), footer = shelf, id = "nodes")
+
+    ## The panel as the document is now.
+    pub func show(self) -> unit!:
+        self.view.refresh()
+        let count = self.view.layout_state.graph.nodes.length
+        self.panel.set_text(f"Node Editor · {count}" if count > 0 else "Node Editor")
+        self.view.layout().invalidate()
+        self.inspector.layout().invalidate()
+
+    func fit_menu(self) -> unit!:
+        let editable = vector_layer(self.workspace)
+        for command in self.add_commands:
+            command.set_enabled(editable)
+        self.delete_command.set_enabled(editable and self.view.layout_state.selected.length > 0)
+
+    ## A node of `kind` where the pointer last pressed, selected.
+    func add_at_menu(self, kind: int) -> unit!:
+        if not vector_layer(self.workspace):
+            self.fail("Add Node: select a vector layer first")
+            return
+        let at = self.view.layout_state.to_graph(self.view.menu_x, self.view.menu_y)
+        self.attempt(func () -> unit!:
+            let made = add_node(self.workspace, kind, at.x, at.y)
+            self.view.refresh()
+            self.view.layout_state.selected = [made])
+
+    func open_search(self) -> unit!:
+        if vector_layer(self.workspace):
+            self.search.open()
+
+    func delete_selected(self) -> unit!:
+        let state = self.view.layout_state
+        delete_nodes(self.workspace, state.selected)
+        state.selected = []
+
+    func frame_all(self) -> unit!:
+        let bounds = self.view.layout().bounds()
+        self.view.layout_state.frame_all(bounds.width, bounds.height)
+        self.view.layout().invalidate()
+
+    # -- A value typed.
+
+    func begin_typing(self, node: int, slot: int, x: float, y: float) -> unit!:
+        let place = self.view.layout_state.graph.place_of(node)
+        if place < 0:
+            return
+        self.typing_node = node
+        self.typing_slot = slot
+        let value = self.workspace.canvas.graph_node_value(self.workspace.selected, place, 4 + slot)
+        self.value_field.set_text(f"{value}")
+        let field_box = self.value_field.layout()
+        let inspector = self.inspector.layout().bounds()
+        let content = self.panel.layout().bounds()
+        field_box.set_popup_point(inspector.x - content.x + x, inspector.y - content.y + y)
+        field_box.set_visible(true)
+        field_box.request_focus()
+
+    func finish_typing(self, text: str) -> unit!:
+        let node = self.typing_node
+        let slot = self.typing_slot
+        self.typing_node = -1
+        self.value_field.layout().set_visible(false)
+        let value = parse_number(text.trim()) else return
+        if node < 0:
+            return
+        self.attempt(func () -> unit!:
+            self.workspace.canvas.separate_next_step()
+            set_node_value(self.workspace, node, slot, value))
+
+    # -- Doing and saying.
+
+    func attempting(self, step: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            self.attempt(step)
+
+    func attempt(self, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            self.fail(failure.message)
+            return
+        self.refresh()
+
+    func changed(self) -> unit!:
+        self.inspector.layout().invalidate()
+        self.refresh()
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+    func refresh(self) -> unit!:
+        self.show()
+        if let refreshed = self.refreshed:
+            refreshed()
+
+## `text` as a number, or none.
+func parse_number(text: str) -> float?:
+    return float(text) catch _:
+        return none

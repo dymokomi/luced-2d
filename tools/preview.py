@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -168,6 +168,50 @@ SCENES = {
             editor.workspace.canvas.set_active_element(id, 1)
             editor.panels.catalog.open("vector")
             editor.workspace.touch()
+            editor.panels.refresh()''',
+    # Layer › New Vector Layer and Window › Node Editor: the default graph, a
+    # star cloned round a circle, the Clone's settings showing.
+    'nodes': '''            editor.panels.actions.add_vector_layer.trigger()
+            editor.panels.catalog.open("nodes")
+            let nodes = editor.panels.catalog.nodes else trap("the Node Editor")
+            nodes.show()
+            nodes.view.layout_state.selected = [3]
+            editor.panels.refresh()''',
+    # Generative art: the default graph's ring made 36 stars, scaled at random,
+    # colored along a gradient and jittered, over a scatter of small ones.
+    'nodeart': '''            editor.panels.actions.add_vector_layer.trigger()
+            let layer = editor.workspace.selected_id()
+            let canvas = editor.workspace.canvas
+            canvas.set_graph_value(layer, 2, 0, 36.0)
+            canvas.set_graph_value(layer, 3, 2, 25.0)
+            let random = canvas.add_graph_node(layer, 15, 40.0, 620.0)
+            canvas.link_graph(layer, random, 3, 2)
+            let gradient = canvas.add_graph_node(layer, 16, 40.0, 760.0)
+            canvas.link_graph(layer, gradient, 3, 4)
+            let scatter = canvas.add_graph_node(layer, 9, 340.0, 520.0)
+            canvas.set_graph_value(layer, scatter, 0, 400.0)
+            canvas.set_graph_value(layer, scatter, 4, 1400.0)
+            canvas.set_graph_value(layer, scatter, 5, 880.0)
+            let dot = canvas.add_graph_node(layer, 2, 340.0, 380.0)
+            canvas.set_graph_value(layer, dot, 2, 10.0)
+            canvas.set_graph_value(layer, dot, 3, 10.0)
+            canvas.set_graph_value(layer, dot, 6, 0.9)
+            canvas.set_graph_value(layer, dot, 7, 0.85)
+            canvas.set_graph_value(layer, dot, 8, 0.8)
+            let dots = canvas.add_graph_node(layer, 11, 620.0, 420.0)
+            canvas.link_graph(layer, dot, dots, 0)
+            canvas.link_graph(layer, scatter, dots, 1)
+            let both = canvas.add_graph_node(layer, 13, 900.0, 260.0)
+            canvas.link_graph(layer, dots, both, 0)
+            canvas.link_graph(layer, 3, both, 1)
+            canvas.move_graph_node(layer, 4, 1160.0, 260.0)
+            canvas.link_graph(layer, both, 4, 0)
+            editor.workspace.touch()
+            print(f"NODEART shapes {canvas.generated_count(editor.workspace.selected)}")
+            editor.panels.catalog.open("nodes")
+            let nodes = editor.panels.catalog.nodes else trap("the Node Editor")
+            nodes.show()
+            nodes.view.layout_state.selected = [3]
             editor.panels.refresh()''',
     # Save, undo, redo, save again: the list must show all three.
     'channelundo': '''            editor.panels.catalog.open("channels")

@@ -77,6 +77,27 @@ The full, commented list is `scripting/luced.luc`.
   - `select_vector` (-1 for none), `rename_vector`, `set_vector_visible`,
     `move_vector`, `duplicate_vector`, `delete_vector`, `vector_selection` (the
     selection modes above) and `transform_vector`.
+- **Node graphs:** the selected vector layer's graph, as the Node Editor edits it:
+  - `new_vector_layer()` makes a vector layer whose graph is a star cloned round a
+    circle; its nodes are called "star", "circle", "clone" and "output".
+  - `add_node(kind, name, x, y)` adds a node of a kind ("Star", "Grid", "Clone",
+    "Random Scatter", "Color Gradient", ...) that the script calls `name` from then on.
+  - `link_nodes(source, target, input)` wires `source`'s output into an input of
+    `target`, by the input's name ("Shapes", "Points", "Count", "Fill") or number;
+    `unlink_node(target, input)` takes the wire away. A wire must join ports of one
+    type (a Number may go where a Color does) and may not close a loop.
+  - `set_node(node, setting, value)` and `set_node_color(node, setting, r, g, b)` set
+    a setting by the name the editor shows; `delete_node(node)`.
+
+  ```luce
+  luced.new_vector_layer()
+  luced.set_node("circle", "Count", 36.0)
+  luced.add_node("Random", "sizes")
+  luced.link_nodes("sizes", "clone", "Scale")
+  luced.add_node("Color Gradient", "tint")
+  luced.set_node_color("tint", "End", 0.1, 0.3, 0.9)
+  luced.link_nodes("tint", "clone", "Fill")
+  ```
 - **Canvas:** `resize_image`, `resize_canvas`, `crop`, `flip_canvas`.
 
 The first action that fails stops the run. What ran before it stays, as one undo step,

@@ -36,6 +36,7 @@ from ui import Command
 from swatches_panel import swatches_of
 from alpha_channels import row_shown, row_picked, next_alpha_name
 from vectors import active_element, next_path_name
+from node_view import NodeView
 from free_transform import begin_free_transform
 from brushes_panel import saved_brushes
 from align import align_layers
@@ -100,6 +101,7 @@ pub func main(arguments: list[str]) -> int!:
     warping()
     alpha_channel_panel(arguments)
     vector_panel(arguments)
+    node_editor(arguments)
     color_panel_modes()
     print("PASS luced-2d workspace, view and panels")
     return 0
@@ -1099,6 +1101,8 @@ func groups_and_shapes() -> unit!:
     workspace.offset_y = 0.0
     let before = workspace.layer_count()
     for tool in ["rectangle", "shape_ellipse", "line", "shape_polygon"]:
+        # From a pixel layer each shape makes a layer of its own.
+        workspace.select(0)
         panels.choose_tool(tool)
         press(view, 20.0, 20.0)
         drag_to(view, 60.0, 50.0)
@@ -1341,13 +1345,15 @@ func pen_paths() -> unit!:
     drag_to(view, 40.0, 10.0)
     release(view, 40.0, 10.0)
     assert(canvas.layer_path_value(workspace.selected, 1, 3) == 10.0 and canvas.layer_path_value(workspace.selected, 1, 5) > 20.0)
-    # An open path ends with Enter.
+    # An open path ends with Enter; drawn on the path's vector layer, it is that
+    # layer's second element, active.
     press(view, 10.0, 75.0)
     release(view, 10.0, 75.0)
     press(view, 40.0, 76.0)
     release(view, 40.0, 76.0)
     view.event(Event(kind = EventKind.key_down, key = Key.enter))
-    assert(workspace.layer_count() == before + 2 and canvas.layer_path_count(workspace.selected) == 2 and not canvas.layer_path_closed(workspace.selected))
+    assert(workspace.layer_count() == before + 1 and canvas.element_count(workspace.selected) == 2)
+    assert(canvas.layer_path_count(workspace.selected) == 2 and not canvas.layer_path_closed(workspace.selected))
 ## Layer › Align and Distribute on three painted layers, each one undo step.
 func aligning() -> unit!:
     let workspace = Workspace(300, 200)
@@ -1977,6 +1983,156 @@ func vector_panel(arguments: list[str]) -> unit!:
         assert(canvas.undo_name() == ("Skew" if mode == mode_skew else "Perspective"))
         workspace.undo()
     panels.close()
+
+## A vector layer and its Node Editor: New Vector Layer draws its default graph
+## (a star cloned round a circle); the shape tool adds to it; in the editor a
+## node is added, wired in by dragging from port to port, a wire picked up and
+## dropped, a value dragged in the settings, nodes box-selected and deleted —
+## each a step, the layer's shapes and pixels following.
+func node_editor(arguments: list[str]) -> unit!:
+    let workspace = Workspace(400, 300)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let canvas = workspace.canvas
+    canvas.bind_headless()
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    actions.add_vector_layer.trigger()
+    let layer = workspace.selected
+    assert(canvas.layer_shaped(layer) and canvas.layer_name(layer) == "Vector 1" and canvas.undo_name() == "New Vector Layer")
+    assert(canvas.graph_node_count(layer) == 4 and canvas.generated_count(layer) == 12)
+    # The ring's top star is drawn above the middle.
+    assert(alpha_at(canvas, 200, int(150.0 - 300.0 * 0.32)) > 0.9 and alpha_at(canvas, 200, 150) < 0.1)
+    # The shape tool adds to the vector layer rather than making one.
+    let count = workspace.layer_count()
+    draw_shape(workspace, "rectangle", 10.0, 10.0, 40.0, 30.0)
+    assert(workspace.layer_count() == count and canvas.element_count(layer) == 1)
+    workspace.undo()
+    # Window › Node Editor shows the graph under the canvas.
+    window_command(actions, "nodes").trigger()
+    let editor = panels.catalog.nodes else trap("the Node Editor is made")
+    assert(panels.catalog.is_open("nodes"))
+    let view = editor.view
+    view.layout().set_size(600.0, 320.0)
+    let frame = Frame(window.Size(600.0, 320.0, 600.0, 320.0, 1.0))
+    view.draw(frame.target())
+    frame.close()
+    let state = view.layout_state
+    assert(state.graph.nodes.length == 4 and state.graph.links.length == 3)
+    # Fixed at 100% from the origin, so the test can point at things.
+    state.zoom = 1.0
+    state.pan_x = 0.0
+    state.pan_y = 0.0
+    let circle = state.graph.nodes[1]
+    let clone = state.graph.nodes[2]
+    assert(state.info(circle).title == "Circle" and state.info(clone).title == "Clone")
+    # A Grid added from the menu where the pointer pressed.
+    node_press(view, 30.0, 700.0, 1)
+    node_release(view, 30.0, 700.0, 1)
+    editor.add_commands[5].trigger()
+    assert(canvas.graph_node_count(layer) == 5 and canvas.undo_name() == "Add Node")
+    view.refresh()
+    let grid = state.graph.nodes[4]
+    assert(state.info(grid).title == "Grid" and grid.x == 30.0 and grid.y == 700.0 and state.focused_node() == grid.id)
+    # Dragged from the Grid's output to the Clone's Points input: it replaces the circle.
+    let out = state.output_at(grid)
+    let points_input = state.input_at(clone, 1)
+    node_press(view, out.x, out.y)
+    node_drag(view, 400.0, 500.0)
+    node_release(view, points_input.x + 2.0, points_input.y)
+    assert(canvas.undo_name() == "Connect" and canvas.generated_count(layer) == 24)
+    # The ring's stars gave way to the grid's, about the origin.
+    assert(alpha_at(canvas, 200, int(150.0 - 300.0 * 0.32)) < 0.1 and alpha_at(canvas, 80, 80) > 0.9)
+    # A Shapes output does not go into a Points input: refused, nothing changes.
+    let star = state.graph.nodes[0]
+    let star_out = state.output_at(star)
+    node_press(view, star_out.x, star_out.y)
+    node_release(view, points_input.x, points_input.y)
+    assert(canvas.undo_name() == "Connect" and canvas.generated_count(layer) == 24)
+    # The grid's Columns set in the settings: a drag right, live, one step.
+    state.selected = [grid.id]
+    let inspector = editor.inspector
+    inspector.layout().set_size(290.0, 320.0)
+    let columns_row = inspector.row_top(0) + 8.0
+    inspector.event(Event(kind = EventKind.pointer_down, x = 180.0, y = columns_row, button = 0, inside = true))
+    inspector.event(Event(kind = EventKind.pointer_moved, x = 192.0, y = columns_row, inside = true))
+    inspector.event(Event(kind = EventKind.pointer_up, x = 192.0, y = columns_row, button = 0, inside = true))
+    assert(canvas.graph_node_value(layer, 4, 4) == 8.0 and canvas.generated_count(layer) == 32 and canvas.undo_name() == "Node Setting")
+    workspace.undo()
+    assert(canvas.generated_count(layer) == 24)
+    workspace.redo()
+    view.refresh()
+    # The wire picked up off the Clone's Points input and dropped on the grid: gone.
+    node_press(view, points_input.x, points_input.y)
+    node_drag(view, 300.0, 600.0)
+    node_release(view, 300.0, 600.0)
+    assert(canvas.undo_name() == "Disconnect" and canvas.generated_count(layer) == 0 and alpha_at(canvas, 80, 80) < 0.1)
+    workspace.undo()
+    view.refresh()
+    assert(canvas.generated_count(layer) == 32)
+    # A node dragged is one step; the pixels are untouched.
+    let before_x = grid.x
+    node_press(view, grid.x + 60.0, grid.y + 10.0)
+    node_drag(view, grid.x + 100.0, grid.y + 30.0)
+    node_release(view, grid.x + 100.0, grid.y + 30.0)
+    view.refresh()
+    assert(canvas.undo_name() == "Move Node" and state.graph.nodes[4].x == before_x + 40.0)
+    # Box-selected and deleted: the grid goes, and its wire.
+    node_press(view, 10.0, 690.0)
+    node_drag(view, 260.0, 900.0)
+    node_release(view, 260.0, 900.0)
+    assert(state.selected.length == 1 and state.selected[0] == grid.id)
+    view.event(Event(kind = EventKind.key_down, key = Key.delete))
+    assert(canvas.graph_node_count(layer) == 4 and canvas.graph_link_count(layer) == 2 and canvas.generated_count(layer) == 0)
+    workspace.undo()
+    assert(canvas.graph_node_count(layer) == 5 and canvas.generated_count(layer) == 32)
+    # Drawn with hundreds of nodes and wires, the editor does not fail.
+    view.refresh()
+    var added = 0
+    while added < 200:
+        discard(canvas.add_graph_node(workspace.selected_id(), 7, float(added % 20) * 200.0, 1200.0 + float(added // 20) * 120.0))
+        added += 1
+    workspace.touch()
+    let busy = Frame(window.Size(600.0, 320.0, 600.0, 320.0, 1.0))
+    state.zoom = 0.3
+    view.draw(busy.target())
+    busy.close()
+    assert(state.graph.nodes.length == 205)
+    # Saved and opened, the graph comes back with the layer.
+    let path = paths.join(arguments[arguments.length - 1], "nodes.l2d")
+    workspace.save(path)
+    let reopened = Canvas.open(path)
+    assert(reopened.graph_node_count(layer) == 205 and reopened.graph_link_count(layer) == 3 and reopened.generated_count(layer) == 32)
+    reopened.close()
+    # A script's calls: a new vector layer, its circle's count, a Random wired
+    # to the Clone's Scale, the star colored.
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d new_vector_layer") else trap("line"))
+    let scripted = workspace.selected
+    commands.apply(parse_line("@l2d set_node\tcircle\tCount\t20") else trap("line"))
+    commands.apply(parse_line("@l2d add_node\tRandom\tsizes\t0\t400") else trap("line"))
+    commands.apply(parse_line("@l2d link_nodes\tsizes\tclone\tScale") else trap("line"))
+    commands.apply(parse_line("@l2d set_node_color\tstar\tFill Color\t0\t0\t1") else trap("line"))
+    assert(scripted != layer and canvas.layer_name(scripted) == "Vector 2" and canvas.generated_count(scripted) == 20)
+    assert(canvas.graph_link_count(scripted) == 4 and canvas.graph_node_value(scripted, 0, 12) > 0.99 and canvas.graph_node_value(scripted, 0, 10) < 0.01)
+    panels.close()
+
+## The flattened document's alpha at a pixel: over the empty background, only
+## what the vector layer draws shows.
+func alpha_at(canvas: Canvas, x: int, y: int) -> float!:
+    canvas.pick(x, y)
+    return canvas.picked_alpha()
+
+func node_press(view: NodeView, x: float, y: float, button: int = 0) -> unit!:
+    view.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = button, inside = true))
+
+func node_drag(view: NodeView, x: float, y: float) -> unit!:
+    view.event(Event(kind = EventKind.pointer_moved, x = x, y = y, inside = true))
+
+func node_release(view: NodeView, x: float, y: float, button: int = 0) -> unit!:
+    view.event(Event(kind = EventKind.pointer_up, x = x, y = y, button = button, inside = true))
 
 func wheel_press(wheel: ColorWheel, x: float, y: float, shift: bool = false) -> unit!:
     wheel.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = 0, inside = true, shift = shift))

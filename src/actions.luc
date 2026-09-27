@@ -112,6 +112,7 @@ pub class Actions:
     pub let add_noise: Command
     # Layer
     pub let add_layer: Command
+    pub let add_vector_layer: Command
     pub let duplicate_layer: Command
     ## Cmd-J and Shift-Cmd-J: a new layer of the selected pixels, copied or cut.
     pub let layer_via_copy: Command
@@ -241,6 +242,7 @@ pub class Actions:
         self.filters = [Command("Motion Blur…", id = "motion_blur"), Command("Lens Correction…", Shortcut(Key.r, primary = true, shift = true), id = "lens_correction"),
                         Command("Bloom…", id = "bloom"), Command("Tonal Contrast…", id = "tonal_contrast")]
         self.add_layer = Command("New Layer", Shortcut(Key.n, primary = true, shift = true), id = "add_layer")
+        self.add_vector_layer = Command("New Vector Layer", id = "add_vector_layer")
         self.duplicate_layer = Command("Duplicate Layer", id = "duplicate_layer")
         self.layer_via_copy = Command("Layer via Copy", Shortcut(Key.j, primary = true), id = "layer_via_copy")
         self.layer_via_cut = Command("Layer via Cut", Shortcut(Key.j, primary = true, shift = true), id = "layer_via_cut")
@@ -305,7 +307,7 @@ pub class Actions:
         self.all = [self.new_document, self.open_document, self.import_image, self.save, self.save_as, self.export_png, self.export_jpeg, self.close_document, self.script_editor, self.next_document, self.previous_document, self.next_document_tab, self.previous_document_tab, self.undo, self.redo, self.redo_y, self.cut, self.copy, self.copy_merged, self.paste, self.paste_in_place, self.fill, self.color_range, self.replace_color, self.fill_background, self.fill_delete, self.fill_background_delete, self.clear, self.swap_colors, self.reset_colors, self.free_transform, self.transform_skew, self.transform_distort, self.transform_perspective, self.transform_warp, self.puppet_warp, self.commit_text, self.flip_horizontal, self.flip_vertical, self.settings,
                     self.select_all, self.deselect, self.inverse, self.expand, self.contract, self.feather, self.border, self.smooth, self.grow, self.similar, self.transform_selection, self.quick_mask, self.select_mask, self.load_selection, self.save_selection,
                     self.crop, self.flip_canvas_horizontal, self.flip_canvas_vertical, self.canvas_size, self.reveal_all, self.image_size, self.trim, self.blur, self.add_noise,
-                    self.add_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
+                    self.add_layer, self.add_vector_layer, self.duplicate_layer, self.layer_via_copy, self.layer_via_cut, self.layer_up, self.layer_down, self.merge_down, self.delete_layer,
                     self.group_layers, self.ungroup, self.move_out_of_folder, self.hide_all_mask, self.toggle_mask_enabled, self.toggle_mask_link, self.copy_mask, self.paste_mask, self.toggle_preview, self.load_transparency,
                     self.toggle_mask, self.toggle_mask_editing, self.toggle_clipped, self.toggle_visibility, self.layer_style, self.rename_layer,
                     self.fit, self.actual_size, self.zoom_in, self.zoom_out, self.show_rulers, self.show_grid, self.show_transform_controls, self.show_guides, self.snap, self.lock_guides, self.clear_guides, self.document_settings, self.bigger, self.smaller, self.harder, self.softer, self.next_blend, self.previous_blend, self.exit_app, self.reset_layout] + self.windows + self.aligns + self.adjustments + self.filters + self.adjustment_layers + self.blends + self.tools + self.units

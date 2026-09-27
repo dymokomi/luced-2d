@@ -15,7 +15,7 @@ from ui import Painter, Point
 from gpu import Rect, Color
 from workspace import Workspace
 from canvas import Canvas
-from vectors import active_element
+from vectors import active_element, vector_layer
 import math
 
 ## One anchor, in document pixels: the point and the handles coming in and
@@ -183,6 +183,13 @@ pub class PenTool:
         if into_empty_path(workspace):
             stage(canvas, anchors)
             canvas.set_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
+                            workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
+            workspace.touch()
+            return
+        # On a vector layer the path is one more of its elements.
+        if vector_layer(workspace):
+            stage(canvas, anchors)
+            canvas.add_path(workspace.selected_id(), closed, workspace.shape_fill, workspace.red, workspace.green, workspace.blue,
                             workspace.shape_stroke, workspace.back_red, workspace.back_green, workspace.back_blue, workspace.shape_stroke_width)
             workspace.touch()
             return

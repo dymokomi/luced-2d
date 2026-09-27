@@ -8,6 +8,7 @@ from actions import Actions
 from kit import Kit
 from layers import LayerList
 from menus import divider
+from vectors import new_vector_layer
 from layer_groups import group_selected, ungroup
 from layer_ops import duplicate_selected, merge, merge_title, can_merge, move_out_of_folder, can_move_out
 
@@ -18,6 +19,7 @@ pub class LayersPanel:
     let row_menu: ContextMenu
     let footer_menu: ContextMenu
     let adjust_button: Button
+    let plus_button: Button
     ## The layer whose name is being edited in its row, or 0.
     var renaming: int = 0
     ## After a change the window refreshes; what failed is said in a prompt;
@@ -56,7 +58,8 @@ pub class LayersPanel:
         let content = VStack([self.row_menu, self.rename_field], spacing = 0.0)
         content.layout().set_flex()
         self.adjust_button = kit.shelf_button("color-correction", self.open_adjustments)
-        let shelf = Shelf([kit.shelf_button("plus", self.command(actions.add_layer)), kit.shelf_button("folder-new", self.command(actions.group_layers)),
+        self.plus_button = kit.shelf_button("plus", self.open_new)
+        let shelf = Shelf([self.plus_button, kit.shelf_button("folder-new", self.command(actions.group_layers)),
                            kit.shelf_button("bevel", self.style), self.adjust_button, kit.shelf_button("layer-mask", self.command(actions.toggle_mask)),
                            kit.shelf_button("send-backward", self.command(actions.toggle_clipped)), kit.shelf_button("duplicate", self.command(actions.duplicate_layer)),
                            Spacer(), kit.shelf_button("trash", self.command(actions.delete_layer))])
@@ -71,6 +74,8 @@ pub class LayersPanel:
         let workspace = self.workspace
         let kit = self.kit
         kit.bind(actions.add_layer, self.attempting("New Layer", workspace.add_layer))
+        kit.bind(actions.add_vector_layer, self.attempting("New Vector Layer", func () -> unit!:
+            new_vector_layer(self.workspace)))
         kit.bind(actions.duplicate_layer, self.attempting("Duplicate", func () -> unit!:
             duplicate_selected(self.workspace)))
         kit.bind(actions.merge_down, self.attempting("Merge", func () -> unit!:
@@ -147,7 +152,15 @@ pub class LayersPanel:
     # -- The footer.
 
     func open_adjustments(self) -> unit!:
+        self.footer_menu.set_commands(self.actions.adjustment_layers)
         let button = self.adjust_button.layout().bounds()
+        let footer = self.footer_menu.layout().bounds()
+        self.footer_menu.open_at(button.x - footer.x, button.y - footer.y)
+
+    ## The + button's menu: a pixel layer or a vector layer.
+    func open_new(self) -> unit!:
+        self.footer_menu.set_commands([self.actions.add_layer, self.actions.add_vector_layer])
+        let button = self.plus_button.layout().bounds()
         let footer = self.footer_menu.layout().bounds()
         self.footer_menu.open_at(button.x - footer.x, button.y - footer.y)
 

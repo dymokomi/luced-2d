@@ -239,6 +239,7 @@ pub class Panels:
         self.catalog.refreshed = self.refresh
         self.catalog.failed = self.prompts.tell
         self.catalog.open_picker = self.pick_color
+        self.catalog.pick_any_color = self.pick_any_color
         self.catalog.brush_chosen = func () -> unit!:
             self.choose_tool("brush")
         self.catalog.align_commands = actions.aligns

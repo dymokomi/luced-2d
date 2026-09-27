@@ -1,0 +1,243 @@
+## The selected vector layer's node graph as the Node Editor and scripts see it:
+## a snapshot of its nodes and wires read from the canvas when the document
+## changes, the catalog of node kinds (luce-image's graph_nodes), and the
+## edits, each one undo step on the canvas that re-evaluates the graph and
+## draws again only the cells its output changed.
+from workspace import Workspace
+from canvas import Canvas
+from vectors import vector_layer
+import math
+
+## What a wire carries, as luce-image numbers it.
+pub let port_shapes: int = 0
+pub let port_points: int = 1
+pub let port_number: int = 2
+pub let port_color: int = 3
+
+## How a parameter is edited.
+pub let param_number: int = 0
+pub let param_whole: int = 1
+pub let param_toggle: int = 2
+pub let param_color: int = 3
+
+## One input of a kind: its name, port type, and the value slot it drives (-1 for data).
+pub class InputInfo:
+    pub let name: str
+    pub let port_type: int
+    pub let slot: int
+
+    pub func init(self, name: str, port_type: int, slot: int):
+        self.name = name
+        self.port_type = port_type
+        self.slot = slot
+
+pub class ParamInfo:
+    pub let name: str
+    pub let kind: int
+    pub let slot: int
+    pub let low: float
+    pub let high: float
+
+    pub func init(self, name: str, kind: int, slot: int, low: float, high: float):
+        self.name = name
+        self.kind = kind
+        self.slot = slot
+        self.low = low
+        self.high = high
+
+## One kind of node: its title, its output's port type (-1 for none), inputs and parameters.
+pub class KindInfo:
+    pub let kind: int
+    pub let title: str
+    pub let output: int
+    pub let inputs: list[InputInfo]
+    pub let params: list[ParamInfo]
+
+    pub func init(self, kind: int, title: str, output: int, inputs: list[InputInfo], params: list[ParamInfo]):
+        self.kind = kind
+        self.title = title
+        self.output = output
+        self.inputs = inputs
+        self.params = params
+
+## The kinds in the order the add menus list them, grouped by what they make:
+## shapes, points, what acts on shapes, fields, and the Output.
+pub func kind_order() -> list[int]:
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 0]
+
+## Every kind, read once from the canvas's catalog.
+pub func node_catalog(canvas: Canvas) -> list[KindInfo]!:
+    var kinds: list[KindInfo] = []
+    var kind = 0
+    while kind < canvas.node_kind_count():
+        var inputs: list[InputInfo] = []
+        var port = 0
+        while port < canvas.node_input_count(kind):
+            inputs.append(InputInfo(canvas.node_input_name(kind, port), canvas.node_input_type(kind, port), canvas.node_input_slot(kind, port)))
+            port += 1
+        var params: list[ParamInfo] = []
+        var param = 0
+        while param < canvas.node_param_count(kind):
+            params.append(ParamInfo(canvas.node_param_name(kind, param), int(canvas.node_param_value(kind, param, 0)), int(canvas.node_param_value(kind, param, 1)),
+                                    canvas.node_param_value(kind, param, 2), canvas.node_param_value(kind, param, 3)))
+            param += 1
+        kinds.append(KindInfo(kind, canvas.node_kind_title(kind), canvas.node_kind_output(kind), inputs, params))
+        kind += 1
+    return kinds
+
+## A node as the editor shows it: its id, kind and top-left in graph space.
+pub class GraphNode:
+    pub let id: int
+    pub let kind: int
+    pub var x: float
+    pub var y: float
+
+    pub func init(self, id: int, kind: int, x: float, y: float):
+        self.id = id
+        self.kind = kind
+        self.x = x
+        self.y = y
+
+## A wire from node `source`'s output into input `port` of node `target`.
+pub class GraphLink:
+    pub let source: int
+    pub let target: int
+    pub let port: int
+
+    pub func init(self, source: int, target: int, port: int):
+        self.source = source
+        self.target = target
+        self.port = port
+
+## The selected layer's graph as it is now; empty when it is no vector layer.
+pub class GraphSnapshot:
+    pub var nodes: list[GraphNode]
+    pub var links: list[GraphLink]
+    ## The layer it was read from, and at which revision.
+    pub var layer: int = -1
+    pub var revision: int = -1
+
+    pub func init(self):
+        self.nodes = []
+        self.links = []
+
+    ## Read the graph again when the document or the selected layer changed.
+    pub func refresh(self, workspace: Workspace) -> unit!:
+        let layer = workspace.selected_id() if workspace.selected < workspace.layer_count() else -1
+        if self.revision == workspace.revision and self.layer == layer:
+            return
+        self.revision = workspace.revision
+        self.layer = layer
+        self.nodes = []
+        self.links = []
+        if not vector_layer(workspace):
+            return
+        let canvas = workspace.canvas
+        let index = workspace.selected
+        var node = 0
+        while node < canvas.graph_node_count(index):
+            self.nodes.append(GraphNode(int(canvas.graph_node_value(index, node, 0)), int(canvas.graph_node_value(index, node, 1)),
+                                        canvas.graph_node_value(index, node, 2), canvas.graph_node_value(index, node, 3)))
+            node += 1
+        var link = 0
+        while link < canvas.graph_link_count(index):
+            self.links.append(GraphLink(canvas.graph_link_value(index, link, 0), canvas.graph_link_value(index, link, 1), canvas.graph_link_value(index, link, 2)))
+            link += 1
+
+    ## The place of node `id`, or -1.
+    pub func place_of(self, id: int) -> int:
+        var at = 0
+        while at < self.nodes.length:
+            if self.nodes[at].id == id:
+                return at
+            at += 1
+        return -1
+
+    ## The wire into input `port` of node `id`, or -1.
+    pub func link_into(self, id: int, port: int) -> int:
+        var at = 0
+        while at < self.links.length:
+            if self.links[at].target == id and self.links[at].port == port:
+                return at
+            at += 1
+        return -1
+
+# mark: Values ================================================================================
+
+## Value `slot` of node `id` of the selected layer's graph.
+pub func node_value(workspace: Workspace, place: int, slot: int) -> float!:
+    return workspace.canvas.graph_node_value(workspace.selected, place, 4 + slot)
+
+# mark: Edits =================================================================================
+# Each is one step on the selected layer; the caller refreshes.
+
+## A node of `kind` at (`x`, `y`) in graph space; its id.
+pub func add_node(workspace: Workspace, kind: int, x: float, y: float) -> int!:
+    let made = workspace.canvas.add_graph_node(workspace.selected_id(), kind, x, y)
+    workspace.touch()
+    return made
+
+## The nodes `ids` taken away with their wires, as one step.
+pub func delete_nodes(workspace: Workspace, ids: list[int]) -> unit!:
+    if ids.length == 0:
+        return
+    let layer = workspace.selected_id()
+    workspace.as_one("Delete Node", func () -> unit!:
+        for id in ids:
+            workspace.canvas.delete_graph_node(layer, id))
+    workspace.touch()
+
+## Node `source`'s output wired into input `port` of node `target`.
+pub func connect(workspace: Workspace, source: int, target: int, port: int) -> unit!:
+    workspace.canvas.link_graph(workspace.selected_id(), source, target, port)
+    workspace.touch()
+
+pub func disconnect(workspace: Workspace, target: int, port: int) -> unit!:
+    workspace.canvas.unlink_graph(workspace.selected_id(), target, port)
+    workspace.touch()
+
+## A wire picked up off input `port` of `target` and put into input `to_port`
+## of `to` instead: one step.
+pub func rewire(workspace: Workspace, source: int, target: int, port: int, to: int, to_port: int) -> unit!:
+    let layer = workspace.selected_id()
+    workspace.as_one("Connect", func () -> unit!:
+        workspace.canvas.unlink_graph(layer, target, port)
+        workspace.canvas.link_graph(layer, source, to, to_port))
+    workspace.touch()
+
+## Value `slot` of node `id` set; a drag of it coalesces into one step.
+pub func set_node_value(workspace: Workspace, id: int, slot: int, value: float) -> unit!:
+    workspace.canvas.set_graph_value(workspace.selected_id(), id, slot, value)
+    workspace.touch()
+
+## The nodes `ids` moved to their new places, as one step.
+pub func move_nodes(workspace: Workspace, ids: list[int], xs: list[float], ys: list[float]) -> unit!:
+    let layer = workspace.selected_id()
+    workspace.as_one("Move Node", func () -> unit!:
+        var at = 0
+        while at < ids.length:
+            workspace.canvas.move_graph_node(layer, ids[at], xs[at], ys[at])
+            at += 1)
+    workspace.touch()
+
+## Whether an output of type `source` may feed an input of type `target`.
+pub func ports_fit(source: int, target: int) -> bool:
+    return source == target or (source == port_number and target == port_color)
+
+## The kind whose title is `title` (any case), or -1.
+pub func kind_named(kinds: list[KindInfo], title: str) -> int:
+    let wanted = title.lower()
+    for info in kinds:
+        if info.title.lower() == wanted or info.title.lower().replace(" ", "_") == wanted:
+            return info.kind
+    return -1
+
+## A number as a parameter shows it: whole numbers without decimals, others to two places.
+pub func shown_number(value: float, whole: bool) -> str:
+    if whole or math.abs(value - math.round(value)) < 1e-9:
+        return f"{int(math.round(value))}"
+    let hundredths = int(math.round(value * 100.0))
+    let sign = "-" if hundredths < 0 else ""
+    let magnitude = hundredths if hundredths >= 0 else -hundredths
+    let fraction = magnitude % 100
+    return f"{sign}{magnitude // 100}.{fraction // 10}{fraction % 10}"

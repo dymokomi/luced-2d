@@ -1,0 +1,278 @@
+## The Node Editor's graph view: the selected vector layer's nodes as square
+## boxes — a title bar, an input a row, the output on the right — and the wires
+## between them as curves, colored by what they carry. It draws only what is in
+## sight, and every wire of one color as one batch of triangles, so hundreds of
+## nodes and wires stay quick. Where things are is node_layout.luc's; what the
+## pointer does, node_gestures.luc's.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point
+from gpu import RenderTarget, Rect, Color
+from input import Cursor, EventKind, Key
+from workspace import Workspace
+from node_graph import GraphNode, KindInfo, node_value, shown_number, port_shapes, port_points, port_number, port_color, param_whole
+from node_layout import NodeLayout, node_width, title_height
+from node_gestures import NodeGestures
+import theme
+import math
+
+## A port's square, in view points.
+let port_size: float = 8.0
+## Segments a wire's curve is drawn in.
+let wire_steps: int = 24
+
+pub class NodeView: Widget:
+    let box: Layout
+    pub let workspace: Workspace
+    let font: Font
+    pub let layout_state: NodeLayout
+    pub let gestures: NodeGestures
+    ## The last press, for the add menus to put a node there (view points).
+    pub var menu_x: float = 40.0
+    pub var menu_y: float = 40.0
+    ## The selection or the graph changed: the panel shows the parameters.
+    pub var on_changed: func() -> unit!? = none
+    pub var on_failed: func(str) -> unit!? = none
+    ## Tab: the add-node search opens.
+    pub var on_search: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, font: Font) -> unit!:
+        self.workspace = workspace
+        self.font = font
+        self.layout_state = NodeLayout(workspace)
+        self.gestures = NodeGestures()
+        self.box = Layout()
+        self.box.set_focusable(true)
+        self.box.set_cursor(Cursor.arrow)
+        self.box.set_flex()
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(420.0, 260.0)
+
+    ## The graph read again if the document changed.
+    pub func refresh(self) -> unit!:
+        self.layout_state.refresh()
+
+    # -- Drawing.
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        self.refresh()
+        let state = self.layout_state
+        let painter = Painter(target)
+        let size = target.size()
+        if state.needs_frame and size.width > 0.0:
+            state.needs_frame = false
+            state.frame_all(size.width, size.height)
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.grey(34.0))
+        self.draw_grid(painter, size.width, size.height)
+        if state.graph.layer < 0 or not self.workspace.canvas.layer_shaped(self.workspace.selected):
+            painter.text("Select a vector layer · Layer › New Vector Layer", 16.0, 16.0, theme.text_muted(), self.font)
+            painter.close()
+            return
+        if state.graph.nodes.length == 0:
+            painter.text("Right-click or press Tab to add a node", 16.0, 16.0, theme.text_muted(), self.font)
+        self.draw_wires(painter, size.width, size.height)
+        for node in state.graph.nodes:
+            self.draw_node(painter, node, size.width, size.height)
+        self.draw_overlay(painter)
+        painter.close()
+
+    ## A square grid every 32 graph points, every fourth line brighter.
+    func draw_grid(self, painter: Painter, width: float, height: float) -> unit!:
+        let state = self.layout_state
+        let step = 32.0 * state.zoom
+        if step < 8.0:
+            return
+        var line = int(math.floor(-state.pan_x / step))
+        while float(line) * step + state.pan_x < width:
+            painter.rectangle(Rect(math.floor(float(line) * step + state.pan_x), 0.0, 1.0, height), theme.grey(44.0 if line % 4 == 0 else 38.0))
+            line += 1
+        line = int(math.floor(-state.pan_y / step))
+        while float(line) * step + state.pan_y < height:
+            painter.rectangle(Rect(0.0, math.floor(float(line) * step + state.pan_y), width, 1.0), theme.grey(44.0 if line % 4 == 0 else 38.0))
+            line += 1
+
+    ## Every wire in sight as a curve, those of one type drawn as one batch.
+    func draw_wires(self, painter: Painter, width: float, height: float) -> unit!:
+        let state = self.layout_state
+        var batches: list[list[Point]] = [[], [], [], []]
+        let thickness = math.max(1.5, 2.0 * math.min(1.0, state.zoom))
+        for link in state.graph.links:
+            if self.gestures.lifted(link):
+                continue
+            let source = state.graph.place_of(link.source)
+            let target = state.graph.place_of(link.target)
+            if source < 0 or target < 0:
+                continue
+            let from_node = state.graph.nodes[source]
+            let out_type = state.info(from_node).output
+            let a = state.to_screen(state.output_at(from_node))
+            let b = state.to_screen(state.input_at(state.graph.nodes[target], link.port))
+            if math.max(a.x, b.x) < -60.0 or math.min(a.x, b.x) > width + 60.0 or math.max(a.y, b.y) < -60.0 or math.min(a.y, b.y) > height + 60.0:
+                continue
+            curve_into(batches[out_type if out_type >= 0 and out_type < 4 else 0], a, b, thickness)
+        var kind = 0
+        while kind < 4:
+            if batches[kind].length > 0:
+                painter.mesh(batches[kind], self.port_color(kind))
+            kind += 1
+
+    ## What a port type is drawn in: Shapes the accent, Points near white,
+    ## Numbers grey, Colors a muted blue.
+    pub func port_color(self, port_type: int) -> Color:
+        if port_type == port_shapes:
+            return self.workspace.look.accent
+        if port_type == port_points:
+            return theme.grey(214.0)
+        if port_type == port_number:
+            return theme.grey(140.0)
+        return theme.srgb(96.0, 150.0, 214.0)
+
+    func draw_node(self, painter: Painter, node: GraphNode, width: float, height: float) -> unit!:
+        let state = self.layout_state
+        let info = state.info(node)
+        let origin = state.to_screen(Point(state.node_x(node), state.node_y(node)))
+        let w = node_width * state.zoom
+        let h = state.node_height(node) * state.zoom
+        if origin.x > width or origin.y > height or origin.x + w < 0.0 or origin.y + h < 0.0:
+            return
+        # A square box on a one-point border, two in the accent when selected.
+        let picked = state.is_selected(node.id)
+        let edge = 2.0 if picked else 1.0
+        painter.rectangle(Rect(origin.x - edge, origin.y - edge, w + edge * 2.0, h + edge * 2.0), self.workspace.look.accent if picked else theme.grey(20.0))
+        painter.rectangle(Rect(origin.x, origin.y, w, h), theme.surface_raised())
+        painter.rectangle(Rect(origin.x, origin.y, w, title_height * state.zoom), theme.grey(74.0))
+        # The strip on the left of the title says what the node makes.
+        painter.rectangle(Rect(origin.x, origin.y, 3.0, title_height * state.zoom), self.port_color(info.output) if info.output >= 0 else theme.text())
+        if state.zoom >= 0.45:
+            painter.text(info.title, origin.x + 10.0, origin.y + (title_height * state.zoom - 14.0) * 0.5, theme.text(), self.font)
+        # The font keeps its size: below 75% the rows would overprint.
+        let labels = state.zoom >= 0.75
+        let place = state.graph.place_of(node.id)
+        var port = 0
+        while port < info.inputs.length:
+            let input = info.inputs[port]
+            let at = state.to_screen(state.input_at(node, port))
+            let wired = state.graph.link_into(node.id, port) >= 0
+            self.draw_port(painter, at, input.port_type, wired)
+            if labels:
+                painter.text(input.name, at.x + 10.0, at.y - 8.0, theme.text_muted(), self.font)
+                # A socket's own value shows until a wire drives it.
+                if input.slot >= 0 and not wired and input.port_type == port_color:
+                    let r = node_value(self.workspace, place, input.slot)
+                    let g = node_value(self.workspace, place, input.slot + 1)
+                    let b = node_value(self.workspace, place, input.slot + 2)
+                    painter.rectangle(Rect(at.x + w - 38.0, at.y - 6.0, 18.0, 12.0), theme.grey(20.0))
+                    painter.rectangle(Rect(at.x + w - 37.0, at.y - 5.0, 16.0, 10.0), Color(r, g, b))
+                elif input.slot >= 0 and not wired:
+                    let text = shown_number(node_value(self.workspace, place, input.slot), whole(info, input.slot))
+                    painter.text(text, at.x + w - 12.0 - self.font.measure(text), at.y - 8.0, theme.text(), self.font)
+            port += 1
+        if info.output >= 0:
+            self.draw_port(painter, state.to_screen(state.output_at(node)), info.output, true)
+
+    ## A port: a square of its type's color, hollow when nothing is wired to it.
+    func draw_port(self, painter: Painter, at: Point, port_type: int, filled: bool) -> unit!:
+        let half = port_size * 0.5
+        painter.rectangle(Rect(at.x - half - 1.0, at.y - half - 1.0, port_size + 2.0, port_size + 2.0), theme.grey(20.0))
+        painter.rectangle(Rect(at.x - half, at.y - half, port_size, port_size), self.port_color(port_type))
+        if not filled:
+            painter.rectangle(Rect(at.x - half + 2.0, at.y - half + 2.0, port_size - 4.0, port_size - 4.0), theme.surface_raised())
+
+    ## A wire being drawn follows the pointer; a box being dragged out shows.
+    func draw_overlay(self, painter: Painter) -> unit!:
+        let state = self.layout_state
+        let gestures = self.gestures
+        if gestures.drawing_wire():
+            let place = state.graph.place_of(gestures.wire_node)
+            if place < 0:
+                return
+            let node = state.graph.nodes[place]
+            let pointer = Point(gestures.pointer_x, gestures.pointer_y)
+            var points: list[Point] = []
+            if gestures.from_output:
+                curve_into(points, state.to_screen(state.output_at(node)), pointer, 2.0)
+                painter.mesh(points, self.port_color(state.info(node).output))
+            else:
+                curve_into(points, pointer, state.to_screen(state.input_at(node, gestures.wire_port)), 2.0)
+                painter.mesh(points, self.port_color(state.info(node).inputs[gestures.wire_port].port_type))
+        elif gestures.drawing_box():
+            let box = gestures.box()
+            let accent = self.workspace.look.accent
+            painter.rectangle(Rect(box[0], box[1], box[2] - box[0], box[3] - box[1]), accent, opacity = 0.12)
+            painter.rectangle(Rect(box[0], box[1], box[2] - box[0], 1.0), accent)
+            painter.rectangle(Rect(box[0], box[3] - 1.0, box[2] - box[0], 1.0), accent)
+            painter.rectangle(Rect(box[0], box[1], 1.0, box[3] - box[1]), accent)
+            painter.rectangle(Rect(box[2] - 1.0, box[1], 1.0, box[3] - box[1]), accent)
+
+    # -- Input.
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.inside:
+            self.box.request_focus()
+            self.menu_x = event.x
+            self.menu_y = event.y
+        if event.kind == EventKind.key_down and event.key == Key.tab:
+            if let search = self.on_search:
+                search()
+            return
+        if event.kind == EventKind.key_down and event.key == Key.f and not event.meta and not event.control:
+            let bounds = self.box.bounds()
+            self.layout_state.frame_all(bounds.width, bounds.height)
+            self.box.invalidate()
+            return
+        let changed = self.gestures.event(self.layout_state, event) catch failure:
+            self.gestures.cancel(self.layout_state)
+            self.box.invalidate()
+            if let failed = self.on_failed:
+                failed(failure.message)
+            return
+        self.box.invalidate()
+        if changed:
+            if let tell = self.on_changed:
+                tell()
+
+## Whether parameter slot `slot` of a kind counts whole.
+func whole(info: KindInfo, slot: int) -> bool:
+    for param in info.params:
+        if param.slot == slot:
+            return param.kind == param_whole
+    return false
+
+## A wire from `a` to `b` as a curve leaving `a` rightwards and entering `b` from
+## the left, `width` points thick, as triangles into `points`.
+pub func curve_into(points: list[Point], a: Point, b: Point, width: float):
+    let reach = math.max(40.0, math.abs(b.x - a.x) * 0.5)
+    var previous = a
+    var step = 1
+    while step <= wire_steps:
+        let t = float(step) / float(wire_steps)
+        let u = 1.0 - t
+        let x = u * u * u * a.x + 3.0 * u * u * t * (a.x + reach) + 3.0 * u * t * t * (b.x - reach) + t * t * t * b.x
+        let y = u * u * u * a.y + 3.0 * u * u * t * a.y + 3.0 * u * t * t * b.y + t * t * t * b.y
+        let next = Point(x, y)
+        segment_into(points, previous, next, width)
+        previous = next
+        step += 1
+
+## One straight piece `width` thick as two triangles, reaching half a width past
+## each end so neighbouring pieces close their joins.
+pub func segment_into(points: list[Point], a: Point, b: Point, width: float):
+    let dx = b.x - a.x
+    let dy = b.y - a.y
+    let length = math.sqrt(dx * dx + dy * dy)
+    if length <= 0.0:
+        return
+    let ux = dx / length * width * 0.5
+    let uy = dy / length * width * 0.5
+    let sx = a.x - ux
+    let sy = a.y - uy
+    let ex = b.x + ux
+    let ey = b.y + uy
+    points.append(Point(sx - uy, sy + ux))
+    points.append(Point(ex - uy, ey + ux))
+    points.append(Point(ex + uy, ey - ux))
+    points.append(Point(sx - uy, sy + ux))
+    points.append(Point(ex + uy, ey - ux))
+    points.append(Point(sx + uy, sy - ux))
