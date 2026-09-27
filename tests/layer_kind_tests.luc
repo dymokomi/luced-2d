@@ -1,0 +1,532 @@
+## Scripts and the kinds of layers beyond pixels: the script host and
+## editor, groups and shapes, alpha channels, vector layers and the node editor.
+from ui import Font
+from gpu import Frame
+from workspace import Workspace
+from canvas import Canvas
+from panels import Panels
+from actions import Actions
+from view import CanvasView
+from transform_box import mode_perspective, mode_skew
+from ui import Event
+from script_host import ScriptHost
+from tool_cursor import cursor_for
+from shape_tool import restyle_selected, draw_shape
+from tools import group_of
+from input import Cursor
+from script_commands import parse_line, ScriptCommands
+import paths
+import files
+from input import EventKind, Key
+from alpha_channels import row_shown, row_picked, next_alpha_name
+from vectors import active_element, next_path_name
+from node_view import NodeView
+from free_transform import begin_free_transform
+import math
+import window
+from test_input import press, drag_to, release, window_command, foreground, blue_box
+
+## A script's lines are read back exactly; a script run by Luce's interpreter
+## adds a layer, paints and adjusts as one undo step, and a failing action
+## stops it.
+pub func scripts() -> unit!:
+    let line = parse_line("@l2d add_layer\tSky\\tblue\t1") else trap("a script line")
+    assert(line.action == "add_layer" and line.fields == ["Sky\tblue", "1"])
+    assert(parse_line("hello") == none)
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let host = ScriptHost(workspace, none, paths.join(files.home_directory(), ".luced-2d-test-run"))
+    let before = workspace.canvas.layer_count()
+    host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.add_layer(\"Sun\")\n    luced.set_color(1.0, 0.8, 0.0)\n    luced.select_ellipse(10, 10, 20, 20)\n    luced.fill()\n    luced.adjust(\"Exposure\", [0.5])\n    print(f\"{luced.document_width()} wide\")\n    return 0\n")
+    if host.console.contains("No such file") or host.console.contains("status 127"):
+        # No Luce installed where the tests run: nothing more to check here.
+        return
+    assert(host.succeeded and host.console.contains("64 wide"))
+    assert(workspace.canvas.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.layers.selected) == "Sun")
+    assert(workspace.canvas.undo_name() == "Script")
+    workspace.undo()
+    assert(workspace.canvas.layer_count() == before)
+    host.run_to_end("import luced\n\npub func main(arguments: list[str]) -> int!:\n    luced.select_layer(9)\n    luced.add_layer(\"Never\")\n    return 0\n")
+    assert(not host.succeeded and host.console.contains("select_layer failed") and workspace.canvas.layer_count() == before)
+    # A menu command that needs a selection runs once the script made one,
+    # with no window to refresh which commands can run.
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d select_rectangle\t10\t10\t30\t30\t0") else trap("line"))
+    commands.apply(parse_line("@l2d run\tinverse") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Inverse")
+    commands.apply(parse_line("@l2d select_color_range\t9\t40\tfalse") else trap("line"))
+    assert(workspace.canvas.undo_name() == "Color Range")
+    # Colors blend as sRGB values unless Document Settings' gamma 1.0 is on:
+    # a script and the dialog both turn it on, each one step.
+    assert(not workspace.canvas.linear_blend())
+    commands.apply(parse_line("@l2d set_linear_blend\ttrue") else trap("line"))
+    assert(workspace.canvas.linear_blend() and workspace.canvas.undo_name() == "Blend RGB Colors Using Gamma 1.0")
+    workspace.undo()
+    assert(not workspace.canvas.linear_blend())
+    panels.document_settings.open()
+    assert(not panels.document_settings.gamma.is_checked())
+    panels.document_settings.gamma.set_checked(true)
+    panels.document_settings.apply()
+    assert(workspace.canvas.linear_blend())
+    panels.document_settings.open()
+    assert(panels.document_settings.gamma.is_checked())
+    panels.document_settings.cancel()
+    panels.close()
+
+## The Script editor opens with a starter script that runs: dots on a layer.
+pub func script_editor() -> unit!:
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    panels.scripts.open()
+    assert(panels.scripts.dialog.is_open())
+    let before = workspace.canvas.layer_count()
+    panels.scripts.run()
+    while panels.scripts.host.running():
+        panels.scripts.poll()
+    panels.scripts.poll()
+    if panels.scripts.host.succeeded:
+        assert(workspace.canvas.layer_count() == before + 1 and workspace.canvas.layer_name(workspace.layers.selected) == "Dots")
+    panels.scripts.close()
+    panels.close()
+
+## Tools come in groups on the rail; shapes land on layers of their own; the
+## pencil paints whole pixels; each tool has its cursor.
+pub func groups_and_shapes() -> unit!:
+    assert(group_of("lasso") == group_of("marquee") and group_of("pencil") == group_of("brush") and group_of("line") >= 0 and group_of("wand") == -1)
+    assert(cursor_for("zoom", false, false, false) == Cursor.hidden and cursor_for("brush", false, false, false) == Cursor.hidden)
+    assert(cursor_for("brush", false, false, true) == Cursor.crosshair and cursor_for("wand", false, false, false) == Cursor.crosshair)
+    assert(cursor_for("text", false, false, false) == Cursor.text and cursor_for("hand", false, false, false) == Cursor.grab and cursor_for("move", true, false, false) == Cursor.grabbing)
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    let before = workspace.canvas.layer_count()
+    for tool in ["rectangle", "shape_ellipse", "line", "shape_polygon"]:
+        # From a pixel layer each shape makes a layer of its own.
+        workspace.layers.select(0)
+        panels.choose_tool(tool)
+        press(view, 20.0, 20.0)
+        drag_to(view, 60.0, 50.0)
+        release(view, 60.0, 50.0)
+    assert(workspace.canvas.layer_count() == before + 4 and workspace.canvas.layer_name(workspace.layers.selected) == "Polygon" and not workspace.canvas.has_selection())
+    # They are shape layers: vector, restyled from the header.
+    assert(workspace.canvas.layer_shaped(workspace.layers.selected) and workspace.canvas.layer_shape_value(workspace.layers.selected, 0) == 3.0)
+    workspace.undo()
+    assert(workspace.canvas.layer_count() == before + 3)
+    workspace.tools.shape_stroke = true
+    restyle_selected(workspace)
+    assert(workspace.canvas.layer_shape_value(workspace.layers.selected, 11) == 1.0)
+    # The line scaled 200%: its weight doubles; the header shows it and a restyle keeps it.
+    panels.choose_tool("line")
+    workspace.tools.shape_weight = 3.0
+    restyle_selected(workspace)
+    assert(workspace.transforms.begin_transform())
+    if let session = workspace.transforms.transform:
+        session.box.set_scale(200.0)
+    workspace.transforms.preview_transform()
+    workspace.transforms.finish_transform(true)
+    assert(workspace.canvas.layer_shaped(workspace.layers.selected) and math.abs(workspace.canvas.layer_shape_value(workspace.layers.selected, 15) - 6.0) < 1e-6)
+    panels.header.show(false)
+    assert(workspace.tools.shape_weight == 6.0)
+    workspace.tools.shape_sides = 7
+    restyle_selected(workspace)
+    assert(math.abs(workspace.canvas.layer_shape_value(workspace.layers.selected, 15) - 6.0) < 1e-6)
+    # The transform box is the shape and its stroke, no more: doubled, the pixels are
+    # twice as wide (the rasteriser leaves no faint residue beside a shape).
+    let big = Workspace(1280, 800)
+    big.canvas.bind_headless()
+    let big_panels = Panels(big, Actions(), Font())
+    big_panels.choose_tool("rectangle")
+    big.tools.shape_stroke = true
+    big.tools.shape_stroke_width = 4.0
+    big.tools.shape_radius = 20.0
+    draw_shape(big, "rectangle", 300.0, 300.0, 219.0, 148.0)
+    assert(big.canvas.measure_content(big.layers.selected_id()) and big.canvas.content_width() == 223 and big.canvas.content_height() == 152)
+    assert(big.transforms.begin_transform())
+    if let session = big.transforms.transform:
+        session.box.set_width(session.box.width * 2.0, true)
+    big.transforms.preview_transform()
+    big.transforms.finish_transform(true)
+    assert(big.canvas.measure_content(big.layers.selected_id()) and big.canvas.content_width() >= 446 and big.canvas.content_width() <= 448)
+    assert(big.canvas.layer_shape_value(big.layers.selected, 15) == 8.0)
+    big_panels.close()
+    # The rail's brush group shows the pencil once it is chosen.
+    panels.choose_tool("pencil")
+    press(view, 90.0, 10.0)
+    drag_to(view, 110.0, 30.0)
+    release(view, 110.0, 30.0)
+    assert(workspace.canvas.undo_name() != "")
+    panels.close()
+
+## The Channels panel: Save and Load Selection from the Select menu's
+## dialogs, the panel's rows (a channel alone, the eyes, Cmd-click loading),
+## its footer and rename, undo, a script's calls, and an .l2d keeping them.
+pub func alpha_channel_panel(arguments: list[str]) -> unit!:
+    let workspace = Workspace(300, 200)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let canvas = workspace.canvas
+    canvas.bind_headless()
+    canvas.select_rectangle(20, 20, 100, 80)
+    panels.refresh()
+    assert(actions.save_selection.is_enabled() and not actions.load_selection.is_enabled())
+    actions.save_selection.trigger()
+    assert(panels.save_selection.dialog.is_open())
+    panels.save_selection.apply()
+    assert(canvas.channel_count() == 1 and canvas.channel_name(0) == "Alpha 1" and canvas.undo_name() == "Save Selection")
+    assert(next_alpha_name(workspace) == "Alpha 2")
+    # Load Selection: a new selection, then subtracted from a wider one.
+    workspace.selection.deselect()
+    panels.refresh()
+    actions.load_selection.trigger()
+    assert(panels.load_selection.dialog.is_open())
+    panels.load_selection.apply()
+    assert(canvas.selected_at(50, 50) == 255 and canvas.selected_at(200, 150) == 0 and canvas.undo_name() == "Load Selection")
+    # Window › Channels: the composite rows, then the alpha channel.
+    # Open from the start, a tab beside Layers; Window › Channels closes it and brings it back.
+    assert(panels.catalog.is_open("channels"))
+    window_command(actions, "channels").trigger()
+    assert(not panels.catalog.is_open("channels"))
+    window_command(actions, "channels").trigger()
+    let channels = panels.catalog.channels else trap("the Channels panel is made")
+    assert(panels.catalog.is_open("channels"))
+    let rows = channels.channel_list
+    rows.layout().set_size(240.0, 300.0)
+    let frame = Frame(window.Size(240.0, 300.0, 240.0, 300.0, 1.0))
+    rows.draw(frame.target())
+    frame.close()
+    assert(row_shown(workspace, 0) and row_picked(workspace, 0) and not row_shown(workspace, 4))
+    # A click on Green shows it alone; on the alpha channel, it alone as gray.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(2) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = rows.row_top(2) + 10.0, button = 0, inside = true))
+    assert(not canvas.composite_shown(0) and canvas.composite_shown(1) and not canvas.composite_shown(2) and row_picked(workspace, 2) and not row_picked(workspace, 0))
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(4) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = rows.row_top(4) + 10.0, button = 0, inside = true))
+    assert(not canvas.composite_shown(1) and canvas.channel_shown(0) and row_picked(workspace, 4))
+    # The composite's eye brings the picture back under the channel's red.
+    rows.event(Event(kind = EventKind.pointer_down, x = 10.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 10.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    assert(row_shown(workspace, 0) and canvas.channel_shown(0) and not row_picked(workspace, 4))
+    let view = CanvasView(workspace)
+    view.layout().set_size(300.0, 200.0)
+    let drawn = Frame(window.Size(300.0, 200.0, 300.0, 200.0, 1.0))
+    view.draw(drawn.target())
+    drawn.close()
+    # Cmd-click on its thumbnail loads it, Alt subtracting.
+    canvas.select_all()
+    rows.event(Event(kind = EventKind.pointer_down, x = 40.0, y = rows.row_top(4) + 22.0, button = 0, inside = true, meta = true, alt = true))
+    assert(canvas.selected_at(50, 50) == 0 and canvas.selected_at(200, 150) == 255)
+    # The footer's New Channel, a rename in the row, undo and redo.
+    canvas.select_rectangle(0, 0, 10, 10)
+    channels.show()
+    assert(canvas.channel_count() == 1)
+    discard(canvas.new_channel(next_alpha_name(workspace)))
+    channels.channel_list.alpha_row = 5
+    assert(channels.picked() == 1)
+    canvas.rename_channel(1, "Mask")
+    assert(canvas.channel_name(1) == "Mask" and canvas.undo_name() == "Rename Channel")
+    workspace.undo()
+    assert(canvas.channel_name(1) == "Alpha 2")
+    workspace.undo()
+    assert(canvas.channel_count() == 1)
+    workspace.redo()
+    assert(canvas.channel_count() == 2)
+    # A script's calls, by name.
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d save_selection\tCorner") else trap("line"))
+    assert(canvas.channel_count() == 3 and canvas.channel_name(2) == "Corner")
+    workspace.selection.deselect()
+    commands.apply(parse_line("@l2d load_selection\tCorner\t0") else trap("line"))
+    assert(canvas.selected_at(5, 5) == 255 and canvas.selected_at(50, 50) == 0)
+    commands.apply(parse_line("@l2d delete_channel\tAlpha 2") else trap("line"))
+    assert(canvas.channel_count() == 2 and canvas.channel_name(1) == "Corner")
+    # Saved and opened again, the channels come back.
+    let path = paths.join(arguments[arguments.length - 1], "channels.l2d")
+    workspace.documents.save(path)
+    let reopened = Canvas.open(path)
+    assert(reopened.channel_count() == 2 and reopened.channel_name(0) == "Alpha 1" and reopened.channel_name(1) == "Corner")
+    reopened.close()
+    panels.close()
+
+## The Vector panel: a vector layer's elements as rows (topmost first); a row
+## clicked makes its element active, the eye hides it, a drag restacks it,
+## Cmd-click selects its outline; the footer's New Path takes the Pen's next
+## path; a free transform and a move act on the active element alone; a
+## script's calls; an .l2d keeping them; and Skew and Perspective named in History.
+pub func vector_panel(arguments: list[str]) -> unit!:
+    let workspace = Workspace(200, 120)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let view = panels.view
+    let canvas = workspace.canvas
+    canvas.bind_headless()
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    # A red rectangle on a layer of its own, then a script's ellipse added to it.
+    foreground(workspace, 1.0, 0.0, 0.0)
+    draw_shape(workspace, "rectangle", 10.0, 10.0, 60.0, 40.0)
+    let layer = workspace.layers.selected
+    let commands = ScriptCommands(workspace, actions)
+    foreground(workspace, 0.0, 0.0, 1.0)
+    commands.apply(parse_line("@l2d add_vector\tellipse\t50\t30\t60\t40") else trap("line"))
+    assert(workspace.layers.selected == layer and canvas.element_count(layer) == 2 and canvas.element_name(layer, 1) == "Ellipse" and active_element(workspace) == 1)
+    # Window › Vector: the ellipse's row on top, the rectangle's below it.
+    # Open from the start, a tab beside Layers; Window › Vector closes it and brings it back.
+    assert(panels.catalog.is_open("vector"))
+    window_command(actions, "vector").trigger()
+    assert(not panels.catalog.is_open("vector"))
+    window_command(actions, "vector").trigger()
+    let vector = panels.catalog.vector else trap("the Vector panel is made")
+    assert(panels.catalog.is_open("vector"))
+    let rows = vector.vector_list
+    rows.layout().set_size(240.0, 200.0)
+    let frame = Frame(window.Size(240.0, 200.0, 240.0, 200.0, 1.0))
+    rows.draw(frame.target())
+    frame.close()
+    assert(rows.row_top(1) == 0.0 and rows.row_top(0) == 44.0)
+    # A click on the rectangle's row makes it active; below the rows, none.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true))
+    assert(active_element(workspace) == 0)
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = 150.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = 150.0, button = 0, inside = true))
+    assert(active_element(workspace) == -1)
+    # The eye hides the ellipse, one step; undone, it shows again.
+    rows.event(Event(kind = EventKind.pointer_down, x = 10.0, y = rows.row_top(1) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 10.0, y = rows.row_top(1) + 10.0, button = 0, inside = true))
+    assert(not canvas.element_visible(layer, 1) and canvas.undo_name() == "Hide Vector")
+    workspace.undo()
+    assert(canvas.element_visible(layer, 1))
+    # The ellipse's row dragged below the rectangle's: it goes to the bottom.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(1) + 10.0, button = 0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_moved, x = 120.0, y = 80.0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_moved, x = 120.0, y = 88.0, inside = true))
+    rows.event(Event(kind = EventKind.pointer_up, x = 120.0, y = 88.0, button = 0, inside = true))
+    assert(canvas.element_name(layer, 0) == "Ellipse" and canvas.element_name(layer, 1) == "Rectangle" and canvas.undo_name() == "Send Backward")
+    workspace.undo()
+    assert(canvas.element_name(layer, 1) == "Ellipse")
+    # Cmd-click on the rectangle's row: its outline is the selection.
+    rows.event(Event(kind = EventKind.pointer_down, x = 120.0, y = rows.row_top(0) + 10.0, button = 0, inside = true, meta = true))
+    assert(canvas.has_selection() and canvas.selected_at(20, 20) == 255 and canvas.selected_at(150, 100) == 0)
+    workspace.selection.deselect()
+    # The Move tool's press picks the element under it; the drag moves it alone.
+    panels.choose_tool("move")
+    press(view, 20.0, 20.0)
+    assert(active_element(workspace) == 0)
+    drag_to(view, 30.0, 20.0)
+    release(view, 30.0, 20.0)
+    assert(canvas.element_value(layer, 0, 20) == 10.0 and canvas.element_value(layer, 1, 20) == 0.0)
+    # A free transform of the active element: only its outline moves until Apply.
+    assert(workspace.transforms.begin_transform())
+    let session = workspace.transforms.transform else trap("a transform is up")
+    assert(session.element == 0 and not session.distorts() and not workspace.transforms.begin_transform_mode(mode_skew))
+    session.box.set_scale(200.0)
+    workspace.transforms.preview_transform()
+    let drawn = Frame(window.Size(200.0, 120.0, 200.0, 120.0, 1.0))
+    view.layout().set_size(200.0, 120.0)
+    view.draw(drawn.target())
+    drawn.close()
+    workspace.transforms.finish_transform(true)
+    assert(canvas.undo_name() == "Free Transform" and math.abs(canvas.element_value(layer, 0, 16) - 2.0) < 1e-9 and canvas.element_value(layer, 1, 16) == 1.0)
+    # The footer's New Path: an empty path, active, which the Pen's next path fills.
+    assert(next_path_name(workspace) == "Path 1")
+    vector.show()
+    workspace.edits.as_one("New Path", func () -> unit!:
+        canvas.add_empty_path(workspace.layers.selected_id(), next_path_name(workspace)))
+    assert(canvas.element_count(layer) == 3 and active_element(workspace) == 2 and canvas.element_value(layer, 2, 22) == 0.0)
+    panels.choose_tool("pen")
+    press(view, 150.0, 20.0)
+    release(view, 150.0, 20.0)
+    press(view, 190.0, 20.0)
+    release(view, 190.0, 20.0)
+    press(view, 170.0, 60.0)
+    release(view, 170.0, 60.0)
+    press(view, 150.0, 20.0)
+    release(view, 150.0, 20.0)
+    assert(workspace.layers.selected == layer and canvas.element_count(layer) == 3 and canvas.element_value(layer, 2, 22) == 3.0 and canvas.element_name(layer, 2) == "Path 1")
+    # A script's calls by the element's place.
+    commands.apply(parse_line("@l2d rename_vector\t2\tTriangle") else trap("line"))
+    commands.apply(parse_line("@l2d duplicate_vector\t0") else trap("line"))
+    assert(canvas.element_count(layer) == 4 and canvas.element_name(layer, 1) == "Rectangle copy" and canvas.element_name(layer, 3) == "Triangle")
+    commands.apply(parse_line("@l2d delete_vector\t1") else trap("line"))
+    commands.apply(parse_line("@l2d show_vector\t0\tfalse") else trap("line"))
+    assert(canvas.element_count(layer) == 3 and not canvas.element_visible(layer, 0))
+    # Saved and opened again, the elements come back.
+    let path = paths.join(arguments[arguments.length - 1], "vectors.l2d")
+    workspace.documents.save(path)
+    let reopened = Canvas.open(path)
+    assert(reopened.element_count(layer) == 3 and reopened.element_name(layer, 2) == "Triangle" and not reopened.element_visible(layer, 0))
+    reopened.close()
+    # Edit › Transform › Skew and Perspective are named so in History.
+    workspace.edits.add_layer()
+    blue_box(workspace)
+    for mode in [mode_skew, mode_perspective]:
+        let skewed = begin_free_transform(canvas, [workspace.layers.selected_id()], 1) else trap("a box")
+        skewed.box.mode = mode
+        let b = skewed.box
+        skewed.box.corners = [b.left + 10.0, b.top, b.left + b.width + 10.0, b.top, b.left + b.width, b.top + b.height, b.left, b.top + b.height]
+        skewed.box.distorted = true
+        skewed.preview()
+        skewed.finish(true)
+        assert(canvas.undo_name() == ("Skew" if mode == mode_skew else "Perspective"))
+        workspace.undo()
+    panels.close()
+
+## A vector layer and its Node Editor: New Vector Layer draws its default graph
+## (a star cloned round a circle); the shape tool adds to it; in the editor a
+## node is added, wired in by dragging from port to port, a wire picked up and
+## dropped, a value dragged in the settings, nodes box-selected and deleted —
+## each a step, the layer's shapes and pixels following.
+pub func node_editor(arguments: list[str]) -> unit!:
+    let workspace = Workspace(400, 300)
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    let canvas = workspace.canvas
+    canvas.bind_headless()
+    workspace.viewport.fitted = true
+    workspace.viewport.zoom = 1.0
+    workspace.viewport.offset_x = 0.0
+    workspace.viewport.offset_y = 0.0
+    actions.add_vector_layer.trigger()
+    let layer = workspace.layers.selected
+    assert(canvas.layer_shaped(layer) and canvas.layer_name(layer) == "Vector 1" and canvas.undo_name() == "New Vector Layer")
+    assert(canvas.graph_node_count(layer) == 4 and canvas.generated_count(layer) == 12)
+    # The ring's top star is drawn above the middle.
+    assert(alpha_at(canvas, 200, int(150.0 - 300.0 * 0.32)) > 0.9 and alpha_at(canvas, 200, 150) < 0.1)
+    # The shape tool adds to the vector layer rather than making one.
+    let count = workspace.canvas.layer_count()
+    draw_shape(workspace, "rectangle", 10.0, 10.0, 40.0, 30.0)
+    assert(workspace.canvas.layer_count() == count and canvas.element_count(layer) == 1)
+    workspace.undo()
+    # Window › Node Editor shows the graph under the canvas.
+    window_command(actions, "nodes").trigger()
+    let editor = panels.catalog.nodes else trap("the Node Editor is made")
+    assert(panels.catalog.is_open("nodes"))
+    let view = editor.view
+    view.layout().set_size(600.0, 320.0)
+    let frame = Frame(window.Size(600.0, 320.0, 600.0, 320.0, 1.0))
+    view.draw(frame.target())
+    frame.close()
+    let state = view.layout_state
+    assert(state.graph.nodes.length == 4 and state.graph.links.length == 3)
+    # Fixed at 100% from the origin, so the test can point at things.
+    state.zoom = 1.0
+    state.pan_x = 0.0
+    state.pan_y = 0.0
+    let circle = state.graph.nodes[1]
+    let clone = state.graph.nodes[2]
+    assert(state.info(circle).title == "Circle" and state.info(clone).title == "Clone")
+    # A Grid added from the menu where the pointer pressed.
+    node_press(view, 30.0, 700.0, 1)
+    node_release(view, 30.0, 700.0, 1)
+    editor.add_commands[5].trigger()
+    assert(canvas.graph_node_count(layer) == 5 and canvas.undo_name() == "Add Node")
+    view.refresh()
+    let grid = state.graph.nodes[4]
+    assert(state.info(grid).title == "Grid" and grid.x == 30.0 and grid.y == 700.0 and state.focused_node() == grid.id)
+    # Dragged from the Grid's output to the Clone's Points input: it replaces the circle.
+    let out = state.output_at(grid)
+    let points_input = state.input_at(clone, 1)
+    node_press(view, out.x, out.y)
+    node_drag(view, 400.0, 500.0)
+    node_release(view, points_input.x + 2.0, points_input.y)
+    assert(canvas.undo_name() == "Connect" and canvas.generated_count(layer) == 24)
+    # The ring's stars gave way to the grid's, about the origin.
+    assert(alpha_at(canvas, 200, int(150.0 - 300.0 * 0.32)) < 0.1 and alpha_at(canvas, 80, 80) > 0.9)
+    # A Shapes output does not go into a Points input: refused, nothing changes.
+    let star = state.graph.nodes[0]
+    let star_out = state.output_at(star)
+    node_press(view, star_out.x, star_out.y)
+    node_release(view, points_input.x, points_input.y)
+    assert(canvas.undo_name() == "Connect" and canvas.generated_count(layer) == 24)
+    # The grid's Columns set in the settings: a drag right, live, one step.
+    state.selected = [grid.id]
+    let inspector = editor.inspector
+    inspector.layout().set_size(290.0, 320.0)
+    let columns_row = inspector.row_top(0) + 8.0
+    inspector.event(Event(kind = EventKind.pointer_down, x = 180.0, y = columns_row, button = 0, inside = true))
+    inspector.event(Event(kind = EventKind.pointer_moved, x = 192.0, y = columns_row, inside = true))
+    inspector.event(Event(kind = EventKind.pointer_up, x = 192.0, y = columns_row, button = 0, inside = true))
+    assert(canvas.graph_node_value(layer, 4, 4) == 8.0 and canvas.generated_count(layer) == 32 and canvas.undo_name() == "Node Setting")
+    workspace.undo()
+    assert(canvas.generated_count(layer) == 24)
+    workspace.redo()
+    view.refresh()
+    # The wire picked up off the Clone's Points input and dropped on the grid: gone.
+    node_press(view, points_input.x, points_input.y)
+    node_drag(view, 300.0, 600.0)
+    node_release(view, 300.0, 600.0)
+    assert(canvas.undo_name() == "Disconnect" and canvas.generated_count(layer) == 0 and alpha_at(canvas, 80, 80) < 0.1)
+    workspace.undo()
+    view.refresh()
+    assert(canvas.generated_count(layer) == 32)
+    # A node dragged is one step; the pixels are untouched.
+    let before_x = grid.x
+    node_press(view, grid.x + 60.0, grid.y + 10.0)
+    node_drag(view, grid.x + 100.0, grid.y + 30.0)
+    node_release(view, grid.x + 100.0, grid.y + 30.0)
+    view.refresh()
+    assert(canvas.undo_name() == "Move Node" and state.graph.nodes[4].x == before_x + 40.0)
+    # Box-selected and deleted: the grid goes, and its wire.
+    node_press(view, 10.0, 690.0)
+    node_drag(view, 260.0, 900.0)
+    node_release(view, 260.0, 900.0)
+    assert(state.selected.length == 1 and state.selected[0] == grid.id)
+    view.event(Event(kind = EventKind.key_down, key = Key.delete))
+    assert(canvas.graph_node_count(layer) == 4 and canvas.graph_link_count(layer) == 2 and canvas.generated_count(layer) == 0)
+    workspace.undo()
+    assert(canvas.graph_node_count(layer) == 5 and canvas.generated_count(layer) == 32)
+    # Drawn with hundreds of nodes and wires, the editor does not fail.
+    view.refresh()
+    var added = 0
+    while added < 200:
+        discard(canvas.add_graph_node(workspace.layers.selected_id(), 7, float(added % 20) * 200.0, 1200.0 + float(added // 20) * 120.0))
+        added += 1
+    workspace.touch()
+    let busy = Frame(window.Size(600.0, 320.0, 600.0, 320.0, 1.0))
+    state.zoom = 0.3
+    view.draw(busy.target())
+    busy.close()
+    assert(state.graph.nodes.length == 205)
+    # Saved and opened, the graph comes back with the layer.
+    let path = paths.join(arguments[arguments.length - 1], "nodes.l2d")
+    workspace.documents.save(path)
+    let reopened = Canvas.open(path)
+    assert(reopened.graph_node_count(layer) == 205 and reopened.graph_link_count(layer) == 3 and reopened.generated_count(layer) == 32)
+    reopened.close()
+    # A script's calls: a new vector layer, its circle's count, a Random wired
+    # to the Clone's Scale, the star colored.
+    let commands = ScriptCommands(workspace, actions)
+    commands.apply(parse_line("@l2d new_vector_layer") else trap("line"))
+    let scripted = workspace.layers.selected
+    commands.apply(parse_line("@l2d set_node\tcircle\tCount\t20") else trap("line"))
+    commands.apply(parse_line("@l2d add_node\tRandom\tsizes\t0\t400") else trap("line"))
+    commands.apply(parse_line("@l2d link_nodes\tsizes\tclone\tScale") else trap("line"))
+    commands.apply(parse_line("@l2d set_node_color\tstar\tFill Color\t0\t0\t1") else trap("line"))
+    assert(scripted != layer and canvas.layer_name(scripted) == "Vector 2" and canvas.generated_count(scripted) == 20)
+    assert(canvas.graph_link_count(scripted) == 4 and canvas.graph_node_value(scripted, 0, 12) > 0.99 and canvas.graph_node_value(scripted, 0, 10) < 0.01)
+    panels.close()
+
+## The flattened document's alpha at a pixel: over the empty background, only
+## what the vector layer draws shows.
+func alpha_at(canvas: Canvas, x: int, y: int) -> float!:
+    canvas.pick(x, y)
+    return canvas.picked_alpha()
+
+func node_press(view: NodeView, x: float, y: float, button: int = 0) -> unit!:
+    view.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = button, inside = true))
+
+func node_drag(view: NodeView, x: float, y: float) -> unit!:
+    view.event(Event(kind = EventKind.pointer_moved, x = x, y = y, inside = true))
+
+func node_release(view: NodeView, x: float, y: float, button: int = 0) -> unit!:
+    view.event(Event(kind = EventKind.pointer_up, x = x, y = y, button = button, inside = true))

@@ -1,0 +1,48 @@
+## What the tests share: pointer events on the canvas view, near-equality,
+## setting the foreground color as the palette does, running a command by
+## id, and the boxes the transform tests draw.
+from workspace import Workspace
+from actions import Actions
+from view import CanvasView
+from ui import Event
+from input import EventKind
+from ui import Command
+import math
+
+pub func press(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
+    view.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = 0, inside = true, shift = shift, alt = alt))
+
+pub func drag_to(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
+    view.event(Event(kind = EventKind.pointer_moved, x = x, y = y, inside = true, shift = shift, alt = alt))
+
+pub func release(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
+    view.event(Event(kind = EventKind.pointer_up, x = x, y = y, button = 0, inside = true, shift = shift, alt = alt))
+
+pub func near(a: float, b: float) -> bool:
+    return math.abs(a - b) < 0.0001
+
+## Window › a panel, by id.
+pub func window_command(actions: Actions, id: str) -> Command!:
+    for command in actions.windows:
+        if command.id() == "window_" + id:
+            return command
+    trap("no Window command for " + id)
+
+## Set the foreground color, as the palette does.
+pub func foreground(workspace: Workspace, red: float, green: float, blue: float):
+    workspace.colors.red = red
+    workspace.colors.green = green
+    workspace.colors.blue = blue
+
+## A box of blue on a layer of `workspace`, 40..160 by 40..120.
+pub func blue_box(workspace: Workspace) -> unit!:
+    workspace.canvas.select_rectangle(40, 40, 120, 80)
+    foreground(workspace, 0.0, 0.2, 1.0)
+    workspace.painting.fill_selection(false)
+    workspace.selection.deselect()
+
+## The selected layer's painted box: left, top, right, bottom.
+pub func painted_box(workspace: Workspace) -> list[int]!:
+    assert(workspace.canvas.measure_content(workspace.layers.selected_id()))
+    let canvas = workspace.canvas
+    return [canvas.content_left(), canvas.content_top(), canvas.content_left() + canvas.content_width(), canvas.content_top() + canvas.content_height()]
