@@ -12,6 +12,7 @@ from kit import Kit, SliderField
 from dynamics_rows import DynamicsRow
 from mask_editor import MaskEditor
 from brush_mask import BrushMask
+from brush import Brush
 
 pub class BrushSettings:
     pub let panel: Panel
@@ -27,6 +28,11 @@ pub class BrushSettings:
     pub let tip_editor: MaskEditor
     pub let texture_editor: MaskEditor
     let sections: Accordion
+    let scroller: ScrollView
+    ## The round tip a brush without a sampled one paints with, as the tip
+    ## pad shows it, and the hardness, angle and roundness it was drawn at.
+    let round_tip: BrushMask
+    var drawn_round: list[float]
     ## Where pictures are chosen for Load…, and failures told.
     pub var app: Application? = none
     pub var on_failed: func(str) -> unit!? = none
@@ -36,6 +42,8 @@ pub class BrushSettings:
         self.kit = kit
         self.rows = []
         self.dynamics = []
+        self.round_tip = BrushMask.create(256, 256)
+        self.drawn_round = []
         self.texture_menu = Menu("None ▾", self.texture_commands(), font = kit.font)
         self.mode_menu = Menu("Multiply ▾", self.mode_commands(), font = kit.font)
         self.invert_box = kit.checkbox("Invert", func () -> unit!:
@@ -100,13 +108,28 @@ pub class BrushSettings:
             sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
         self.sections = Accordion(["Brush Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = kit.font, open = 0)
         # Rows keep their height: a short panel scrolls rather than squashing them.
-        let scroller = ScrollView(VStack([self.sections, Spacer()], spacing = 0.0, padding = 6.0))
-        scroller.layout().set_flex()
-        self.panel = Panel("Brush Settings", scroller, minimum = Size(340.0, 240.0), id = "brush_settings")
+        self.scroller = ScrollView(VStack([self.sections, Spacer()], spacing = 0.0, padding = 6.0))
+        self.scroller.layout().set_flex()
+        kit.keep(self.sections.on_change(self.bring_into_view))
+        self.panel = Panel("Brush Settings", self.scroller, minimum = Size(340.0, 240.0), id = "brush_settings")
 
-    ## Open section `index` (0 Brush Tip Shape .. 5 Transfer).
-    pub func open_section(self, index: int) -> unit!:
-        self.sections.open_section(index)
+    ## Open section `index` (0 Brush Tip Shape .. 5 Transfer), eased unless
+    ## `animated` is false.
+    pub func open_section(self, index: int, animated: bool = true) -> unit!:
+        self.sections.open_section(index, animated)
+
+    ## A section opened: scroll so its header is at the top, where it ends up
+    ## once the others have folded (each header and the accordion's spacing).
+    func bring_into_view(self, index: int) -> unit!:
+        if index < 0:
+            return
+        let header = self.sections.layout().child(0).layout().bounds().height
+        self.scroller.scroll_to(float(index) * (header + 4.0))
+        self.scroller.layout().invalidate()
+
+    ## How far the panel is scrolled, in points.
+    pub func scrolled(self) -> float:
+        return self.scroller.offset()
 
     ## One setting: a captioned slider and field, `apply` taking each edit.
     func row(self, label: str, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> Widget!:
@@ -205,7 +228,7 @@ pub class BrushSettings:
         self.texture_menu.set_text(texture_names()[b.texture] + " ▾")
         self.mode_menu.set_text(mode_names()[b.texture_mode] + " ▾")
         self.invert_box.set_checked(b.texture_invert)
-        self.tip_editor.show(b.tip)
+        self.tip_editor.show(b.tip, self.round_for(b))
         self.texture_editor.show(b.texture_image)
 
     ## Show the panel: floating the first time, else brought forward wherever
@@ -216,6 +239,15 @@ pub class BrushSettings:
             dock.select(self.panel)
         else:
             dock.float(self.panel)
+
+    ## The round tip at `b`'s hardness, angle and roundness, drawn again only
+    ## when they change.
+    func round_for(self, b: Brush) -> BrushMask!:
+        let wanted = [b.hardness, b.angle, b.roundness]
+        if self.drawn_round != wanted:
+            self.round_tip.draw_round(b.hardness, b.angle, b.roundness)
+            self.drawn_round = wanted
+        return self.round_tip
 
 ## The selected pixels of the whole picture (all of it without a selection)
 ## as a brush image: Define Brush Preset's tip.

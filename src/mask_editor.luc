@@ -19,8 +19,11 @@ pub let pad_side: float = 256.0
 pub class MaskPad: Widget:
     let box: Layout
     let image: Image
-    ## The mask shown, or none (an empty pad); the pad paints on it.
+    ## The mask shown, or none (an empty pad), and whether it is the brush's
+    ## own: a stand-in (the round tip a brush without one paints with) is
+    ## copied to the brush by the first press, then painted on.
     pub var mask: BrushMask? = none
+    pub var owned: bool = false
     ## The painting brush's radius in pad points, and whether it erases.
     pub var radius: float = 8.0
     pub var erasing: bool = false
@@ -30,13 +33,16 @@ pub class MaskPad: Widget:
     var last_y: float = 0.0
     ## Whether the image must be written again before it is drawn.
     var stale: bool = true
-    ## The first press on an empty pad: the holder makes a mask for it.
-    pub var on_needed: func() -> BrushMask!? = none
+    ## The first press on a pad showing none of the brush's own: the holder
+    ## makes the brush a mask from what is shown (none: a blank one).
+    pub var on_needed: func(BrushMask?) -> BrushMask!? = none
     ## Something was painted.
     pub var on_edited: func() -> unit!? = none
 
     pub func init(self) -> unit!:
         self.box = Layout()
+        # A box takes the pointer only when it says so.
+        self.box.set_interactive(true)
         self.box.set_cursor(Cursor.crosshair)
         self.image = Image(int(pad_side), int(pad_side))
 
@@ -46,9 +52,10 @@ pub class MaskPad: Widget:
     pub func measure(self, available: Constraints) -> Size!:
         return Size(pad_side, pad_side)
 
-    ## Show `mask` (none for an empty pad).
-    pub func show(self, mask: BrushMask?) -> unit!:
+    ## Show `mask` (none for an empty pad), the brush's own or a stand-in.
+    pub func show(self, mask: BrushMask?, owned: bool = true) -> unit!:
         self.mask = mask
+        self.owned = owned and mask != none
         self.refresh()
 
     ## Draw the mask again: it changed elsewhere.
@@ -69,9 +76,10 @@ pub class MaskPad: Widget:
 
     pub func event(self, event: Event) -> unit!:
         if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
-            if self.mask == none:
+            if not self.owned:
                 if let needed = self.on_needed:
-                    self.mask = needed()
+                    self.mask = needed(self.mask)
+                    self.owned = true
             self.dragging = true
             self.last_x = self.mask_x(event.x)
             self.last_y = self.mask_y(event.y)
@@ -120,6 +128,8 @@ pub class MaskEditor:
     let erase_button: Button
     let size: SliderField
     let take: func(BrushMask?) -> unit!
+    ## What the pad shows when the brush has no image.
+    var stand_in: BrushMask? = none
     ## Where a picture file is chosen: its path, or "" when none was.
     pub var choose_file: func() -> str!? = none
     ## Something failed, and why.
@@ -145,32 +155,43 @@ pub class MaskEditor:
         self.content = VStack([HStack([self.pad, Spacer()], spacing = 0.0), tools, edits, HStack(sources, spacing = 6.0)], spacing = 6.0)
         self.set_erasing(false)
 
-    ## Show `mask`, the brush's image (none: nothing yet).
-    pub func show(self, mask: BrushMask?) -> unit!:
-        self.pad.show(mask)
+    ## Show `mask`, the brush's image; without one, `stand_in` (the round tip
+    ## the brush paints with), which painting then starts from.
+    pub func show(self, mask: BrushMask?, stand_in: BrushMask? = none) -> unit!:
+        self.stand_in = stand_in
+        if mask != none:
+            self.pad.show(mask)
+        else:
+            self.pad.show(stand_in, false)
 
     ## Say edits went to the brush: the pad's own mask is the brush's.
     pub func set_edited(self, edited: func() -> unit!):
         self.pad.on_edited = edited
+
+    ## Paint (black) or Erase (white) with the pad's brush.
+    pub func erase(self) -> unit!:
+        self.set_erasing(true)
 
     func set_erasing(self, erasing: bool) -> unit!:
         self.pad.erasing = erasing
         self.paint_button.set_style(ButtonStyle.sunken if erasing else ButtonStyle.selected)
         self.erase_button.set_style(ButtonStyle.selected if erasing else ButtonStyle.sunken)
 
-    ## A new empty mask for the brush, the pad's size.
-    func blank(self) -> BrushMask!:
-        let mask = BrushMask.create(256, 256)
+    ## The brush's own mask, made from `start` (a copy) or blank, the pad's size.
+    func blank(self, start: BrushMask?) -> BrushMask!:
+        var mask = BrushMask.create(256, 256)
+        if let shown = start:
+            mask = shown.copy()
         self.take(mask)
         return mask
 
     ## Clear: the brush has no image (a tip goes back to round).
     func clear(self) -> unit!:
         self.take(none)
-        self.pad.show(none)
+        self.pad.show(self.stand_in, false)
 
     func invert(self) -> unit!:
-        let mask = self.pad.mask else self.blank()
+        let mask = (self.pad.mask else self.blank(none)) if self.pad.owned else self.blank(self.pad.mask)
         mask.invert()
         self.take(mask)
         self.pad.show(mask)

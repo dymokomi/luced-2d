@@ -1,5 +1,6 @@
 ## Tool options remembered between runs, as Photoshop keeps them: the tool in
-## hand, the brush, the selection, wand, type, gradient, clone, healing,
+## hand, the brush in hand whole (settings, dynamics, tip and texture, in a
+## folder beside the file, with the library brush it came from), the selection, wand, type, gradient, clone, healing,
 ## smudge and transform
 ## options and the crop ratio, in `~/.luced-2d/tools.toml`, written when the
 ## window closes and read when it opens. What the file lacks or gets out of
@@ -9,7 +10,7 @@ from workspace import Workspace
 from tools import tools
 import files
 import paths
-from brush import max_brush
+from brush_library import SavedBrush, load_brush, save_brush, quoted
 
 ## Where the options live, beside the settings.
 pub func tools_path(directory: str = "") -> str!:
@@ -29,16 +30,9 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     for known in tools():
         if known.id == tool:
             workspace.tool = tool
-    let brush = workspace.brush
-    brush.preset = words(table, "brush.preset", brush.preset)
-    brush.diameter = number(table, "brush.diameter", brush.diameter, 1.0, max_brush)
-    brush.hardness = number(table, "brush.hardness", brush.hardness, 0.0, 1.0)
-    brush.opacity = number(table, "brush.opacity", brush.opacity, 0.01, 1.0)
-    brush.flow = number(table, "brush.flow", brush.flow, 0.01, 1.0)
-    brush.spacing = number(table, "brush.spacing", brush.spacing, 0.01, 10.0)
-    brush.angle = number(table, "brush.angle", brush.angle, -180.0, 180.0)
-    brush.roundness = number(table, "brush.roundness", brush.roundness, 0.01, 1.0)
-    brush.smoothing = number(table, "brush.smoothing", brush.smoothing, 0.0, 100.0)
+    # The brush in hand, whole, from its folder beside the options.
+    if boolean(table, "brush.kept", false):
+        restore_brush(workspace, table, paths.directory(path))
     let selecting = workspace.selecting
     selecting.mode = int(number(table, "selection.mode", float(selecting.mode), 0.0, 3.0))
     selecting.feather = int(number(table, "selection.feather", float(selecting.feather), 0.0, 250.0))
@@ -71,9 +65,25 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     workspace.shape_stroke_width = number(table, "shape.stroke_width", workspace.shape_stroke_width, 0.5, 500.0)
     workspace.shape_radius = number(table, "shape.radius", workspace.shape_radius, 0.0, 1000.0)
 
+## The brush kept in `directory`'s brush folder as the brush in hand; one
+## that does not read keeps the brush there is.
+func restore_brush(workspace: Workspace, table: Table, directory: str) -> unit!:
+    let saved = load_brush(directory, brush_folder) catch failure:
+        discard(failure)
+        return
+    saved.brush.preset = words(table, "brush.preset", saved.name)
+    saved.brush.folder = words(table, "brush.folder", "")
+    workspace.brush = saved.brush
+
 ## Keep the workspace's options at `path`.
 pub func remember_tools(workspace: Workspace, path: str) -> unit!:
+    let brush = workspace.brush
+    save_brush(paths.directory(path), SavedBrush(brush.preset, brush_folder, brush))
     files.write_text(path, serialize_tools(workspace))
+
+## The brush in hand's folder beside tools.toml: every setting, its dynamics,
+## tip and texture (brush_library.luc's form), so it comes back as it was.
+let brush_folder: str = "brush-in-hand"
 
 ## The options file's text.
 pub func serialize_tools(workspace: Workspace) -> str:
@@ -82,8 +92,7 @@ pub func serialize_tools(workspace: Workspace) -> str:
     let typing = workspace.typing
     var text = "# luced-2d's tool options, kept when the window closes.\n\n"
     text = text + f"[tool]\ncurrent = \"{workspace.tool}\"\n\n"
-    text = text + f"[brush]\npreset = \"{brush.preset}\"\ndiameter = {brush.diameter}\nhardness = {brush.hardness}\nopacity = {brush.opacity}\nflow = {brush.flow}\n"
-    text = text + f"spacing = {brush.spacing}\nangle = {brush.angle}\nroundness = {brush.roundness}\nsmoothing = {brush.smoothing}\n\n"
+    text = text + f"[brush]\n# The brush in hand is kept whole in {brush_folder}/; the library brush it came from, if any.\nkept = true\npreset = {quoted(brush.preset)}\nfolder = {quoted(brush.folder)}\n\n"
     text = text + f"[selection]\nmode = {selecting.mode}\nfeather = {selecting.feather}\nantialias = {flag(selecting.antialias)}\nsample = {selecting.sample}\n"
     text = text + f"all_layers = {flag(selecting.all_layers)}\ntolerance = {workspace.tolerance}\ncontiguous = {flag(workspace.contiguous)}\n\n"
     text = text + f"[type]\nfamily = \"{typing.family}\"\nstyle = \"{typing.style}\"\nsize = {typing.size}\nalignment = {typing.alignment}\n\n"

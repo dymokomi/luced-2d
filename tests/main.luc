@@ -39,6 +39,9 @@ from vectors import active_element, next_path_name
 from node_view import NodeView
 from free_transform import begin_free_transform
 from brush_tests import brush_tests
+from brush_dynamics import mapped
+from brush_mask import BrushMask
+from brush_library import brush_text
 from align import align_layers
 from dock_layout import parse_layout
 from gpu import Rect
@@ -914,6 +917,25 @@ func tool_options_kept() -> unit!:
     let second = Workspace(40, 30)
     restore_tools(second, path)
     assert(second.tool == "lasso" and second.brush.diameter == 77.0 and second.selecting.feather == 9 and second.typing.family == "Menlo" and second.gradient_radial)
+    # The brush in hand comes back whole: its dynamics, tip and texture, and the library brush it was.
+    first.brush.dynamics[3] = mapped(3)
+    first.brush.dynamics[2] = mapped(8, 0.2, 0.5, 30)
+    let tip = BrushMask.create(20, 10)
+    tip.dab(5.0, 5.0, 4.0, 1.0, 1.0)
+    first.brush.tip = tip
+    let texture = BrushMask.create(8, 8)
+    texture.clear(1.0)
+    first.brush.texture_image = texture
+    first.brush.texture = 4
+    first.brush.preset = "My \"Ink\""
+    first.brush.folder = "my-ink"
+    remember_tools(first, path)
+    let fourth = Workspace(40, 30)
+    restore_tools(fourth, path)
+    assert(fourth.brush.preset == "My \"Ink\"" and fourth.brush.folder == "my-ink" and fourth.brush.texture == 4)
+    assert(brush_text(fourth.brush, "x") == brush_text(first.brush, "x"))
+    let back = fourth.brush.tip else trap("the tip comes back")
+    assert(back.coverage() == tip.coverage() and fourth.brush.texture_image != none)
     # What the file gets wrong keeps its default.
     files.write_text(path, "[brush]\ndiameter = -5\n[tool]\ncurrent = \"nothing\"\n")
     let third = Workspace(40, 30)

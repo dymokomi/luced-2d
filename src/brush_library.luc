@@ -219,7 +219,7 @@ func has_image(mask: BrushMask?) -> bool:
     return false
 
 ## `text` as a TOML basic string.
-func quoted(text: str) -> str:
+pub func quoted(text: str) -> str:
     return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 func flag(value: bool) -> str:

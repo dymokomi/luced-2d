@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders', 'brushtip', 'brushdynamics', 'brushlist'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders', 'brushtip', 'brushdynamics', 'brushtransfer', 'brushlist', 'brushround'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -688,18 +688,39 @@ SCENES = {
             editor.panels.refresh()
             editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
             editor.panels.refresh()""",
+    # A plain round brush: the tip pad shows the round tip it paints with.
+    'brushround': """            editor.workspace.choose_tool("brush")
+            editor.workspace.brush = preset("Soft Round", 60.0, 1.0)
+            editor.workspace.brush.roundness = 0.5
+            editor.workspace.brush.angle = 30.0
+            editor.panels.open_brush()
+            editor.panels.refresh()
+            editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
+            editor.panels.brush.open_section(0, false)
+            editor.panels.refresh()""",
     'brushlist': """            editor.workspace.choose_tool("brush")
             editor.panels.open_brush()
             editor.panels.refresh()
             editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
             editor.panels.catalog.open("brushes")
             editor.panels.refresh()""",
+    # Shape Dynamics open: Size on Pen Pressure, Angle on Azimuth.
     'brushdynamics': """            editor.workspace.choose_tool("brush")
+            editor.workspace.brush.dynamics[0] = mapped(1, 0.25, 0.3)
             editor.workspace.brush.dynamics[3] = mapped(3)
             editor.panels.open_brush()
             editor.panels.refresh()
             editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
-            editor.panels.brush.open_section(1)
+            editor.panels.brush.open_section(1, false)
+            editor.panels.refresh()""",
+    # Transfer open: Flow on Pen Tilt, Opacity fading over 40 dabs.
+    'brushtransfer': """            editor.workspace.choose_tool("brush")
+            editor.workspace.brush.dynamics[1] = mapped(2, 0.1)
+            editor.workspace.brush.dynamics[2] = mapped(8, 0.0, 0.0, 40)
+            editor.panels.open_brush()
+            editor.panels.refresh()
+            editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
+            editor.panels.brush.open_section(5, false)
             editor.panels.refresh()""",
 }
 SCENE = SCENES[arguments.scene]
@@ -707,7 +728,7 @@ if arguments.zoom:
     SCENE += '\n            editor.workspace.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('from brush_mask import BrushMask\nfrom brush import preset\n' if 'BrushMask' in SCENE else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('from brush_mask import BrushMask\n' if 'BrushMask' in SCENE else '') + ('from brush import preset\n' if 'preset(' in SCENE else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')

@@ -4,7 +4,7 @@
 ## brush in hand as a new brush, saves it over the picked saved one,
 ## duplicates, renames (also a double-click on the name) and deletes, and
 ## imports and exports `.l2dbrush` files to share.
-from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ScrollView
+from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ScrollView, ConfirmDialog
 from workspace import Workspace
 from brush import Brush, preset, preset_names, max_brush
 from brush_mask import BrushMask
@@ -21,6 +21,9 @@ pub class BrushesPanel:
     let workspace: Workspace
     let settings: BrushSettings
     let rename_field: TextField
+    ## Asks before a saved brush's folder goes, and the row it asks about.
+    pub let confirm: ConfirmDialog
+    var deleting: int = -1
     ## The library's folder and what it holds.
     pub let library: str
     pub var saved: list[SavedBrush]
@@ -51,13 +54,21 @@ pub class BrushesPanel:
         kit.keep(self.rename_field.on_commit(self.finish_rename))
         let scroller = ScrollView(self.rows)
         scroller.layout().set_flex()
-        let content = VStack([scroller, self.rename_field], spacing = 0.0)
+        self.confirm = ConfirmDialog(font = kit.font)
+        kit.keep(self.confirm.on_choose(self.chosen_delete))
+        let content = VStack([scroller, self.rename_field, self.confirm], spacing = 0.0)
         content.layout().set_flex()
         let shelf = Shelf([kit.shelf_button("plus", self.save_new), kit.shelf_button("save", self.save_over), kit.shelf_button("duplicate", self.duplicate),
                            kit.shelf_button("text-tool", self.rename_selected), kit.shelf_button("import", self.import_file), kit.shelf_button("export", self.export_file),
                            Spacer(), kit.shelf_button("trash", self.delete_selected)])
         self.panel = Panel("Brushes", content, minimum = Size(220.0, 160.0), footer = shelf, id = "brushes")
         self.show()
+        # The row of the library brush in hand, as the last run left it.
+        var index = 0
+        for saved in self.saved:
+            if saved.folder != "" and saved.folder == workspace.brush.folder:
+                self.rows.selected = preset_names().length + index
+            index += 1
 
     ## The window's accent and selection colors.
     func look(self) -> Look:
@@ -96,6 +107,7 @@ pub class BrushesPanel:
             let brush = saved.brush.copy()
             brush.diameter = math.max(1.0, math.min(max_brush, brush.diameter))
             brush.preset = saved.name
+            brush.folder = saved.folder
             self.workspace.brush = brush
             self.workspace.touch()
         self.settings.show()
@@ -105,6 +117,10 @@ pub class BrushesPanel:
     ## "+": the brush in hand saved as a new brush, "Brush N".
     pub func save_new(self) -> unit!:
         self.add(self.workspace.brush.copy(), f"Brush {self.saved.length + 1}")
+        # The brush in hand is that saved brush now.
+        if let saved = self.saved_at(self.rows.selected):
+            self.workspace.brush.preset = saved.name
+            self.workspace.brush.folder = saved.folder
 
     ## Keep `brush` in the library as `name`, and pick its row.
     pub func add(self, brush: Brush, name: str) -> unit!:
@@ -113,6 +129,7 @@ pub class BrushesPanel:
             self.fail(f"Could not save the brush: {failure.message}")
             return
         brush.preset = name
+        brush.folder = saved.folder
         self.saved.append(saved)
         self.show()
         self.rows.selected = preset_names().length + self.saved.length - 1
@@ -176,14 +193,32 @@ pub class BrushesPanel:
         save_brush(self.library, saved)
         self.show()
 
-    ## The bin: the picked saved brush leaves the library; built-ins stay.
+    ## The bin: asks, then the picked saved brush leaves the library; the
+    ## built-ins stay.
     pub func delete_selected(self) -> unit!:
         let row = self.rows.selected
+        let saved = self.saved_at(row) else return
+        self.deleting = row
+        self.confirm.open(f"Delete the brush “{saved.name}” from the library?", "Delete", "")
+
+    func chosen_delete(self, role: int) -> unit!:
+        let row = self.deleting
+        self.deleting = -1
+        if role == 0:
+            self.remove(row)
+
+    ## Saved row `row` out of the library, its folder removed. The brush in
+    ## hand, when it was that one, is an unsaved brush now.
+    pub func remove(self, row: int) -> unit!:
         let saved = self.saved_at(row) else return
         delete_brush(self.library, saved.folder) catch failure:
             self.fail(f"Could not delete the brush: {failure.message}")
             return
         discard(self.saved.remove_at(row - preset_names().length))
+        if self.workspace.brush.folder == saved.folder:
+            self.workspace.brush.folder = ""
+            self.workspace.brush.preset = "(unsaved)"
+            self.workspace.touch()
         self.rows.selected = -1
         self.show()
 

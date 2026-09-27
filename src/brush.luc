@@ -4,7 +4,7 @@
 ## the built-in presets; and pushing it all to the canvas before a stroke.
 from canvas import Canvas
 from brush_mask import BrushMask
-from brush_dynamics import Mapping, default_mappings, no_mappings, copy_mappings, mapped
+from brush_dynamics import Mapping, default_mappings, no_mappings, copy_mappings
 import math
 
 pub class Brush:
@@ -40,8 +40,10 @@ pub class Brush:
     ## A sampled tip (none: the round one) and the texture's own image.
     pub var tip: BrushMask? = none
     pub var texture_image: BrushMask? = none
-    ## The preset these settings started from.
+    ## The preset these settings started from, and the library folder of the
+    ## saved brush they came from ("" for a built-in or an unsaved one).
     pub var preset: str = "Hard Round"
+    pub var folder: str = ""
 
     pub func init(self):
         self.dynamics = default_mappings()
@@ -108,6 +110,7 @@ pub class Brush:
         if let image = self.texture_image:
             copied.texture_image = image.copy()
         copied.preset = self.preset
+        copied.folder = self.folder
         return copied
 
     ## [ and ]: the diameter by `factor`, always by at least a pixel, 1..max_brush.
@@ -140,7 +143,7 @@ pub func preset(name: str, diameter: float, opacity: float) -> Brush!:
         brush.flow = 0.1
         brush.spacing = 0.05
         brush.dynamics = no_mappings()
-        brush.dynamics[1] = mapped(1)
+        brush.dynamics[1].control = 1
     elif name == "Chalk":
         brush.hardness = 0.9
         brush.roundness = 0.8
