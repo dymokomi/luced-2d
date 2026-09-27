@@ -54,12 +54,20 @@ pub class ToolState:
     ## The selection tools' options (selection_options.luc), and the Text tool's.
     pub let selecting: SelectionOptions
     pub let typing: TypeOptions
+    ## Told of every tool chosen, to let go of what the tool before had under
+    ## way (a view's half-drawn lasso or path).
+    var listeners: list[func(str)]
 
     pub func init(self, live: Live):
         self.live = live
         self.brush = Brush()
         self.selecting = SelectionOptions()
         self.typing = TypeOptions()
+        self.listeners = []
+
+    ## Tell `listener` of every tool chosen from now on.
+    pub func on_choose(self, listener: func(str)):
+        self.listeners.append(listener)
 
     ## Make `tool` (a `tools()` id) active. The workspace's `choose_tool` also
     ## settles what goes with the tool (the Crop box, a live gradient).
@@ -69,6 +77,8 @@ pub class ToolState:
         self.tool_used = false
         self.tool = tool
         self.erasing = tool == "eraser"
+        for listener in self.listeners:
+            listener(tool)
         self.live.touch()
 
     ## Start again from brush preset `name`, keeping the size and opacity.

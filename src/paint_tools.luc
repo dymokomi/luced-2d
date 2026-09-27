@@ -1,0 +1,94 @@
+## The painting tools — Brush, Pencil, Eraser and the retouching tools (Clone
+## Stamp, Spot Healing, Smudge, Dodge, Burn), which paint through the same
+## stroke. A press starts a stroke on the selected layer; with Shift a line
+## first runs from where the last stroke ended, and the stroke keeps to one
+## axis.
+from ui import Event, Point
+from tool_handler import ToolHandler, ToolContext, event_time
+from brush_dynamics import PenSample, pen_of
+import math
+
+pub class PaintTool: ToolHandler:
+    ## A stroke is under way.
+    pub var painting: bool = false
+    ## Where the last stroke ended, in document pixels, for Shift-click lines.
+    var end_x: float = 0.0
+    var end_y: float = 0.0
+    var has_end: bool = false
+    ## A Shift-drag stroke keeps to the axis it first moves along: 0 not yet
+    ## chosen, 1 horizontal, 2 vertical; -1 when Shift was not held.
+    var axis: int = -1
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+
+    pub func active(self) -> bool:
+        return self.painting
+
+    ## Alt-click with the Clone Stamp sets where it copies from; Alt with the
+    ## Brush or Pencil is the eyedropper, as Photoshop's; a dialog's
+    ## eyedropper or the picker's sampling takes the press before a stroke.
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        let tool = workspace.tools.tool
+        if tool == "clone" and event.alt:
+            workspace.painting.set_clone_source(x, y)
+            return
+        if context.dialog_sample(x, y):
+            return
+        if (tool == "brush" or tool == "pencil") and event.alt:
+            workspace.eyedroppers.pick(x, y)
+            return
+        if context.refuses_group(tool) or context.picker_sample(event, x, y):
+            return
+        self.begin(context, x, y, event.shift, pen_of(event, event_time()))
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let point = self.on_axis(context, x, y)
+        context.workspace.painting.extend_stroke(point.x, point.y, pen_of(event, event_time()))
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.painting = false
+        let point = self.on_axis(context, x, y)
+        let painting = context.workspace.painting
+        painting.extend_stroke(point.x, point.y, pen_of(event, event_time()))
+        painting.end_stroke()
+        self.end_x = point.x
+        self.end_y = point.y
+        self.has_end = true
+
+    ## Esc, or the view losing the pointer: the stroke taken back, or kept.
+    pub func stop(self, context: ToolContext, keep: bool) -> unit!:
+        if not self.painting:
+            return
+        self.painting = false
+        if keep:
+            context.workspace.painting.end_stroke()
+        else:
+            context.workspace.painting.cancel_stroke()
+
+    ## Start painting at a document point.
+    func begin(self, context: ToolContext, x: float, y: float, shift: bool, pen: PenSample) -> unit!:
+        let workspace = context.workspace
+        if shift and self.has_end:
+            workspace.painting.begin_stroke(self.end_x, self.end_y, pen)
+            workspace.painting.extend_stroke(x, y, pen)
+        else:
+            workspace.painting.begin_stroke(x, y, pen)
+        self.painting = workspace.canvas.painting()
+        self.axis = 0 if shift else -1
+        self.start_x = x
+        self.start_y = y
+
+    ## A stroke point kept to the stroke's axis once it has one: Shift-drag
+    ## chooses horizontal or vertical by the first few pixels of travel.
+    func on_axis(self, context: ToolContext, x: float, y: float) -> Point:
+        if self.axis == 0:
+            let dx = math.abs(x - self.start_x)
+            let dy = math.abs(y - self.start_y)
+            if (dx + dy) * context.workspace.viewport.zoom >= 4.0:
+                self.axis = 1 if dx >= dy else 2
+        if self.axis == 1:
+            return Point(x, self.start_y)
+        if self.axis == 2:
+            return Point(self.start_x, y)
+        return Point(x, y)

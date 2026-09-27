@@ -11,7 +11,7 @@ import time
 from kit import dropped_paths
 from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_inside, drop_above, drop_below
 from layer_ops import duplicate_selected, OpacityKeys, set_opacity_all
-from view import digit_value
+from view_keys import digit_value
 from layer_effects import EffectRows
 
 ## The layer list: one 52-point row per shown layer, top layer first, each with

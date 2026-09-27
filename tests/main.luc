@@ -4,7 +4,8 @@ from workspace import Workspace
 from canvas import Canvas
 from panels import Panels, next_in_cycle
 from actions import Actions
-from view import CanvasView, clamp_texel, texel_span
+from view import CanvasView
+from view_aids import clamp_texel, texel_span
 from navigator_panel import view_box
 from transform_box import TransformBox, grab_move, grab_turn, mode_distort, mode_perspective, mode_skew
 from crop_box import CropBox, crop_new

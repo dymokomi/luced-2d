@@ -1,0 +1,206 @@
+## What the canvas view draws besides the document and the tools' own
+## outlines: the checkerboard under transparent pixels, the grid and the
+## pixel grid, the brush's outline and the Clone Stamp's preview and source,
+## the Eyedropper's ring, and the boxes (free transform, warp, crop, live
+## gradient, transform controls) over the document.
+from ui import Painter, Image, Point, Font
+from gpu import Rect, Region, Filter, Color
+from workspace import Workspace
+import theme
+import math
+
+pub class ViewAids:
+    let workspace: Workspace
+    ## One 256-point block of 8-point checker cells.
+    let checker: Image
+    ## The Clone Stamp preview's picture and its side in pixels.
+    var clone_image: Image? = none
+    var clone_side: int = 0
+    ## For the size shown beside a Crop box being dragged.
+    let font: Font?
+
+    pub func init(self, workspace: Workspace, font: Font?) -> unit!:
+        self.workspace = workspace
+        self.font = font
+        self.checker = Image(256, 256)
+        for y in 0..<256:
+            for x in 0..<256:
+                self.checker.set_pixel(x, y, theme.checker_dark() if (x // 8 + y // 8) % 2 == 1 else theme.checker_light())
+
+    ## The checkerboard under the document's part of the view, clipped to it:
+    ## one 256-point picture of 8-point cells per block, not a rectangle per cell.
+    pub func draw_checker(self, painter: Painter, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let left = self.workspace.viewport.offset_x
+        let top = self.workspace.viewport.offset_y
+        let block = 256.0
+        var y = y0 - math.mod(y0 - top, block)
+        while y < y1:
+            var x = x0 - math.mod(x0 - left, block)
+            while x < x1:
+                let cx = math.max(x, x0)
+                let cy = math.max(y, y0)
+                let cw = math.min(x + block, x1) - cx
+                let ch = math.min(y + block, y1) - cy
+                # The block's texels this piece covers: whole texels, inside the
+                # 256-texel tile, at least one wide. Fractional offsets (a pan, a
+                # zoom) otherwise round a sliver to nothing or past the tile.
+                let sx = clamp_texel(int(math.floor(cx - x)))
+                let sy = clamp_texel(int(math.floor(cy - y)))
+                let sw = texel_span(sx, int(math.ceil(cx + cw - x)))
+                let sh = texel_span(sy, int(math.ceil(cy + ch - y)))
+                if cw > 0.0 and ch > 0.0:
+                    painter.image(self.checker, Rect(cx, cy, cw, ch), Region(sx, sy, sw, sh), 1.0, Filter.nearest)
+                x += block
+            y += block
+
+    ## At 800% and closer, a faint line between the document's pixels.
+    pub func draw_pixel_grid(self, painter: Painter, width: float, height: float) -> unit!:
+        let viewport = self.workspace.viewport
+        let zoom = viewport.zoom
+        if zoom < 8.0:
+            return
+        let canvas = self.workspace.canvas
+        let ink = Color(0.5, 0.5, 0.5, 0.25)
+        let left = math.max(0.0, viewport.offset_x)
+        let top = math.max(0.0, viewport.offset_y)
+        let right = math.min(width, viewport.offset_x + float(canvas.width()) * zoom)
+        let bottom = math.min(height, viewport.offset_y + float(canvas.height()) * zoom)
+        var x = viewport.offset_x + math.ceil((left - viewport.offset_x) / zoom) * zoom
+        while x < right:
+            painter.rectangle(Rect(math.floor(x), top, 1.0, bottom - top), ink)
+            x += zoom
+        var y = viewport.offset_y + math.ceil((top - viewport.offset_y) / zoom) * zoom
+        while y < bottom:
+            painter.rectangle(Rect(left, math.floor(y), right - left, 1.0), ink)
+            y += zoom
+
+    ## The grid over the document: majors every grid_major document pixels, their
+    ## subdivisions fainter; a level whose lines would crowd closer than a few
+    ## points on screen is left out.
+    pub func draw_grid(self, painter: Painter, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let viewport = self.workspace.viewport
+        let major = viewport.grid_major() * viewport.zoom
+        let minor = major / float(viewport.grid_divisions())
+        if minor >= 6.0:
+            self.grid_lines(painter, minor, x0, y0, x1, y1, Color(1.0, 1.0, 1.0), 0.10)
+        if major >= 8.0:
+            self.grid_lines(painter, major, x0, y0, x1, y1, Color(1.0, 1.0, 1.0), 0.32)
+
+    func grid_lines(self, painter: Painter, step: float, x0: float, y0: float, x1: float, y1: float, ink: Color, opacity: float) -> unit!:
+        let left = self.workspace.viewport.offset_x
+        let top = self.workspace.viewport.offset_y
+        var x = left + math.ceil((x0 - left) / step) * step
+        while x <= x1:
+            painter.rectangle(Rect(math.floor(x), y0, 1.0, y1 - y0), ink, opacity)
+            x += step
+        var y = top + math.ceil((y0 - top) / step) * step
+        while y <= y1:
+            painter.rectangle(Rect(x0, math.floor(y), x1 - x0, 1.0), ink, opacity)
+            y += step
+
+    ## The eyedropper's ring round view point (`x`, `y`), as Photoshop's: the
+    ## color under it in the top half, `before` (the foreground as it was) in
+    ## the bottom half.
+    pub func draw_sample_ring(self, painter: Painter, x: float, y: float, before: Color) -> unit!:
+        let colors = self.workspace.colors
+        let now = Color(colors.red, colors.green, colors.blue)
+        let segments = 64
+        var index = 0
+        while index < segments:
+            let angle = float(index) * 6.283185307 / float(segments)
+            let next = float(index + 1) * 6.283185307 / float(segments)
+            # Screen y grows downward: angles past half a turn are the top half.
+            let color = now if index >= segments // 2 else before
+            let a = Point(x + math.cos(angle) * 44.0, y + math.sin(angle) * 44.0)
+            let b = Point(x + math.cos(next) * 44.0, y + math.sin(next) * 44.0)
+            painter.line(a, b, 16.0, color)
+            index += 1
+
+    ## The brush's outline about view point (`x`, `y`), at screen resolution,
+    ## one dark and one light ring.
+    pub func draw_brush_outline(self, painter: Painter, x: float, y: float) -> unit!:
+        let radius = self.workspace.tools.brush.diameter * self.workspace.viewport.zoom * 0.5
+        let segments = 48
+        var index = 0
+        while index < segments:
+            let angle = float(index) * 6.283185307 / float(segments)
+            let next = float(index + 1) * 6.283185307 / float(segments)
+            let a = Point(x + math.cos(angle) * radius, y + math.sin(angle) * radius)
+            let b = Point(x + math.cos(next) * radius, y + math.sin(next) * radius)
+            painter.line(a, b, 3.0, theme.backdrop())
+            painter.line(a, b, 1.0, theme.text())
+            index += 1
+
+    ## What the Clone Stamp would lay down with the pointer at view point
+    ## (`x`, `y`), shown inside its tip as Photoshop's clone overlay: the
+    ## source under the brush, faded.
+    pub func draw_clone_preview(self, painter: Painter, x: float, y: float) -> unit!:
+        let workspace = self.workspace
+        let viewport = workspace.viewport
+        let diameter = workspace.tools.brush.diameter
+        let source = workspace.canvas.clone_preview(workspace.layers.selected_id(), (x - viewport.offset_x) / viewport.zoom, (y - viewport.offset_y) / viewport.zoom, diameter, 0.6) catch failure:
+            discard(failure)
+            return
+        let side = int(math.max(1.0, math.min(1024.0, math.ceil(diameter))))
+        if self.clone_side != side:
+            self.clone_image = Image(side, side)
+            self.clone_side = side
+        let image = self.clone_image else return
+        image.write(source)
+        let shown = float(side) * viewport.zoom
+        painter.image(image, Rect(x - shown * 0.5, y - shown * 0.5, shown, shown))
+
+    ## The Clone Stamp's source: a crosshair where a stroke from view point
+    ## (`x`, `y`) would copy from, white under black as Compositor's.
+    pub func draw_clone_source(self, painter: Painter, x: float, y: float) -> unit!:
+        let viewport = self.workspace.viewport
+        let canvas = self.workspace.canvas
+        let source_x = canvas.clone_sample_x((x - viewport.offset_x) / viewport.zoom) * viewport.zoom + viewport.offset_x
+        let source_y = canvas.clone_sample_y((y - viewport.offset_y) / viewport.zoom) * viewport.zoom + viewport.offset_y
+        for width in [3.0, 1.0]:
+            let ink = theme.text() if width == 3.0 else theme.backdrop()
+            painter.line(Point(source_x - 7.0, source_y), Point(source_x + 7.0, source_y), width, ink)
+            painter.line(Point(source_x, source_y - 7.0), Point(source_x, source_y + 7.0), width, ink)
+
+    ## A live gradient's ends; then a free transform's box, else a warp's
+    ## mesh, else the Crop tool's box, else the Move tool's transform
+    ## controls — not while a move is dragged (`moving`): the box stays where
+    ## the layer was.
+    pub func draw_boxes(self, painter: Painter, width: float, height: float, moving: bool) -> unit!:
+        let workspace = self.workspace
+        let zoom = workspace.viewport.zoom
+        let left = workspace.viewport.offset_x
+        let top = workspace.viewport.offset_y
+        if let edit = workspace.painting.gradient:
+            edit.draw(painter, zoom, left, top, theme.text(), theme.backdrop())
+        if let session = workspace.transforms.transform:
+            session.box.draw(painter, zoom, left, top, theme.text(), theme.backdrop())
+            return
+        if let warp = workspace.transforms.mesh_warp:
+            warp.draw(painter, zoom, left, top, theme.text(), theme.backdrop())
+            return
+        if let crop = workspace.image.crop_box:
+            crop.draw(painter, width, height, zoom, left, top, theme.text(), theme.backdrop())
+            # While it is dragged, its size beside its bottom-right corner, as Photoshop shows it.
+            if crop.grabbed >= 0:
+                if let font = self.font:
+                    let label = f"{int(math.abs(crop.right - crop.left))} × {int(math.abs(crop.bottom - crop.top))} px"
+                    let x = math.max(crop.left, crop.right) * zoom + left + 10.0
+                    let y = math.max(crop.top, crop.bottom) * zoom + top + 10.0
+                    painter.rectangle(Rect(x - 4.0, y - 2.0, font.measure(label) + 8.0, font.line_height() + 4.0), theme.backdrop())
+                    painter.text(label, x, y, theme.text(), font)
+            return
+        if not moving:
+            if let shown = workspace.transforms.controls_box():
+                shown.draw(painter, zoom, left, top, theme.text(), theme.backdrop())
+
+## A texel index kept inside a 256-texel checker tile, leaving room for one texel.
+pub func clamp_texel(value: int) -> int:
+    return value if value >= 0 and value <= 255 else (0 if value < 0 else 255)
+
+## Texels from `start` to `end`, at least one and not past the tile.
+pub func texel_span(start: int, end: int) -> int:
+    let span = end - start
+    if span < 1:
+        return 1
+    return span if span <= 256 - start else 256 - start

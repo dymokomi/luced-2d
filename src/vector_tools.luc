@@ -1,0 +1,48 @@
+## The vector tools on the canvas: the shape tools (dragged out corner to
+## corner) and the Pen (anchors clicked, their handles dragged).
+from ui import Event
+from tool_handler import ToolHandler, ToolContext
+from shape_tool import ShapeDrag
+from pen_tool import PenTool
+
+pub class ShapeTool: ToolHandler:
+    ## The shape while it is dragged out.
+    pub let shape: ShapeDrag
+
+    pub func init(self):
+        self.shape = ShapeDrag()
+
+    pub func active(self) -> bool:
+        return self.shape.active
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.shape.begin(context.workspace.tools.tool, x, y)
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.shape.drag(x, y, event.shift, event.alt)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.shape.drag(x, y, event.shift, event.alt)
+        self.shape.finish(context.workspace)
+        context.changed()
+
+pub class PenHandler: ToolHandler:
+    pub let pen: PenTool
+
+    pub func init(self):
+        self.pen = PenTool()
+
+    ## An anchor or handle is held.
+    pub func active(self) -> bool:
+        return self.pen.holding()
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.pen.press(context.workspace, x, y, 6.0 / context.workspace.viewport.zoom)
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.pen.drag(x, y, event.alt, 6.0 / context.workspace.viewport.zoom)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.pen.drag(x, y, event.alt, 6.0 / context.workspace.viewport.zoom)
+        self.pen.release(context.workspace)
+        context.changed()

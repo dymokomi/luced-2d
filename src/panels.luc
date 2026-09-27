@@ -125,11 +125,11 @@ pub class Panels:
         self.files.refreshed = self.refresh
         self.view = CanvasView(workspace, font)
         self.view.on_open_files = self.files.open_files
-        self.view.on_key_up = self.spring_back
-        self.view.on_changed = self.refresh
-        self.view.on_text = self.place_text
-        self.view.on_edit_text = self.edit_text
-        self.view.on_refused = self.prompts.tell
+        self.view.keys.on_key_up = self.spring_back
+        self.view.context.on_changed = self.refresh
+        self.view.context.on_text = self.place_text
+        self.view.context.on_edit_text = self.edit_text
+        self.view.context.on_refused = self.prompts.tell
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
         self.tabs.on_close = self.files.close_document_at

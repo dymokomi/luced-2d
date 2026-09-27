@@ -1,0 +1,152 @@
+## The selection tools: the Rectangular and Elliptical Marquees and the Lasso
+## (dragged out, their corners pulling to what snaps), the Magic Wand, the
+## Polygonal and Magnetic Lassos (clicked corner by corner), and, for all but
+## the last two, a drag inside the selection moving its outline.
+from ui import Event
+from tool_handler import ToolHandler, ToolContext, now_ms
+from selection_drag import SelectionDrag
+from polygon_lasso import PolygonLasso
+from magnetic_lasso import MagneticLasso
+import math
+
+## A selection tool pressed inside the selection drags its outline by whole
+## pixels; a click without a drag selects again with the wand, or deselects.
+pub class OutlineMove: ToolHandler:
+    var moving: bool = false
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+    ## The whole pixels applied so far.
+    var applied_x: int = 0
+    var applied_y: int = 0
+
+    pub func active(self) -> bool:
+        return self.moving
+
+    ## Takes the press when it lands inside the selection, without Shift or
+    ## Alt (which add to it or take from it instead).
+    pub func takes(self, context: ToolContext, event: Event, x: float, y: float) -> bool:
+        return not event.shift and not event.alt and context.workspace.selection.in_selection(x, y)
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.moving = true
+        self.start_x = x
+        self.start_y = y
+        self.applied_x = 0
+        self.applied_y = 0
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let dx = int(math.floor(x - self.start_x + 0.5))
+        let dy = int(math.floor(y - self.start_y + 0.5))
+        if dx != self.applied_x or dy != self.applied_y:
+            context.workspace.selection.move_selection(dx - self.applied_x, dy - self.applied_y)
+            self.applied_x = dx
+            self.applied_y = dy
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.moving = false
+        if self.applied_x == 0 and self.applied_y == 0:
+            let workspace = context.workspace
+            if workspace.tools.tool == "wand":
+                workspace.selection.select_wand(x, y, 0)
+            else:
+                workspace.selection.deselect()
+
+## The Rectangular and Elliptical Marquees and the Lasso.
+pub class MarqueeTool: ToolHandler:
+    pub let shape: SelectionDrag
+    let outline: OutlineMove
+
+    pub func init(self, outline: OutlineMove):
+        self.shape = SelectionDrag()
+        self.outline = outline
+
+    pub func active(self) -> bool:
+        return self.shape.active
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if self.outline.takes(context, event, x, y):
+            self.outline.press(context, event, x, y)
+            return
+        if context.dialog_sample(x, y) or context.picker_sample(event, x, y):
+            return
+        let workspace = context.workspace
+        let tool = workspace.tools.tool
+        # A marquee's corners pull to the canvas, the guides and the layers.
+        let marquee = tool != "lasso"
+        context.snapper.gather(workspace, [], marquee)
+        self.shape.begin(workspace, context.snapper.snap_x(x) if marquee else x, context.snapper.snap_y(y) if marquee else y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let marquee = not self.shape.lasso
+        self.shape.drag(context.workspace, context.snapper.snap_x(x) if marquee else x, context.snapper.snap_y(y) if marquee else y, event.shift, event.alt)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.shape.finish(context.workspace, x, y, event.shift, event.alt)
+
+## The Magic Wand: a click selects the connected (or all) colors like the one there.
+pub class WandTool: ToolHandler:
+    let outline: OutlineMove
+
+    pub func init(self, outline: OutlineMove):
+        self.outline = outline
+
+    pub func active(self) -> bool:
+        return false
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if self.outline.takes(context, event, x, y):
+            self.outline.press(context, event, x, y)
+            return
+        if context.dialog_sample(x, y) or context.picker_sample(event, x, y):
+            return
+        let workspace = context.workspace
+        workspace.selection.select_wand(x, y, workspace.tools.selecting.mode_for(event.shift, event.alt))
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+## The Polygonal Lasso: each click a corner; its keys are the view's.
+pub class PolygonTool: ToolHandler:
+    let lasso: PolygonLasso
+
+    pub func init(self, lasso: PolygonLasso):
+        self.lasso = lasso
+
+    pub func active(self) -> bool:
+        return false
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if context.dialog_sample(x, y) or context.picker_sample(event, x, y):
+            return
+        self.lasso.click(context.workspace, x, y, event.shift, event.alt, 6.0 / context.workspace.viewport.zoom, now_ms())
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+## The Magnetic Lasso: each click an anchor, the edge between followed.
+pub class MagneticTool: ToolHandler:
+    let lasso: MagneticLasso
+
+    pub func init(self, lasso: MagneticLasso):
+        self.lasso = lasso
+
+    pub func active(self) -> bool:
+        return false
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if context.dialog_sample(x, y) or context.picker_sample(event, x, y):
+            return
+        let zoom = context.workspace.viewport.zoom
+        self.lasso.click(context.workspace, x, y, event.shift, event.alt, zoom, 6.0 / zoom, now_ms())
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return

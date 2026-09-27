@@ -1,0 +1,167 @@
+## The canvas view's gestures that belong to no one tool: sizing the brush
+## with a right-drag, a dialog's on-image drag, dragging a guide, a warp's
+## points, and a free transform's or the Crop tool's box. The view starts
+## them before the tool in hand sees the press (view.luc's `press`).
+from ui import Event
+from tool_handler import ToolHandler, ToolContext
+from guides import GuideDrag
+from transform_box import grab_move, grab_turn
+from brush import max_brush
+import math
+
+## A right-drag with a brushed tool sizes the brush (Shift: its hardness), as
+## Photoshop's Alt-right-drag does; the outline stays where the drag began.
+pub class BrushSizing: ToolHandler:
+    pub var sizing: bool = false
+    pub var x: float = 0.0
+    pub var y: float = 0.0
+    var diameter: float = 0.0
+    var hardness: float = 0.0
+
+    pub func active(self) -> bool:
+        return self.sizing
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let brush = context.workspace.tools.brush
+        self.sizing = true
+        self.x = event.x
+        self.y = event.y
+        self.diameter = brush.diameter
+        self.hardness = brush.hardness
+
+    ## Right is bigger, a point a pixel at 100%; with Shift, up is harder.
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        let brush = workspace.tools.brush
+        brush.diameter = math.clamp(self.diameter + (event.x - self.x) / workspace.viewport.zoom, 1.0, max_brush)
+        if event.shift:
+            brush.hardness = math.clamp(self.hardness - (event.y - self.y) / 200.0, 0.0, 1.0)
+        workspace.touch()
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if event.button != 1:
+            return
+        self.sizing = false
+        context.changed()
+
+## Hue/Saturation's on-image adjustment takes the drag while it is armed.
+pub class OnImageDrag: ToolHandler:
+    var dragging: bool = false
+    var start_x: float = 0.0
+
+    pub func active(self) -> bool:
+        return self.dragging
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.dragging = true
+        self.start_x = event.x
+        context.workspace.eyedroppers.adjust_drag(x, y, 0.0, event.meta or event.control, true)
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        context.workspace.eyedroppers.adjust_drag(0.0, 0.0, event.x - self.start_x, event.meta or event.control, false)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.dragging = false
+        context.changed()
+
+## A guide under the pointer taken up (the Move tool, or Cmd held); over a
+## ruler (past the view's top or left edge) it goes when let go.
+pub class GuideGesture: ToolHandler:
+    ## The guide being dragged; the rulers start new ones on it too.
+    pub let guides: GuideDrag
+
+    pub func init(self, guides: GuideDrag):
+        self.guides = guides
+
+    pub func active(self) -> bool:
+        return self.guides.active
+
+    ## Takes the press when a guide is within 4 points of it.
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        let guide = self.guides.hit(workspace, x, y, 4.0 / workspace.viewport.zoom)
+        if guide >= 0:
+            self.guides.begin(workspace, guide)
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.guides.drag(x, y, event.x < 0.0 or event.y < 0.0)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.guides.finish(context.workspace)
+
+## A warp takes every press while it is up: on its points and pins, or
+## (Puppet Warp) a new pin.
+pub class WarpGesture: ToolHandler:
+    ## A Warp point or Puppet pin is being dragged.
+    pub var warping: bool = false
+
+    pub func active(self) -> bool:
+        return self.warping
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        let warp = workspace.transforms.mesh_warp else return
+        self.warping = warp.press(x, y, 8.0 / workspace.viewport.zoom, event.alt)
+        workspace.touch()
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if let warp = context.workspace.transforms.mesh_warp:
+            warp.drag(x, y)
+            context.workspace.touch()
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.warping = false
+        if let warp = context.workspace.transforms.mesh_warp:
+            warp.release()
+
+## A free transform's or the Crop tool's box takes presses while it is up;
+## handles answer within 8 points whatever the zoom. Handles pull to what
+## snaps; a box moved whole keeps its offset to the pointer.
+pub class BoxGesture: ToolHandler:
+    ## A box being dragged.
+    pub var boxing: bool = false
+
+    pub func active(self) -> bool:
+        return self.boxing
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        let reach = 8.0 / workspace.viewport.zoom
+        context.snapper.gather(workspace, workspace.layers.selected_ids(), false)
+        if let session = workspace.transforms.transform:
+            let grab = session.box.hit(x, y, reach)
+            # Alt-dragging inside moves a copy, the original left in place.
+            if grab == grab_move and event.alt:
+                workspace.transforms.duplicate_in_transform()
+            if let carried = workspace.transforms.transform:
+                carried.box.begin(grab, x, y)
+            self.boxing = true
+            return
+        if let crop = workspace.image.crop_box:
+            crop.begin(crop.hit(x, y, reach), x, y)
+            self.boxing = true
+
+    ## Cmd (Ctrl) on a corner distorts, Cmd+Shift on a side skews, Cmd+Alt+Shift on a corner is perspective.
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let snapped_x = context.snapper.snap_x(x)
+        let snapped_y = context.snapper.snap_y(y)
+        let workspace = context.workspace
+        if let session = workspace.transforms.transform:
+            let moving = session.box.grabbed == grab_move or session.box.grabbed == grab_turn
+            session.box.drag(x if moving else snapped_x, y if moving else snapped_y, event.shift, event.alt, (event.meta or event.control) and session.distorts())
+            workspace.transforms.preview_transform()
+            return
+        if let crop = workspace.image.crop_box:
+            crop.drag(snapped_x, snapped_y, event.shift, event.alt)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.boxing = false
+        let workspace = context.workspace
+        if let session = workspace.transforms.transform:
+            session.box.end()
+        else:
+            if let crop = workspace.image.crop_box:
+                crop.end()
+        # The header's size readout follows the box once it is let go.
+        if workspace.image.crop_box != none:
+            context.changed()

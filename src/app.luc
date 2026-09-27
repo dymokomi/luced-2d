@@ -55,6 +55,7 @@ pub class Luce2D:
         let connections: list[Connection] = []
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
             discard(elapsed)
+            panels.view.settle()
             panels.view.march()
             panels.show_opening()
             panels.scripts.poll()

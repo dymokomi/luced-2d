@@ -1,0 +1,174 @@
+## The canvas view's keys: space held pans; Esc drops a stroke; Enter and Esc
+## end what the tools have under way (a Pen path, a lasso, a warp, a free
+## transform, a live gradient, the crop); Tab steps the tool's modes; digits
+## set an opacity; arrows nudge.
+from ui import Event
+from input import EventKind, Key
+from tool_handler import ToolContext
+from navigate_tools import PanGesture
+from paint_tools import PaintTool
+from vector_tools import PenHandler
+from selection_tools import MarqueeTool
+from polygon_lasso import PolygonLasso
+from magnetic_lasso import MagneticLasso
+from view_gestures import WarpGesture, BoxGesture
+from gradient_tool import GradientTool
+from layer_ops import OpacityKeys, set_opacity_all
+import math
+import time
+
+pub class ViewKeys:
+    let context: ToolContext
+    let pan: PanGesture
+    let paint: PaintTool
+    let pen: PenHandler
+    let marquee: MarqueeTool
+    let polygon: PolygonLasso
+    let magnetic: MagneticLasso
+    let warp: WarpGesture
+    let boxes: BoxGesture
+    let gradient: GradientTool
+    ## Space is held: a press pans.
+    pub var space_held: bool = false
+    ## A key let go over the canvas, for spring-loaded tools.
+    pub var on_key_up: func(Key) -> unit!? = none
+    ## The digits typed, so two quick ones give an exact opacity.
+    let opacity_keys: OpacityKeys
+
+    pub func init(self, context: ToolContext, pan: PanGesture, paint: PaintTool, pen: PenHandler, marquee: MarqueeTool, polygon: PolygonLasso,
+                  magnetic: MagneticLasso, warp: WarpGesture, boxes: BoxGesture, gradient: GradientTool):
+        self.context = context
+        self.pan = pan
+        self.paint = paint
+        self.pen = pen
+        self.marquee = marquee
+        self.polygon = polygon
+        self.magnetic = magnetic
+        self.warp = warp
+        self.boxes = boxes
+        self.gradient = gradient
+        self.opacity_keys = OpacityKeys()
+
+    pub func key(self, event: Event) -> unit!:
+        if event.kind == EventKind.key_down:
+            self.key_down(event)
+        elif event.kind == EventKind.key_up:
+            if event.key == Key.space:
+                self.space_held = false
+                self.pan.panning = false
+            elif let released = self.on_key_up:
+                released(event.key)
+        else:
+            # Shift or alt pressed or let go mid-drag reshapes the marquee at once.
+            self.marquee.shape.modifiers(event.shift, event.alt)
+
+    func key_down(self, event: Event) -> unit!:
+        let context = self.context
+        let workspace = context.workspace
+        let key = event.key
+        let ends = key == Key.enter or key == Key.escape
+        if key == Key.space:
+            self.space_held = true
+        elif key == Key.escape and self.paint.painting:
+            # Esc drops the stroke in progress.
+            self.paint.stop(context, false)
+        elif self.pen.pen.drawing and ends:
+            # The Pen's keys: Enter or Esc ends the path drawn so far.
+            self.pen.pen.finish(workspace)
+            context.changed()
+        elif self.polygon.active and (ends or key == Key.backspace or key == Key.delete):
+            # The Polygonal Lasso's keys: Enter closes, Esc lets go, Delete takes a corner back.
+            if key == Key.enter:
+                self.polygon.close(workspace)
+            elif key == Key.escape:
+                self.polygon.cancel()
+            else:
+                self.polygon.take_back()
+            context.changed()
+        elif self.magnetic.active and (ends or key == Key.backspace or key == Key.delete):
+            # The Magnetic Lasso's keys: Enter closes, Esc lets go, Backspace takes an anchor back.
+            if key == Key.enter:
+                self.magnetic.close(workspace)
+            elif key == Key.escape:
+                self.magnetic.cancel(workspace)
+            else:
+                self.magnetic.take_back(workspace)
+            context.changed()
+        elif ends and not self.warp.warping and workspace.transforms.mesh_warp != none:
+            # Enter keeps a Warp or Puppet Warp; Esc drops it.
+            workspace.transforms.finish_mesh_warp(key == Key.enter)
+            context.changed()
+        elif ends and not self.boxes.boxing and not self.gradient.handle and (workspace.transforms.transform != none or workspace.image.crop_box != none or workspace.painting.gradient != none):
+            # Enter applies a free transform, a live gradient or the crop; Esc drops it.
+            if workspace.painting.gradient != none:
+                workspace.painting.finish_gradient(key == Key.enter)
+            elif workspace.transforms.transform != none:
+                workspace.transforms.finish_transform(key == Key.enter)
+            else:
+                workspace.image.finish_crop(key == Key.enter)
+            context.changed()
+        elif key == Key.tab and not event.meta and not event.control and not event.alt and not self.paint.painting:
+            # Tab steps the tool through its modes.
+            workspace.tools.cycle_tool_mode()
+            context.changed()
+        elif not event.meta and not event.control and not event.repeated and digit_value(key) >= 0:
+            self.type_digit(digit_value(key))
+        elif key == Key.left or key == Key.right or key == Key.up or key == Key.down:
+            self.nudge(event)
+
+    ## A number key, as Photoshop's: 1..9 set 10%..90% and 0 sets 100%; two
+    ## digits within half a second set that exact percentage (0 then 5: 5%).
+    ## Painting tools take it as the brush's opacity, the others as every
+    ## selected layer's.
+    func type_digit(self, value: int) -> unit!:
+        let fraction = self.opacity_keys.typed(value, time.now() // 1000000)
+        let workspace = self.context.workspace
+        let tool = workspace.tools.tool
+        if tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "clone" or tool == "heal" or tool == "smear":
+            workspace.tools.brush.opacity = math.max(0.01, fraction)
+            workspace.touch()
+        else:
+            set_opacity_all(workspace, fraction)
+        self.context.changed()
+
+    ## Arrows nudge a pixel, Shift ten: the selected pixels with the Move tool
+    ## or Cmd held with any tool (or the layer with no selection), the outline
+    ## with a selection tool.
+    func nudge(self, event: Event) -> unit!:
+        let step = 10 if event.shift else 1
+        let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
+        let dy = -step if event.key == Key.up else (step if event.key == Key.down else 0)
+        let workspace = self.context.workspace
+        let tool = workspace.tools.tool
+        let selection = workspace.canvas.has_selection()
+        if tool == "move" or event.meta or event.control:
+            if selection:
+                workspace.selection.move_selected_pixels(dx, dy, false)
+            else:
+                workspace.edits.move_layer(dx, dy)
+        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "magnetic" or tool == "wand"):
+            workspace.selection.move_selection(dx, dy)
+
+## The digit a number key types, or -1.
+pub func digit_value(key: Key) -> int:
+    if key == Key.digit_0:
+        return 0
+    if key == Key.digit_1:
+        return 1
+    if key == Key.digit_2:
+        return 2
+    if key == Key.digit_3:
+        return 3
+    if key == Key.digit_4:
+        return 4
+    if key == Key.digit_5:
+        return 5
+    if key == Key.digit_6:
+        return 6
+    if key == Key.digit_7:
+        return 7
+    if key == Key.digit_8:
+        return 8
+    if key == Key.digit_9:
+        return 9
+    return -1

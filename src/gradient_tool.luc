@@ -1,0 +1,64 @@
+## The Gradient tool: a drag places a gradient that stays live, its ends
+## movable, until kept (Enter, Apply, another tool) or dropped (Esc). A press
+## on a live gradient's handle moves that end; elsewhere a new one starts,
+## keeping the one before.
+from ui import Event
+from tool_handler import ToolHandler, ToolContext
+import math
+
+pub class GradientTool: ToolHandler:
+    ## A live gradient's end being dragged (the new one's end, or a handle).
+    pub var handle: bool = false
+    ## A new gradient's drag from (`start_x`, `start_y`), not yet moved away.
+    var dragging: bool = false
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+
+    pub func active(self) -> bool:
+        return self.handle or self.dragging
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        if context.dialog_sample(x, y):
+            return
+        # Alt held: the eyedropper, as Photoshop's gradient takes it.
+        if event.alt:
+            workspace.eyedroppers.pick(x, y)
+            return
+        if context.refuses_group("gradient"):
+            return
+        if let edit = workspace.painting.gradient:
+            edit.grabbed = edit.hit(x, y, 8.0 / workspace.viewport.zoom)
+            if edit.grabbed >= 0:
+                self.handle = true
+                return
+        self.dragging = true
+        self.start_x = x
+        self.start_y = y
+
+    ## Once the pointer has left the press, the gradient shows live, its end following.
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let painting = context.workspace.painting
+        if self.handle:
+            if let edit = painting.gradient:
+                edit.drag(x, y, event.shift)
+                painting.follow_gradient()
+            return
+        if (math.abs(x - self.start_x) + math.abs(y - self.start_y)) * context.workspace.viewport.zoom >= 3.0:
+            self.dragging = false
+            painting.begin_gradient(self.start_x, self.start_y, x, y)
+            if let edit = painting.gradient:
+                edit.grabbed = 1
+                edit.drag(x, y, event.shift)
+                self.handle = true
+                painting.follow_gradient()
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if self.handle:
+            self.handle = false
+            if let edit = context.workspace.painting.gradient:
+                edit.grabbed = -1
+            return
+        # A click without a drag keeps the live gradient, if one is up.
+        self.dragging = false
+        context.workspace.painting.finish_gradient(true)

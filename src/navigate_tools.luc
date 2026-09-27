@@ -1,0 +1,77 @@
+## Getting around the document: panning (the Hand tool, space held, or the
+## middle button), the Zoom tool, and the idle tool, which rests on the
+## canvas and does nothing there.
+from ui import Event
+from tool_handler import ToolHandler, ToolContext
+import math
+
+## A pan by dragging: the view follows the pointer.
+pub class PanGesture: ToolHandler:
+    pub var panning: bool = false
+    var last_x: float = 0.0
+    var last_y: float = 0.0
+
+    pub func active(self) -> bool:
+        return self.panning
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.panning = true
+        self.last_x = event.x
+        self.last_y = event.y
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        context.workspace.viewport.pan(event.x - self.last_x, event.y - self.last_y)
+        self.last_x = event.x
+        self.last_y = event.y
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.panning = false
+
+## The Zoom tool: a click zooms in a step (Alt: out) about it; a drag is a
+## scrubby zoom — right zooms in, left out, about where it started.
+pub class ZoomTool: ToolHandler:
+    var zooming: bool = false
+    var moved: bool = false
+    var out: bool = false
+    var x: float = 0.0
+    var y: float = 0.0
+    var start: float = 1.0
+
+    pub func active(self) -> bool:
+        return self.zooming
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.zooming = true
+        self.moved = false
+        self.out = event.alt
+        self.x = event.x
+        self.y = event.y
+        self.start = context.workspace.viewport.zoom
+
+    ## Every 100 points right doubles, left halves.
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let dx = event.x - self.x
+        if math.abs(dx) >= 3.0:
+            self.moved = true
+        if self.moved:
+            let viewport = context.workspace.viewport
+            viewport.zoom_about(self.start * math.pow(2.0, dx / 100.0) / viewport.zoom, self.x, self.y)
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.zooming = false
+        if not self.moved:
+            context.workspace.viewport.zoom_step(-1 if self.out else 1, self.x, self.y)
+
+## The idle tool: presses on the canvas do nothing.
+pub class IdleTool: ToolHandler:
+    pub func active(self) -> bool:
+        return false
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return

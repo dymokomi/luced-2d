@@ -1,0 +1,154 @@
+## The Move tool, and any tool with Cmd (Ctrl) held: a drag moves the
+## selected pixels when there is a selection (Alt copies them), else the
+## selected layers (Alt moves a copy), or on a vector layer the element
+## pressed. It previews while dragging and commits once, on release — the
+## layers drawn offset by the view, selected pixels through a canvas preview.
+## What moves snaps by its edges and middle.
+from ui import Event
+from tool_handler import ToolHandler, ToolContext
+from view_gestures import BoxGesture
+from free_transform import box_around
+from vectors import pick_element
+import math
+
+pub class MoveTool: ToolHandler:
+    let boxes: BoxGesture
+    pub var moving: bool = false
+    ## A move of the active vector element alone: its outline shows where it goes.
+    pub var element: bool = false
+    ## Selected pixels move (through a preview), copied with Alt.
+    pub var pixels: bool = false
+    var copy: bool = false
+    ## Where the drag began and where it has got to, in view points.
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+    var now_x: float = 0.0
+    var now_y: float = 0.0
+    ## The whole pixels the selected pixels' preview shows them moved.
+    pub var shown_x: int = 0
+    pub var shown_y: int = 0
+    ## The box of what moves, in document pixels, for snapping its edges.
+    var left: float = 0.0
+    var top: float = 0.0
+    var right: float = 0.0
+    var bottom: float = 0.0
+
+    pub func init(self, boxes: BoxGesture):
+        self.boxes = boxes
+
+    pub func active(self) -> bool:
+        return self.moving
+
+    ## With Show Transform Controls a handle starts a free transform. With
+    ## Auto-Select, or Cmd held with the Move tool, the press first picks the
+    ## top layer with pixels under it; Cmd-Shift-click adds it to the selection.
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        let workspace = context.workspace
+        let command = event.meta or event.control
+        let zoom = workspace.viewport.zoom
+        if workspace.tools.tool == "move" and not command:
+            if let shown = workspace.transforms.controls_box():
+                let grab = shown.hit(x, y, 8.0 / zoom)
+                if grab >= 0 and grab < 8 and workspace.transforms.begin_transform():
+                    if let session = workspace.transforms.transform:
+                        session.box.begin(grab, x, y)
+                    self.boxes.boxing = true
+                    # The header becomes the transform's, with Apply and Cancel.
+                    context.changed()
+                    return
+        if command and event.shift:
+            workspace.layers.pick_layer(x, y, true)
+            context.changed()
+            return
+        if workspace.tools.tool == "move" and (workspace.tools.auto_select or command):
+            workspace.layers.pick_layer(x, y)
+            context.changed()
+        # On a vector layer the press picks the element under it, which then moves
+        # alone; a press on none of them moves the whole layer.
+        let canvas = workspace.canvas
+        let on_element = not canvas.has_selection() and not event.alt and pick_element(workspace, x, y, 4.0 / zoom)
+        if on_element:
+            context.changed()
+        if event.alt and not canvas.has_selection():
+            workspace.edits.duplicate()
+        self.element = on_element
+        self.moving = true
+        self.start_x = event.x
+        self.start_y = event.y
+        self.now_x = event.x
+        self.now_y = event.y
+        self.shown_x = 0
+        self.shown_y = 0
+        self.copy = event.alt
+        self.pixels = canvas.has_selection()
+        let ids = workspace.layers.moving_ids()
+        context.snapper.gather(workspace, ids, true)
+        if let found = box_around(canvas, ids):
+            self.left = found.left
+            self.top = found.top
+            self.right = found.left + found.width
+            self.bottom = found.top + found.height
+        else:
+            context.snapper.enabled = false
+        if self.pixels:
+            workspace.previews.begin_preview() catch failure:
+                discard(failure)
+                self.pixels = false
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.moved_to(context, event)
+        if not self.pixels:
+            return
+        let zoom = context.workspace.viewport.zoom
+        let dx = whole(self.now_x - self.start_x, zoom)
+        let dy = whole(self.now_y - self.start_y, zoom)
+        if dx != self.shown_x or dy != self.shown_y:
+            context.workspace.selection.preview_move_selected(dx, dy, self.copy)
+            self.shown_x = dx
+            self.shown_y = dy
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.moving = false
+        self.moved_to(context, event)
+        let workspace = context.workspace
+        let zoom = workspace.viewport.zoom
+        let dx = whole(self.now_x - self.start_x, zoom)
+        let dy = whole(self.now_y - self.start_y, zoom)
+        if self.pixels:
+            self.pixels = false
+            if dx == 0 and dy == 0:
+                workspace.previews.end_preview(false)
+            else:
+                workspace.selection.preview_move_selected(dx, dy, self.copy)
+                workspace.previews.end_preview(true)
+                workspace.selection.move_selection(dx, dy)
+        else:
+            workspace.edits.move_layer(dx, dy)
+
+    ## How far the drag has moved, in view points.
+    pub func moved_x(self) -> float:
+        return self.now_x - self.start_x
+
+    pub func moved_y(self) -> float:
+        return self.now_y - self.start_y
+
+    ## Where a move has got to: the pointer, kept to an axis with Shift, and
+    ## pulled so the moved box's edges or middle meet what snaps.
+    func moved_to(self, context: ToolContext, event: Event):
+        self.now_x = event.x
+        self.now_y = event.y
+        if event.shift:
+            # Shift keeps the move to the axis it goes further along.
+            if math.abs(event.x - self.start_x) >= math.abs(event.y - self.start_y):
+                self.now_y = self.start_y
+            else:
+                self.now_x = self.start_x
+        let zoom = context.workspace.viewport.zoom
+        let dx = (self.now_x - self.start_x) / zoom
+        let dy = (self.now_y - self.start_y) / zoom
+        self.now_x += context.snapper.shift_x(self.left + dx, self.right + dx) * zoom
+        self.now_y += context.snapper.shift_y(self.top + dy, self.bottom + dy) * zoom
+
+## View points moved as whole document pixels at `zoom`.
+pub func whole(points: float, zoom: float) -> int:
+    return int(math.floor(points / zoom + 0.5))

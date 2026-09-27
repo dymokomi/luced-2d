@@ -1,29 +1,36 @@
-## The canvas view: it draws the document at the workspace's zoom and offset,
-## and turns pointer, key and scroll input into what the active tool does —
-## painting, selecting, moving, zooming and panning.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, Point, Font
-from gpu import RenderTarget, Rect, Region, Filter, Color
-from input import EventKind, Cursor, Key, ScrollUnit
+## The canvas view: it draws the document at the workspace's zoom and offset
+## with the view aids (view_aids.luc) and the tools' outlines over it, and
+## turns pointer, key (view_keys.luc) and scroll input into what the active
+## tool does. A press goes to the tool's handler (tool_handler.luc, one file
+## per tool family) after the gestures that come before any tool — panning,
+## sizing the brush, a guide, a warp, a box, a dialog's eyedropper; drags
+## and the release go to whichever gesture is under way.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from gpu import RenderTarget, Rect
+from input import EventKind, Cursor, ScrollUnit
 from workspace import Workspace
-from selection_drag import SelectionDrag
 from kit import outline, dropped_paths
-from transform_box import grab_move, grab_turn
-from layer_ops import OpacityKeys, set_opacity_all
 from polygon_lasso import PolygonLasso
 from magnetic_lasso import MagneticLasso
 from guides import GuideDrag
-from snapping import Snapper
-from free_transform import box_around
-from shape_tool import ShapeDrag, is_shape
 from pen_tool import PenTool
+from shape_tool import shape_tools
 from vector_overlay import VectorOverlay
-from vectors import pick_element
 from tool_cursor import cursor_for, draw_magnifier
-from brush_dynamics import PenSample, pen_of
+from tool_handler import ToolHandler, ToolContext, brushed
+from view_gestures import BrushSizing, OnImageDrag, GuideGesture, WarpGesture, BoxGesture
+from navigate_tools import PanGesture, ZoomTool, IdleTool
+from paint_tools import PaintTool
+from gradient_tool import GradientTool
+from sample_tools import EyedropperTool
+from text_tool import TextTool
+from selection_tools import OutlineMove, MarqueeTool, WandTool, PolygonTool, MagneticTool
+from vector_tools import ShapeTool, PenHandler
+from move_tool import MoveTool, whole
+from view_aids import ViewAids
+from view_keys import ViewKeys
 import theme
 import math
-import time
-from brush import max_brush
 
 ## The document on screen: backdrop, checkerboard under transparent pixels,
 ## the flattened document at the workspace's zoom and offset, and a hairline
@@ -33,137 +40,90 @@ from brush import max_brush
 pub class CanvasView: Widget:
     let box: Layout
     pub let workspace: Workspace
-    ## Called when the text tool clicks, after the position is remembered.
-    ## The Text tool: a new text layer at (x, y) wrapping in a box that wide
-    ## (0: point text), or the text layer at an index edited.
-    pub var on_text: func(float, float, float) -> unit!? = none
-    pub var on_edit_text: func(int) -> unit!? = none
+    ## What the tool handlers share, with the window's callbacks for them.
+    pub let context: ToolContext
+    pub let keys: ViewKeys
     ## Files dropped on the canvas: the ones luced-2d can open.
     pub var on_open_files: func(list[str]) -> unit!? = none
-    ## A key let go over the canvas, for spring-loaded tools.
-    pub var on_key_up: func(Key) -> unit!? = none
-    ## Something the window shows changed from the keyboard (an opacity by digit).
-    pub var on_changed: func() -> unit!? = none
-    ## Something a press could not do, said to the user: painting on a group.
-    pub var on_refused: func(str) -> unit!? = none
     pub var pointer_x: float = 0.0
     pub var pointer_y: float = 0.0
     pub var pointer_inside: bool = false
     ## Layouts that show the pointer (the rulers), redrawn with the view.
     pub var linked: list[Layout]
-    ## Panning: by the hand tool, space held, or the middle button.
-    var panning: bool = false
-    var space_held: bool = false
-    var last_x: float = 0.0
-    var last_y: float = 0.0
-    var painting: bool = false
-    ## Where the last stroke ended, in document pixels, for Shift-click lines.
-    var stroke_end_x: float = 0.0
-    var stroke_end_y: float = 0.0
-    var has_stroke_end: bool = false
-    ## A Shift-drag stroke keeps to the axis it first moves along: 0 not yet
-    ## chosen, 1 horizontal, 2 vertical; -1 when Shift was not held.
-    var axis: int = -1
-    var stroke_x: float = 0.0
-    var stroke_y: float = 0.0
-    ## The digits typed, so two quick ones give an exact opacity.
-    let opacity_keys: OpacityKeys
-    ## The Polygonal Lasso's shape while its corners are clicked.
+    ## The Polygonal and Magnetic Lassos' shapes while their corners are clicked,
+    ## the Pen's path, and a guide being dragged.
     pub let polygon: PolygonLasso
     pub let magnetic: MagneticLasso
-    ## A shape tool's shape while it is dragged out.
-    pub let shape: ShapeDrag
     pub let pen: PenTool
+    pub let guides: GuideDrag
+    ## The gestures before any tool, and the tools' handlers.
+    let pan: PanGesture
+    let sizing: BrushSizing
+    let on_image: OnImageDrag
+    let guide_gesture: GuideGesture
+    let warp: WarpGesture
+    let boxes: BoxGesture
+    let move: MoveTool
+    let marquee: MarqueeTool
+    let shapes: ShapeTool
+    let paint: PaintTool
+    let eyedropper: EyedropperTool
+    ## The handler for each tool id; tools not listed paint.
+    let handlers: map[str, ToolHandler]
+    ## Every handler that can have a gesture under way, in the order a drag looks.
+    let gestures: list[ToolHandler]
     ## The active vector element's outline over the canvas.
     let vector_overlay: VectorOverlay
-    ## The Clone Stamp preview's picture and its side in pixels.
-    var clone_image: Image? = none
-    var clone_side: int = 0
+    let aids: ViewAids
     ## Alt held, for the Zoom tool's minus.
     var alt_held: bool = false
-    ## A drag for Hue/Saturation's on-image adjustment, and where it began.
-    var adjust_dragging: bool = false
-    var adjust_x: float = 0.0
-    ## A guide being dragged, and what pulls while a gesture snaps.
-    pub let guides: GuideDrag
-    let snapper: Snapper
-    ## The box of what a move drags, in document pixels, for snapping its edges.
-    var move_left: float = 0.0
-    var move_top: float = 0.0
-    var move_right: float = 0.0
-    var move_bottom: float = 0.0
-    let selection: SelectionDrag
-    ## A gradient drag in progress, from a document point.
-    var gradient_dragging: bool = false
-    ## A live gradient's end being dragged (the new one's end, or a handle).
-    var gradient_handle: bool = false
-    ## For the size shown beside a Crop box being dragged.
-    var font: Font? = none
-    ## A right-button drag sizing the brush: where it began, and the brush then.
-    var sizing: bool = false
-    var sizing_x: float = 0.0
-    var sizing_y: float = 0.0
-    var sizing_diameter: float = 0.0
-    var sizing_hardness: float = 0.0
-    ## The eyedropper held down: its ring shows the color under it over the
-    ## foreground as it was, which it keeps sampling as it moves.
-    var ringing: bool = false
-    var ring_before: Color = Color(0.0, 0.0, 0.0)
-    ## The Text tool pressed: a click sets point text, a drag a box.
-    var text_dragging: bool = false
-    var gradient_x: float = 0.0
-    var gradient_y: float = 0.0
-    ## A move drag: it previews while dragging and commits once, on release —
-    ## the whole layer, or with a selection its selected pixels (copied with
-    ## Alt), shown through a canvas preview.
-    var moving: bool = false
-    ## A move drag of the active vector element alone: its outline shows where it goes.
-    var move_element: bool = false
-    var move_pixels: bool = false
-    var move_copy: bool = false
-    var move_shown_x: int = 0
-    var move_shown_y: int = 0
-    ## A selection tool dragging inside the selection moves its outline; the
-    ## whole pixels applied so far.
-    var outline_moving: bool = false
-    var outline_x: float = 0.0
-    var outline_y: float = 0.0
-    var outline_applied_x: int = 0
-    var outline_applied_y: int = 0
-    var move_x: float = 0.0
-    var move_y: float = 0.0
-    var move_now_x: float = 0.0
-    var move_now_y: float = 0.0
-    ## A free transform's or the Crop tool's box being dragged.
-    var boxing: bool = false
-    ## A Warp point or Puppet pin is being dragged.
-    var warping: bool = false
-    ## A zoom tool drag: right zooms in, left out, about where it started.
-    var zooming: bool = false
-    var zoom_moved: bool = false
-    var zoom_out: bool = false
-    var zoom_x: float = 0.0
-    var zoom_y: float = 0.0
-    var zoom_start: float = 1.0
     var ants: float = 0.0
-    let checker: Image
 
     pub func init(self, workspace: Workspace, font: Font? = none) -> unit!:
         self.workspace = workspace
-        self.font = font
-        self.selection = SelectionDrag()
-        self.opacity_keys = OpacityKeys()
+        let context = ToolContext(workspace)
+        self.context = context
         self.polygon = PolygonLasso()
         self.magnetic = MagneticLasso()
-        self.shape = ShapeDrag()
-        self.pen = PenTool()
-        self.vector_overlay = VectorOverlay()
         self.guides = GuideDrag()
-        self.snapper = Snapper()
-        self.checker = Image(256, 256)
-        for y in 0..<256:
-            for x in 0..<256:
-                self.checker.set_pixel(x, y, theme.checker_dark() if (x // 8 + y // 8) % 2 == 1 else theme.checker_light())
+        self.vector_overlay = VectorOverlay()
+        self.aids = ViewAids(workspace, font)
+        self.pan = PanGesture()
+        self.sizing = BrushSizing()
+        self.on_image = OnImageDrag()
+        self.guide_gesture = GuideGesture(self.guides)
+        self.warp = WarpGesture()
+        self.boxes = BoxGesture()
+        self.move = MoveTool(self.boxes)
+        let outline_move = OutlineMove()
+        self.marquee = MarqueeTool(outline_move)
+        self.shapes = ShapeTool()
+        let pen = PenHandler()
+        self.pen = pen.pen
+        self.paint = PaintTool()
+        self.eyedropper = EyedropperTool()
+        context.eyedropper = self.eyedropper
+        let gradient = GradientTool()
+        let text = TextTool()
+        let zoom = ZoomTool()
+        var handlers: map[str, ToolHandler] = {}
+        handlers["zoom"] = zoom
+        handlers["idle"] = IdleTool()
+        handlers["pen"] = pen
+        handlers["gradient"] = gradient
+        handlers["eyedropper"] = self.eyedropper
+        handlers["text"] = text
+        handlers["wand"] = WandTool(outline_move)
+        handlers["polygon"] = PolygonTool(self.polygon)
+        handlers["magnetic"] = MagneticTool(self.magnetic)
+        for tool in ["marquee", "ellipse", "lasso"]:
+            handlers[tool] = self.marquee
+        for tool in shape_tools():
+            handlers[tool] = self.shapes
+        self.handlers = handlers
+        self.gestures = [self.eyedropper, self.sizing, self.on_image, self.shapes, pen, self.guide_gesture, gradient, self.warp, self.boxes,
+                         self.pan, self.paint, zoom, self.marquee, self.move, outline_move, text]
+        self.keys = ViewKeys(context, self.pan, self.paint, pen, self.marquee, self.polygon, self.magnetic, self.warp, self.boxes, gradient)
         self.box = Layout()
         self.box.set_focusable(true)
         # Tab steps the tool's modes on the canvas instead of moving focus.
@@ -174,6 +134,7 @@ pub class CanvasView: Widget:
         # Pictures and documents dropped on the canvas open, each in its own tab.
         self.box.set_drop_target(true)
         self.linked = []
+        workspace.tools.on_choose(self.tool_changed)
 
     pub func layout(self) -> Layout:
         return self.box
@@ -181,222 +142,28 @@ pub class CanvasView: Widget:
     pub func measure(self, available: Constraints) -> Size!:
         return Size(900.0, 700.0)
 
-    # -- Drawing.
-
-    pub func draw(self, target: RenderTarget) -> unit!:
-        let painter = Painter(target)
-        let size = target.size()
-        let workspace = self.workspace
-        # A live gradient is kept when another tool is chosen, and follows the
-        # colors and the header's options while it stays.
-        if workspace.painting.gradient != none and workspace.tools.tool != "gradient":
-            workspace.painting.finish_gradient(true)
-        workspace.painting.follow_gradient()
-        if not workspace.viewport.fitted:
-            workspace.viewport.fit(size.width, size.height)
-        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.backdrop())
-        let left = workspace.viewport.offset_x
-        let top = workspace.viewport.offset_y
-        let whole = Rect(0.0, 0.0, size.width, size.height)
-        # The document's part of the view.
-        let x0 = math.max(0.0, left)
-        let y0 = math.max(0.0, top)
-        let x1 = math.min(size.width, left + float(workspace.canvas.width()) * workspace.viewport.zoom)
-        let y1 = math.min(size.height, top + float(workspace.canvas.height()) * workspace.viewport.zoom)
-        if x1 > x0 and y1 > y0:
-            self.draw_checker(painter, x0, y0, x1, y1)
-            # The canvas draws the checkerboard under the picture itself, so the
-            # two mix as the document blends its colors (sRGB unless gamma 1.0).
-            workspace.canvas.set_checker(8.0, theme.checker_light().red, theme.checker_dark().red)
-            if self.moving and not self.move_pixels and not self.move_element:
-                let dx = (self.move_now_x - self.move_x) / workspace.viewport.zoom
-                let dy = (self.move_now_y - self.move_y) / workspace.viewport.zoom
-                workspace.canvas.draw_moving(target, whole, workspace.viewport.zoom, left, top, workspace.layers.selected_id(), dx, dy)
-            else:
-                workspace.canvas.draw(target, whole, workspace.viewport.zoom, left, top)
-            outline(painter, Rect(x0, y0, x1 - x0, y1 - y0), theme.border())
-        # Marching ants along the selection's edge, at screen resolution, moving
-        # with selected pixels being dragged; while a shape is being dragged its
-        # outline is drawn plainly; while selected pixels float in a transform
-        # the box shows where they go, and the outline follows on Apply. Quick
-        # Mask tints what it masks instead.
-        let floating = workspace.canvas.transforming() and workspace.canvas.transform_floats()
-        if (workspace.canvas.has_selection() or workspace.canvas.quick_mask()) and not floating:
-            var ants_left = left
-            var ants_top = top
-            if self.moving and self.move_pixels:
-                ants_left += float(self.move_shown_x) * workspace.viewport.zoom
-                ants_top += float(self.move_shown_y) * workspace.viewport.zoom
-            workspace.canvas.draw_selection(target, whole, workspace.viewport.zoom, ants_left, ants_top, self.ants)
-        # The grid over the picture and whatever tints it.
-        if workspace.viewport.show_grid and x1 > x0 and y1 > y0:
-            self.draw_grid(painter, x0, y0, x1, y1)
-        self.selection.draw(painter, workspace.viewport.zoom, left, top, theme.text())
-        # Another tool chosen mid-shape lets the polygon go.
-        if self.polygon.active and workspace.tools.tool != "polygon":
+    ## Another tool chosen mid-shape lets the Polygonal and Magnetic Lassos'
+    ## shapes and the Pen's path go.
+    func tool_changed(self, tool: str):
+        if self.polygon.active and tool != "polygon":
             self.polygon.cancel()
-        self.polygon.draw(painter, workspace.viewport.zoom, left, top, theme.text(), theme.backdrop())
-        if self.magnetic.active and workspace.tools.tool != "magnetic":
-            self.magnetic.cancel(workspace)
-        self.magnetic.draw(painter, workspace, left, top, theme.text(), theme.backdrop())
-        self.guides.draw(painter, workspace, size.width, size.height)
-        self.draw_pixel_grid(painter, size.width, size.height)
-        if self.ringing:
-            self.draw_sample_ring(painter)
-        self.draw_box(painter, size.width, size.height)
-        self.shape.draw(painter, workspace, workspace.viewport.zoom, left, top, theme.text(), theme.backdrop())
-        if self.pen.drawing and workspace.tools.tool != "pen":
+        if self.magnetic.active and tool != "magnetic":
+            self.magnetic.cancel(self.workspace)
+        if self.pen.drawing and tool != "pen":
             self.pen.cancel()
-        self.pen.draw(painter, workspace, workspace.viewport.zoom, left, top, theme.text(), theme.backdrop())
-        var element_dx = 0.0
-        var element_dy = 0.0
-        if self.moving and self.move_element:
-            element_dx = float(self.move_whole(self.move_now_x - self.move_x))
-            element_dy = float(self.move_whole(self.move_now_y - self.move_y))
-        self.vector_overlay.draw(painter, workspace, element_dx, element_dy, workspace.look.accent, theme.backdrop())
-        # The pointer may have gone to another panel without the view hearing of
-        # it; the layout's hover says where it is now.
-        let pointer_here = self.pointer_inside and (self.box.contains_pointer() or self.painting)
-        if pointer_here and not self.panning and not self.space_held and workspace.tools.tool == "zoom":
-            draw_magnifier(painter, self.pointer_x, self.pointer_y, self.alt_held, theme.text(), theme.backdrop())
-        if pointer_here and not self.panning and brushed(workspace.tools.tool) and workspace.eyedroppers.drag_for == none and workspace.eyedroppers.sample_for == none and workspace.eyedroppers.range_sample_for == none:
-            self.draw_brush_outline(painter)
-            if workspace.tools.tool == "clone" and workspace.canvas.has_clone_source():
-                self.draw_clone_preview(painter)
-                self.draw_clone_source(painter)
-        painter.close()
 
-    ## The checkerboard under the document's part of the view, clipped to it:
-    ## one 256-point picture of 8-point cells per block, not a rectangle per cell.
-    func draw_checker(self, painter: Painter, x0: float, y0: float, x1: float, y1: float) -> unit!:
-        let left = self.workspace.viewport.offset_x
-        let top = self.workspace.viewport.offset_y
-        let block = 256.0
-        var y = y0 - math.mod(y0 - top, block)
-        while y < y1:
-            var x = x0 - math.mod(x0 - left, block)
-            while x < x1:
-                let cx = math.max(x, x0)
-                let cy = math.max(y, y0)
-                let cw = math.min(x + block, x1) - cx
-                let ch = math.min(y + block, y1) - cy
-                # The block's texels this piece covers: whole texels, inside the
-                # 256-texel tile, at least one wide. Fractional offsets (a pan, a
-                # zoom) otherwise round a sliver to nothing or past the tile.
-                let sx = clamp_texel(int(math.floor(cx - x)))
-                let sy = clamp_texel(int(math.floor(cy - y)))
-                let sw = texel_span(sx, int(math.ceil(cx + cw - x)))
-                let sh = texel_span(sy, int(math.ceil(cy + ch - y)))
-                if cw > 0.0 and ch > 0.0:
-                    painter.image(self.checker, Rect(cx, cy, cw, ch), Region(sx, sy, sw, sh), 1.0, Filter.nearest)
-                x += block
-            y += block
+    # -- Each frame.
 
-    ## The brush's outline around the pointer, at screen resolution, one dark and one light ring.
-    ## At 800% and closer, a faint line between the document's pixels.
-    func draw_pixel_grid(self, painter: Painter, width: float, height: float) -> unit!:
-        let workspace = self.workspace
-        let zoom = workspace.viewport.zoom
-        if zoom < 8.0:
-            return
-        let ink = Color(0.5, 0.5, 0.5, 0.25)
-        let left = math.max(0.0, workspace.viewport.offset_x)
-        let top = math.max(0.0, workspace.viewport.offset_y)
-        let right = math.min(width, workspace.viewport.offset_x + float(workspace.canvas.width()) * zoom)
-        let bottom = math.min(height, workspace.viewport.offset_y + float(workspace.canvas.height()) * zoom)
-        var x = workspace.viewport.offset_x + math.ceil((left - workspace.viewport.offset_x) / zoom) * zoom
-        while x < right:
-            painter.rectangle(Rect(math.floor(x), top, 1.0, bottom - top), ink)
-            x += zoom
-        var y = workspace.viewport.offset_y + math.ceil((top - workspace.viewport.offset_y) / zoom) * zoom
-        while y < bottom:
-            painter.rectangle(Rect(left, math.floor(y), right - left, 1.0), ink)
-            y += zoom
-
-    ## The eyedropper's ring round the pointer, as Photoshop's: the color under
-    ## it in the top half, the foreground as it was in the bottom half.
-    func draw_sample_ring(self, painter: Painter) -> unit!:
-        let workspace = self.workspace
-        let now = Color(workspace.colors.red, workspace.colors.green, workspace.colors.blue)
-        let segments = 64
-        var index = 0
-        while index < segments:
-            let angle = float(index) * 6.283185307 / float(segments)
-            let next = float(index + 1) * 6.283185307 / float(segments)
-            # Screen y grows downward: angles past half a turn are the top half.
-            let color = now if index >= segments // 2 else self.ring_before
-            let a = Point(self.pointer_x + math.cos(angle) * 44.0, self.pointer_y + math.sin(angle) * 44.0)
-            let b = Point(self.pointer_x + math.cos(next) * 44.0, self.pointer_y + math.sin(next) * 44.0)
-            painter.line(a, b, 16.0, color)
-            index += 1
-
-    func draw_brush_outline(self, painter: Painter) -> unit!:
-        let radius = self.workspace.tools.brush.diameter * self.workspace.viewport.zoom * 0.5
-        let center_x = self.sizing_x if self.sizing else self.pointer_x
-        let center_y = self.sizing_y if self.sizing else self.pointer_y
-        let segments = 48
-        var index = 0
-        while index < segments:
-            let angle = float(index) * 6.283185307 / float(segments)
-            let next = float(index + 1) * 6.283185307 / float(segments)
-            let a = Point(center_x + math.cos(angle) * radius, center_y + math.sin(angle) * radius)
-            let b = Point(center_x + math.cos(next) * radius, center_y + math.sin(next) * radius)
-            painter.line(a, b, 3.0, theme.backdrop())
-            painter.line(a, b, 1.0, theme.text())
-            index += 1
-
-    ## What the Clone Stamp would lay down, shown inside its tip, as
-    ## Photoshop's clone overlay: the source under the brush, faded.
-    func draw_clone_preview(self, painter: Painter) -> unit!:
-        let workspace = self.workspace
-        let diameter = workspace.tools.brush.diameter
-        let source = workspace.canvas.clone_preview(workspace.layers.selected_id(), self.document_x(self.pointer_x), self.document_y(self.pointer_y), diameter, 0.6) catch failure:
-            discard(failure)
-            return
-        let side = int(math.max(1.0, math.min(1024.0, math.ceil(diameter))))
-        if self.clone_side != side:
-            self.clone_image = Image(side, side)
-            self.clone_side = side
-        let image = self.clone_image else return
-        image.write(source)
-        let shown = float(side) * workspace.viewport.zoom
-        painter.image(image, Rect(self.pointer_x - shown * 0.5, self.pointer_y - shown * 0.5, shown, shown))
-
-    ## The Clone Stamp's source: a crosshair where a stroke from the pointer
-    ## would copy from, white under black as Compositor's.
-    func draw_clone_source(self, painter: Painter) -> unit!:
-        let workspace = self.workspace
-        let canvas = workspace.canvas
-        let x = canvas.clone_sample_x(self.document_x(self.pointer_x)) * workspace.viewport.zoom + workspace.viewport.offset_x
-        let y = canvas.clone_sample_y(self.document_y(self.pointer_y)) * workspace.viewport.zoom + workspace.viewport.offset_y
-        for width in [3.0, 1.0]:
-            let ink = theme.text() if width == 3.0 else theme.backdrop()
-            painter.line(Point(x - 7.0, y), Point(x + 7.0, y), width, ink)
-            painter.line(Point(x, y - 7.0), Point(x, y + 7.0), width, ink)
-
-    ## The grid over the document: majors every grid_major document pixels, their
-    ## subdivisions fainter; a level whose lines would crowd closer than a few
-    ## points on screen is left out.
-    func draw_grid(self, painter: Painter, x0: float, y0: float, x1: float, y1: float) -> unit!:
-        let workspace = self.workspace
-        let major = workspace.viewport.grid_major() * workspace.viewport.zoom
-        let minor = major / float(workspace.viewport.grid_divisions())
-        if minor >= 6.0:
-            self.grid_lines(painter, minor, x0, y0, x1, y1, Color(1.0, 1.0, 1.0), 0.10)
-        if major >= 8.0:
-            self.grid_lines(painter, major, x0, y0, x1, y1, Color(1.0, 1.0, 1.0), 0.32)
-
-    func grid_lines(self, painter: Painter, step: float, x0: float, y0: float, x1: float, y1: float, ink: Color, opacity: float) -> unit!:
-        let left = self.workspace.viewport.offset_x
-        let top = self.workspace.viewport.offset_y
-        var x = left + math.ceil((x0 - left) / step) * step
-        while x <= x1:
-            painter.rectangle(Rect(math.floor(x), y0, 1.0, y1 - y0), ink, opacity)
-            x += step
-        var y = top + math.ceil((y0 - top) / step) * step
-        while y <= y1:
-            painter.rectangle(Rect(x0, math.floor(y), x1 - x0, 1.0), ink, opacity)
-            y += step
+    ## Once a frame, before drawing: a document not yet fitted is fitted to the
+    ## view, and a live gradient follows the colors and the header's options.
+    pub func settle(self) -> unit!:
+        let viewport = self.workspace.viewport
+        if not viewport.fitted:
+            let bounds = self.box.bounds()
+            if bounds.width > 0.0 and bounds.height > 0.0:
+                viewport.fit(bounds.width, bounds.height)
+                self.box.invalidate()
+        self.workspace.painting.follow_gradient()
 
     ## Advance the marching ants, and keep drawing while a smudge finishes on
     ## its worker (each frame shows how far it got); called from the frame timer.
@@ -411,7 +178,8 @@ pub class CanvasView: Widget:
     ## A marquee or lasso dragged past the view's edge pans toward the pointer
     ## each frame, faster the further past, and goes on growing.
     func autoscroll(self):
-        if not self.selection.active:
+        let shape = self.marquee.shape
+        if not shape.active:
             return
         let size = self.box.bounds()
         let dx = past_edge(self.pointer_x, size.width)
@@ -419,9 +187,85 @@ pub class CanvasView: Widget:
         if dx == 0.0 and dy == 0.0:
             return
         self.workspace.viewport.pan(-dx, -dy)
-        self.selection.drag_again(self.workspace, self.document_x(self.pointer_x), self.document_y(self.pointer_y)) catch failure:
+        shape.drag_again(self.workspace, self.document_x(self.pointer_x), self.document_y(self.pointer_y)) catch failure:
             discard(failure)
         self.box.invalidate()
+
+    # -- Drawing.
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        let workspace = self.workspace
+        let canvas = workspace.canvas
+        let zoom = workspace.viewport.zoom
+        let left = workspace.viewport.offset_x
+        let top = workspace.viewport.offset_y
+        let move = self.move
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.backdrop())
+        let whole_view = Rect(0.0, 0.0, size.width, size.height)
+        # The document's part of the view.
+        let x0 = math.max(0.0, left)
+        let y0 = math.max(0.0, top)
+        let x1 = math.min(size.width, left + float(canvas.width()) * zoom)
+        let y1 = math.min(size.height, top + float(canvas.height()) * zoom)
+        if x1 > x0 and y1 > y0:
+            self.aids.draw_checker(painter, x0, y0, x1, y1)
+            # The canvas draws the checkerboard under the picture itself, so the
+            # two mix as the document blends its colors (sRGB unless gamma 1.0).
+            canvas.set_checker(8.0, theme.checker_light().red, theme.checker_dark().red)
+            if move.moving and not move.pixels and not move.element:
+                canvas.draw_moving(target, whole_view, zoom, left, top, workspace.layers.selected_id(), move.moved_x() / zoom, move.moved_y() / zoom)
+            else:
+                canvas.draw(target, whole_view, zoom, left, top)
+            outline(painter, Rect(x0, y0, x1 - x0, y1 - y0), theme.border())
+        # Marching ants along the selection's edge, at screen resolution, moving
+        # with selected pixels being dragged; while a shape is being dragged its
+        # outline is drawn plainly; while selected pixels float in a transform
+        # the box shows where they go, and the outline follows on Apply. Quick
+        # Mask tints what it masks instead.
+        let floating = canvas.transforming() and canvas.transform_floats()
+        if (canvas.has_selection() or canvas.quick_mask()) and not floating:
+            var ants_left = left
+            var ants_top = top
+            if move.moving and move.pixels:
+                ants_left += float(move.shown_x) * zoom
+                ants_top += float(move.shown_y) * zoom
+            canvas.draw_selection(target, whole_view, zoom, ants_left, ants_top, self.ants)
+        # The grid over the picture and whatever tints it.
+        if workspace.viewport.show_grid and x1 > x0 and y1 > y0:
+            self.aids.draw_grid(painter, x0, y0, x1, y1)
+        self.marquee.shape.draw(painter, zoom, left, top, theme.text())
+        self.polygon.draw(painter, zoom, left, top, theme.text(), theme.backdrop())
+        self.magnetic.draw(painter, workspace, left, top, theme.text(), theme.backdrop())
+        self.guides.draw(painter, workspace, size.width, size.height)
+        self.aids.draw_pixel_grid(painter, size.width, size.height)
+        if self.eyedropper.ringing:
+            self.aids.draw_sample_ring(painter, self.pointer_x, self.pointer_y, self.eyedropper.before)
+        self.aids.draw_boxes(painter, size.width, size.height, move.moving)
+        self.shapes.shape.draw(painter, workspace, zoom, left, top, theme.text(), theme.backdrop())
+        self.pen.draw(painter, workspace, zoom, left, top, theme.text(), theme.backdrop())
+        var element_dx = 0.0
+        var element_dy = 0.0
+        if move.moving and move.element:
+            element_dx = float(whole(move.moved_x(), zoom))
+            element_dy = float(whole(move.moved_y(), zoom))
+        self.vector_overlay.draw(painter, workspace, element_dx, element_dy, workspace.look.accent, theme.backdrop())
+        # The pointer may have gone to another panel without the view hearing of
+        # it; the layout's hover says where it is now.
+        let pointer_here = self.pointer_inside and (self.box.contains_pointer() or self.paint.painting)
+        let tool = workspace.tools.tool
+        let panning = self.pan.panning
+        if pointer_here and not panning and not self.keys.space_held and tool == "zoom":
+            draw_magnifier(painter, self.pointer_x, self.pointer_y, self.alt_held, theme.text(), theme.backdrop())
+        if pointer_here and not panning and brushed(tool) and not workspace.eyedroppers.armed():
+            # A right-drag sizing the brush keeps its outline where the drag began.
+            let sizing = self.sizing
+            self.aids.draw_brush_outline(painter, sizing.x if sizing.sizing else self.pointer_x, sizing.y if sizing.sizing else self.pointer_y)
+            if tool == "clone" and canvas.has_clone_source():
+                self.aids.draw_clone_preview(painter, self.pointer_x, self.pointer_y)
+                self.aids.draw_clone_source(painter, self.pointer_x, self.pointer_y)
+        painter.close()
 
     ## Document coordinates of a view point.
     func document_x(self, x: float) -> float:
@@ -434,11 +278,12 @@ pub class CanvasView: Widget:
 
     pub func event(self, event: Event) -> unit!:
         let kind = event.kind
+        let workspace = self.workspace
         if kind == EventKind.drag_entered:
-            self.box.set_drop_accepted(dropped_paths(self.box, self.workspace.documents.can_open).length > 0)
+            self.box.set_drop_accepted(dropped_paths(self.box, workspace.documents.can_open).length > 0)
             return
         if kind == EventKind.drop:
-            let files = dropped_paths(self.box, self.workspace.documents.can_open)
+            let files = dropped_paths(self.box, workspace.documents.can_open)
             if let open = self.on_open_files:
                 open(files)
             return
@@ -447,7 +292,7 @@ pub class CanvasView: Widget:
         if event.cancelled:
             self.cancel()
         elif kind == EventKind.key_down or kind == EventKind.key_up or kind == EventKind.modifiers_changed:
-            self.key(event)
+            self.keys.key(event)
         elif kind == EventKind.scroll or kind == EventKind.magnify:
             self.scroll(event)
         elif kind == EventKind.pointer_down and event.inside:
@@ -456,12 +301,14 @@ pub class CanvasView: Widget:
             self.pointer_x = event.x
             self.pointer_y = event.y
             self.pointer_inside = event.inside
+            let x = self.document_x(event.x)
+            let y = self.document_y(event.y)
             if self.polygon.active:
-                self.polygon.hover(self.document_x(event.x), self.document_y(event.y))
+                self.polygon.hover(x, y)
             if self.magnetic.active:
-                self.magnetic.hover(self.workspace, self.document_x(event.x), self.document_y(event.y))
+                self.magnetic.hover(workspace, x, y)
             if self.pen.drawing and not self.pen.holding():
-                self.pen.hover(self.document_x(event.x), self.document_y(event.y))
+                self.pen.hover(x, y)
             self.drag(event)
         elif kind == EventKind.pointer_up:
             self.release(event)
@@ -469,124 +316,53 @@ pub class CanvasView: Widget:
             self.pointer_inside = false
         self.alt_held = event.alt
         # Sampling for a dialog (On Image, an eyedropper) shows cross hairs, whatever the tool.
-        let sampling = self.workspace.eyedroppers.drag_for != none or self.workspace.eyedroppers.sample_for != none or self.workspace.eyedroppers.range_sample_for != none
-        self.box.set_cursor(Cursor.crosshair if sampling and not self.panning else cursor_for(self.workspace.tools.tool, self.panning, self.space_held, self.workspace.tools.brush.diameter * self.workspace.viewport.zoom < 5.0))
+        let panning = self.pan.panning
+        self.box.set_cursor(Cursor.crosshair if workspace.eyedroppers.armed() and not panning else cursor_for(workspace.tools.tool, panning, self.keys.space_held, workspace.tools.brush.diameter * workspace.viewport.zoom < 5.0))
         self.box.invalidate()
         for linked in self.linked:
             linked.invalidate()
 
     ## The view lost the pointer mid-gesture: end what is in progress.
     func cancel(self) -> unit!:
-        self.panning = false
-        self.shape.cancel()
-        if self.painting:
-            self.painting = false
-            self.workspace.painting.end_stroke()
+        self.pan.panning = false
+        self.shapes.shape.cancel()
+        self.paint.stop(self.context, true)
         self.pointer_inside = false
 
-    func key(self, event: Event) -> unit!:
-        if event.kind == EventKind.key_down:
-            if event.key == Key.space:
-                self.space_held = true
-            elif event.key == Key.escape and self.painting:
-                # Esc drops the stroke in progress.
-                self.painting = false
-                self.workspace.painting.cancel_stroke()
-            elif self.pen.drawing and (event.key == Key.enter or event.key == Key.escape):
-                # The Pen's keys: Enter or Esc ends the path drawn so far.
-                self.pen.finish(self.workspace)
-                if let changed = self.on_changed:
-                    changed()
-            elif self.polygon.active and (event.key == Key.enter or event.key == Key.escape or event.key == Key.backspace or event.key == Key.delete):
-                # The Polygonal Lasso's keys: Enter closes, Esc lets go, Delete takes a corner back.
-                if event.key == Key.enter:
-                    self.polygon.close(self.workspace)
-                elif event.key == Key.escape:
-                    self.polygon.cancel()
-                else:
-                    self.polygon.take_back()
-                if let changed = self.on_changed:
-                    changed()
-            elif self.magnetic.active and (event.key == Key.enter or event.key == Key.escape or event.key == Key.backspace or event.key == Key.delete):
-                # The Magnetic Lasso's keys: Enter closes, Esc lets go, Backspace takes an anchor back.
-                if event.key == Key.enter:
-                    self.magnetic.close(self.workspace)
-                elif event.key == Key.escape:
-                    self.magnetic.cancel(self.workspace)
-                else:
-                    self.magnetic.take_back(self.workspace)
-                if let changed = self.on_changed:
-                    changed()
-            elif (event.key == Key.enter or event.key == Key.escape) and not self.warping and self.workspace.transforms.mesh_warp != none:
-                # Enter keeps a Warp or Puppet Warp; Esc drops it.
-                self.workspace.transforms.finish_mesh_warp(event.key == Key.enter)
-                if let changed = self.on_changed:
-                    changed()
-            elif (event.key == Key.enter or event.key == Key.escape) and not self.boxing and not self.gradient_handle and (self.workspace.transforms.transform != none or self.workspace.image.crop_box != none or self.workspace.painting.gradient != none):
-                # Enter applies a free transform, a live gradient or the crop; Esc drops it.
-                if self.workspace.painting.gradient != none:
-                    self.workspace.painting.finish_gradient(event.key == Key.enter)
-                elif self.workspace.transforms.transform != none:
-                    self.workspace.transforms.finish_transform(event.key == Key.enter)
-                else:
-                    self.workspace.image.finish_crop(event.key == Key.enter)
-                if let changed = self.on_changed:
-                    changed()
-            elif event.key == Key.tab and not event.meta and not event.control and not event.alt and not self.painting:
-                # Tab steps the tool through its modes.
-                self.workspace.tools.cycle_tool_mode()
-                if let changed = self.on_changed:
-                    changed()
-            elif not event.meta and not event.control and not event.repeated and digit_value(event.key) >= 0:
-                self.type_digit(digit_value(event.key))
-            elif event.key == Key.left or event.key == Key.right or event.key == Key.up or event.key == Key.down:
-                self.nudge(event)
-        elif event.kind == EventKind.key_up:
-            if event.key == Key.space:
-                self.space_held = false
-                self.panning = false
-            elif let released = self.on_key_up:
-                released(event.key)
-        else:
-            # Shift or alt pressed or let go mid-drag reshapes the marquee at once.
-            self.selection.modifiers(event.shift, event.alt)
-
     func scroll(self, event: Event) -> unit!:
+        let viewport = self.workspace.viewport
         if event.kind == EventKind.magnify:
             # A touchpad pinch: the magnification change, about the pointer.
-            self.workspace.viewport.zoom_about(1.0 + event.scroll_y, event.x, event.y)
+            viewport.zoom_about(1.0 + event.scroll_y, event.x, event.y)
         elif event.scroll_unit == ScrollUnit.lines and (event.shift or (event.scroll_x != 0.0 and event.scroll_y == 0.0)):
             # Shift-wheel, or a wheel tilted sideways, pans across; a notch is 40 points.
             let across = event.scroll_x if event.scroll_x != 0.0 else event.scroll_y
-            self.workspace.viewport.pan(across * 40.0, 0.0)
+            viewport.pan(across * 40.0, 0.0)
         elif event.scroll_unit == ScrollUnit.lines or event.meta or event.control or event.alt:
             # A notched mouse wheel zooms about the pointer; so does any scroll with cmd, ctrl or alt held.
             let step = 1.0 if event.scroll_unit == ScrollUnit.points else 24.0
-            self.workspace.viewport.zoom_about(math.pow(1.0025, event.scroll_y * step), event.x, event.y)
+            viewport.zoom_about(math.pow(1.0025, event.scroll_y * step), event.x, event.y)
         else:
             # Precise touchpad scrolling pans.
-            self.workspace.viewport.pan(event.scroll_x, event.scroll_y)
+            viewport.pan(event.scroll_x, event.scroll_y)
 
-    ## A press on the canvas starts what the active tool does.
+    ## A press on the canvas: the gestures that come before any tool, then
+    ## the handler of the tool in hand.
     func press(self, event: Event) -> unit!:
         let workspace = self.workspace
+        let context = self.context
         let tool = workspace.tools.tool
-        if event.button == 0 and not self.space_held:
+        let space_held = self.keys.space_held
+        if event.button == 0 and not space_held:
             # A tool used while its key is held springs back when the key is let go.
             workspace.tools.tool_used = true
-        if event.button == 2 or (event.button == 0 and (self.space_held or tool == "hand")):
-            self.panning = true
-            self.last_x = event.x
-            self.last_y = event.y
+        let x = self.document_x(event.x)
+        let y = self.document_y(event.y)
+        if event.button == 2 or (event.button == 0 and (space_held or tool == "hand")):
+            self.pan.press(context, event, x, y)
             return
         if event.button == 1 and brushed(tool):
-            # Right-drag sizes the brush (Shift: its hardness), as Photoshop's
-            # Alt-right-drag does; the outline stays where the drag began.
-            self.sizing = true
-            self.sizing_x = event.x
-            self.sizing_y = event.y
-            self.sizing_diameter = workspace.tools.brush.diameter
-            self.sizing_hardness = workspace.tools.brush.hardness
+            self.sizing.press(context, event, x, y)
             return
         if event.button != 0:
             return
@@ -594,557 +370,52 @@ pub class CanvasView: Widget:
         # zooms; edits wait for it (the status bar says how far it has come).
         if (workspace.canvas.is_opening() or workspace.canvas.refine_keeping()) and tool != "zoom":
             return
-        let x = self.document_x(event.x)
-        let y = self.document_y(event.y)
-        # A free transform or the Crop tool's box takes presses while it is up;
-        # handles answer within 8 points whatever the zoom.
-        let reach = 8.0 / workspace.viewport.zoom
+        let command = event.meta or event.control
+        let boxed = workspace.transforms.transform != none or workspace.image.crop_box != none
         # With the Move tool (or Cmd held) a guide under the pointer is taken up.
-        if (tool == "move" or event.meta or event.control) and workspace.transforms.transform == none and workspace.image.crop_box == none:
-            let guide = self.guides.hit(workspace, x, y, 4.0 / workspace.viewport.zoom)
-            if guide >= 0:
-                self.guides.begin(workspace, guide)
+        if (tool == "move" or command) and not boxed:
+            self.guide_gesture.press(context, event, x, y)
+            if self.guide_gesture.active():
                 return
-        # A warp takes every press while it is up: on its points and pins, or
-        # (Puppet Warp) a new pin.
-        if let warp = workspace.transforms.mesh_warp:
-            self.warping = warp.press(x, y, reach, event.alt)
-            workspace.touch()
+        if workspace.transforms.mesh_warp != none:
+            self.warp.press(context, event, x, y)
             return
-        if workspace.transforms.transform != none or workspace.image.crop_box != none:
-            self.snapper.gather(workspace, workspace.layers.selected_ids(), false)
-        if let session = workspace.transforms.transform:
-            let grab = session.box.hit(x, y, reach)
-            # Alt-dragging inside moves a copy, the original left in place.
-            if grab == grab_move and event.alt:
-                workspace.transforms.duplicate_in_transform()
-            if let carried = workspace.transforms.transform:
-                carried.box.begin(grab, x, y)
-            self.boxing = true
+        if boxed:
+            self.boxes.press(context, event, x, y)
             return
-        if let crop = workspace.image.crop_box:
-            crop.begin(crop.hit(x, y, reach), x, y)
-            self.boxing = true
-            return
-        # Hue/Saturation's on-image adjustment takes the drag while it is armed.
         if workspace.eyedroppers.drag_for != none:
-            self.adjust_dragging = true
-            self.adjust_x = event.x
-            workspace.eyedroppers.adjust_drag(x, y, 0.0, event.meta or event.control, true)
+            self.on_image.press(context, event, x, y)
             return
         # Color Range's eyedropper takes clicks while its dialog is up: a click
         # samples, Shift-click adds, Alt-click subtracts.
         if workspace.eyedroppers.range_sample_to(x, y, event.shift, event.alt):
-            if let changed = self.on_changed:
-                changed()
+            context.changed()
             return
-        # Cmd (Ctrl) held makes most tools the Move tool for the drag, as in Photoshop.
-        let temporary_move = (event.meta or event.control) and tool != "hand" and tool != "zoom"
-        let selecting_tool = tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "wand"
-        # With Show Transform Controls a handle starts a free transform.
-        if tool == "move" and not temporary_move:
-            if let shown = workspace.transforms.controls_box():
-                let grab = shown.hit(x, y, reach)
-                if grab >= 0 and grab < 8 and workspace.transforms.begin_transform():
-                    if let session = workspace.transforms.transform:
-                        session.box.begin(grab, x, y)
-                    self.boxing = true
-                    # The header becomes the transform's, with Apply and Cancel.
-                    if let changed = self.on_changed:
-                        changed()
-                    return
-        if tool == "move" or temporary_move:
-            self.start_move(event)
-        elif selecting_tool and not event.shift and not event.alt and workspace.selection.in_selection(x, y):
-            # Inside the selection a selection tool drags its outline.
-            self.outline_moving = true
-            self.outline_x = x
-            self.outline_y = y
-            self.outline_applied_x = 0
-            self.outline_applied_y = 0
-        elif tool == "zoom":
-            self.zooming = true
-            self.zoom_moved = false
-            self.zoom_out = event.alt
-            self.zoom_x = event.x
-            self.zoom_y = event.y
-            self.zoom_start = workspace.viewport.zoom
-        elif tool == "idle":
-            # The idle tool rests on the canvas and does nothing there.
+        # Cmd (Ctrl) held makes most tools the Move tool for the press, as in Photoshop.
+        if tool == "move" or (command and tool != "hand" and tool != "zoom"):
+            self.move.press(context, event, x, y)
             return
-        elif is_shape(tool):
-            self.shape.begin(tool, x, y)
-        elif tool == "pen":
-            self.pen.press(workspace, x, y, 6.0 / workspace.viewport.zoom)
-        elif tool == "clone" and event.alt:
-            # Alt-click: where the Clone Stamp copies from, as Photoshop's.
-            workspace.painting.set_clone_source(x, y)
-        elif workspace.eyedroppers.sample_to(x, y):
-            # A dialog's eyedropper took the click (Levels' black, gray or white point).
-            if let changed = self.on_changed:
-                changed()
-        elif (tool == "brush" or tool == "pencil" or tool == "gradient") and event.alt:
-            # Alt held: the eyedropper, as Photoshop's brush and gradient take it.
-            workspace.eyedroppers.pick(x, y)
-        elif self.refuses_group(tool):
-            return
-        elif tool == "gradient":
-            # A live gradient's handle moves that end; elsewhere a new one starts.
-            if let edit = workspace.painting.gradient:
-                edit.grabbed = edit.hit(x, y, reach)
-                if edit.grabbed >= 0:
-                    self.gradient_handle = true
-                    return
-            self.gradient_dragging = true
-            self.gradient_x = x
-            self.gradient_y = y
-        elif tool == "eyedropper" or workspace.colors.sampling:
-            self.ringing = true
-            self.ring_before = Color(workspace.colors.red, workspace.colors.green, workspace.colors.blue)
-            workspace.eyedroppers.pick(x, y)
-        elif tool == "text":
-            # Where the press was: let go there, a point; dragged, a box.
-            self.text_dragging = true
-            self.gradient_x = x
-            self.gradient_y = y
-        elif tool == "wand":
-            workspace.selection.select_wand(x, y, workspace.tools.selecting.mode_for(event.shift, event.alt))
-        elif tool == "polygon":
-            self.polygon.click(workspace, x, y, event.shift, event.alt, 6.0 / workspace.viewport.zoom, time.now() // 1000000)
-        elif tool == "magnetic":
-            self.magnetic.click(workspace, x, y, event.shift, event.alt, workspace.viewport.zoom, 6.0 / workspace.viewport.zoom, time.now() // 1000000)
-        elif tool == "marquee" or tool == "ellipse" or tool == "lasso":
-            # A marquee's corners pull to the canvas, the guides and the layers.
-            self.snapper.gather(workspace, [], tool != "lasso")
-            let marquee = tool != "lasso"
-            self.selection.begin(workspace, self.snapper.snap_x(x) if marquee else x, self.snapper.snap_y(y) if marquee else y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
-        else:
-            self.begin_painting(x, y, event.shift, pen_of(event, event_time()))
+        let handler = self.handlers[tool] else self.paint
+        handler.press(context, event, x, y)
 
-    ## Whether `tool` needs pixels and the selected layer is a group, which has
-    ## none: then say so, as Photoshop does, and do nothing.
-    func refuses_group(self, tool: str) -> bool!:
-        let paints = tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
-        # A group's mask is painted like any other.
-        if not paints or not self.workspace.canvas.layer_is_group(self.workspace.layers.selected):
-            return false
-        if self.workspace.canvas.editing_mask() and self.workspace.canvas.layer_masked(self.workspace.layers.selected) and tool != "text":
-            return false
-        if let refused = self.on_refused:
-            refused("The layer is a group: pick a layer inside it to paint on")
-        return true
-
-    ## Start painting at a document point. With Shift, a straight line first
-    ## runs from where the last stroke ended, and the stroke keeps to one axis.
-    func begin_painting(self, x: float, y: float, shift: bool, pen: PenSample) -> unit!:
-        let workspace = self.workspace
-        if shift and self.has_stroke_end:
-            workspace.painting.begin_stroke(self.stroke_end_x, self.stroke_end_y, pen)
-            workspace.painting.extend_stroke(x, y, pen)
-        else:
-            workspace.painting.begin_stroke(x, y, pen)
-        self.painting = workspace.canvas.painting()
-        self.axis = 0 if shift else -1
-        self.stroke_x = x
-        self.stroke_y = y
-
-    ## A stroke point kept to the stroke's axis once it has one: Shift-drag
-    ## chooses horizontal or vertical by the first few pixels of travel.
-    func on_axis(self, x: float, y: float) -> Point:
-        if self.axis == 0:
-            let dx = math.abs(x - self.stroke_x)
-            let dy = math.abs(y - self.stroke_y)
-            if (dx + dy) * self.workspace.viewport.zoom >= 4.0:
-                self.axis = 1 if dx >= dy else 2
-        if self.axis == 1:
-            return Point(x, self.stroke_y)
-        if self.axis == 2:
-            return Point(self.stroke_x, y)
-        return Point(x, y)
-
-    ## A number key, as Photoshop's: 1..9 set 10%..90% and 0 sets 100%; two
-    ## digits within half a second set that exact percentage (0 then 5: 5%).
-    ## Painting tools take it as the brush's opacity, the others as every
-    ## selected layer's.
-    func type_digit(self, value: int) -> unit!:
-        let fraction = self.opacity_keys.typed(value, time.now() // 1000000)
-        let workspace = self.workspace
-        let tool = workspace.tools.tool
-        if tool == "brush" or tool == "eraser" or tool == "gradient" or tool == "clone" or tool == "heal" or tool == "smear":
-            workspace.tools.brush.opacity = math.max(0.01, fraction)
-            workspace.touch()
-        else:
-            set_opacity_all(workspace, fraction)
-        if let changed = self.on_changed:
-            changed()
-
-    ## A Move tool press: the selected pixels when there is a selection (Alt
-    ## copies them), else the whole layer (Alt moves a copy of it). With
-    ## Auto-Select, or Cmd held with the Move tool, the press first picks the
-    ## top layer with pixels under it.
-    func start_move(self, event: Event) -> unit!:
-        let workspace = self.workspace
-        let command = event.meta or event.control
-        if command and event.shift:
-            # Cmd-Shift-click adds the layer under the pointer to the selection.
-            workspace.layers.pick_layer(self.document_x(event.x), self.document_y(event.y), true)
-            if let changed = self.on_changed:
-                changed()
-            return
-        if workspace.tools.tool == "move" and (workspace.tools.auto_select or command):
-            workspace.layers.pick_layer(self.document_x(event.x), self.document_y(event.y))
-            if let changed = self.on_changed:
-                changed()
-        # On a vector layer the press picks the element under it, which then moves
-        # alone; a press on none of them moves the whole layer.
-        let on_element = not workspace.canvas.has_selection() and not event.alt and pick_element(workspace, self.document_x(event.x), self.document_y(event.y), 4.0 / workspace.viewport.zoom)
-        if on_element:
-            if let changed = self.on_changed:
-                changed()
-        if event.alt and not workspace.canvas.has_selection():
-            workspace.edits.duplicate()
-        self.move_element = on_element
-        self.moving = true
-        self.move_x = event.x
-        self.move_y = event.y
-        self.move_now_x = event.x
-        self.move_now_y = event.y
-        self.move_shown_x = 0
-        self.move_shown_y = 0
-        self.move_copy = event.alt
-        self.move_pixels = self.workspace.canvas.has_selection()
-        # What is moved snaps by its edges and middle: the selection's box, or the layers'.
-        let ids = workspace.layers.moving_ids()
-        self.snapper.gather(workspace, ids, true)
-        if let found = box_around(workspace.canvas, ids):
-            self.move_left = found.left
-            self.move_top = found.top
-            self.move_right = found.left + found.width
-            self.move_bottom = found.top + found.height
-        else:
-            self.snapper.enabled = false
-        if self.move_pixels:
-            self.workspace.previews.begin_preview() catch failure:
-                discard(failure)
-                self.move_pixels = false
-
-    ## View points moved as whole document pixels.
-    func move_whole(self, points: float) -> int:
-        return int(math.floor(points / self.workspace.viewport.zoom + 0.5))
-
-    ## Arrows nudge a pixel, Shift ten: the selected pixels with the Move tool
-    ## or Cmd held with any tool (or the layer with no selection), the outline
-    ## with a selection tool.
-    func nudge(self, event: Event) -> unit!:
-        let step = 10 if event.shift else 1
-        let dx = -step if event.key == Key.left else (step if event.key == Key.right else 0)
-        let dy = -step if event.key == Key.up else (step if event.key == Key.down else 0)
-        let workspace = self.workspace
-        let tool = workspace.tools.tool
-        let selection = workspace.canvas.has_selection()
-        if tool == "move" or event.meta or event.control:
-            if selection:
-                workspace.selection.move_selected_pixels(dx, dy, false)
-            else:
-                workspace.edits.move_layer(dx, dy)
-        elif selection and (tool == "marquee" or tool == "ellipse" or tool == "lasso" or tool == "polygon" or tool == "magnetic" or tool == "wand"):
-            workspace.selection.move_selection(dx, dy)
-
-    ## A free transform's or the Crop tool's box dragged to a document point.
-    func drag_box(self, x: float, y: float, shift: bool, alt: bool, distort: bool) -> unit!:
-        # Handles pull to what snaps; a box moved whole keeps its offset to the pointer.
-        let snapped_x = self.snapper.snap_x(x)
-        let snapped_y = self.snapper.snap_y(y)
-        if let session = self.workspace.transforms.transform:
-            let moving = session.box.grabbed == grab_move or session.box.grabbed == grab_turn
-            session.box.drag(x if moving else snapped_x, y if moving else snapped_y, shift, alt, distort and session.distorts())
-            self.workspace.transforms.preview_transform()
-            return
-        if let crop = self.workspace.image.crop_box:
-            crop.drag(snapped_x, snapped_y, shift, alt)
-
-    func end_box(self):
-        if let session = self.workspace.transforms.transform:
-            session.box.end()
-            return
-        if let crop = self.workspace.image.crop_box:
-            crop.end()
-
-    ## A free transform's box, else the Crop tool's, else the Move tool's transform controls, over the view.
-    func draw_box(self, painter: Painter, width: float, height: float) -> unit!:
-        let workspace = self.workspace
-        if let edit = workspace.painting.gradient:
-            edit.draw(painter, workspace.viewport.zoom, workspace.viewport.offset_x, workspace.viewport.offset_y, theme.text(), theme.backdrop())
-        if let session = workspace.transforms.transform:
-            session.box.draw(painter, workspace.viewport.zoom, workspace.viewport.offset_x, workspace.viewport.offset_y, theme.text(), theme.backdrop())
-            return
-        if let warp = workspace.transforms.mesh_warp:
-            warp.draw(painter, workspace.viewport.zoom, workspace.viewport.offset_x, workspace.viewport.offset_y, theme.text(), theme.backdrop())
-            return
-        if let crop = workspace.image.crop_box:
-            crop.draw(painter, width, height, workspace.viewport.zoom, workspace.viewport.offset_x, workspace.viewport.offset_y, theme.text(), theme.backdrop())
-            # While it is dragged, its size beside its bottom-right corner, as Photoshop shows it.
-            if crop.grabbed >= 0:
-                if let font = self.font:
-                    let label = f"{int(math.abs(crop.right - crop.left))} × {int(math.abs(crop.bottom - crop.top))} px"
-                    let x = math.max(crop.left, crop.right) * workspace.viewport.zoom + workspace.viewport.offset_x + 10.0
-                    let y = math.max(crop.top, crop.bottom) * workspace.viewport.zoom + workspace.viewport.offset_y + 10.0
-                    painter.rectangle(Rect(x - 4.0, y - 2.0, font.measure(label) + 8.0, font.line_height() + 4.0), theme.backdrop())
-                    painter.text(label, x, y, theme.text(), font)
-            return
-        # Not while a move is dragged: the box stays where the layer was.
-        if not self.moving:
-            if let shown = workspace.transforms.controls_box():
-                shown.draw(painter, workspace.viewport.zoom, workspace.viewport.offset_x, workspace.viewport.offset_y, theme.text(), theme.backdrop())
-
-    ## The pointer moved: carry on the gesture in progress.
+    ## The pointer moved: carry on the gesture under way.
     func drag(self, event: Event) -> unit!:
-        if self.ringing:
-            self.workspace.eyedroppers.pick(self.document_x(event.x), self.document_y(event.y))
-            return
-        if self.sizing:
-            # Right is bigger, a point a pixel at 100%; with Shift, up is harder.
-            let brush = self.workspace.tools.brush
-            brush.diameter = math.clamp(self.sizing_diameter + (event.x - self.sizing_x) / self.workspace.viewport.zoom, 1.0, max_brush)
-            if event.shift:
-                brush.hardness = math.clamp(self.sizing_hardness - (event.y - self.sizing_y) / 200.0, 0.0, 1.0)
-            self.workspace.touch()
-            return
-        if self.adjust_dragging:
-            self.workspace.eyedroppers.adjust_drag(0.0, 0.0, event.x - self.adjust_x, event.meta or event.control, false)
-            return
-        if self.shape.active:
-            self.shape.drag(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt)
-            return
-        if self.pen.holding():
-            self.pen.drag(self.document_x(event.x), self.document_y(event.y), event.alt, 6.0 / self.workspace.viewport.zoom)
-            return
-        if self.guides.active:
-            # Over a ruler (past the view's top or left edge) a guide goes when let go.
-            self.guides.drag(self.document_x(event.x), self.document_y(event.y), event.x < 0.0 or event.y < 0.0)
-        elif self.gradient_handle:
-            if let edit = self.workspace.painting.gradient:
-                edit.drag(self.document_x(event.x), self.document_y(event.y), event.shift)
-        elif self.gradient_dragging:
-            # Once the pointer has left the press, the gradient shows live, its end following.
-            let x = self.document_x(event.x)
-            let y = self.document_y(event.y)
-            if (math.abs(x - self.gradient_x) + math.abs(y - self.gradient_y)) * self.workspace.viewport.zoom >= 3.0:
-                self.gradient_dragging = false
-                self.workspace.painting.begin_gradient(self.gradient_x, self.gradient_y, x, y)
-                if let edit = self.workspace.painting.gradient:
-                    edit.grabbed = 1
-                    edit.drag(x, y, event.shift)
-                    self.gradient_handle = true
-        elif self.warping:
-            if let warp = self.workspace.transforms.mesh_warp:
-                warp.drag(self.document_x(event.x), self.document_y(event.y))
-                self.workspace.touch()
-        elif self.boxing:
-            # Cmd (Ctrl) on a corner distorts, Cmd+Shift on a side skews, Cmd+Alt+Shift on a corner is perspective.
-            self.drag_box(self.document_x(event.x), self.document_y(event.y), event.shift, event.alt, event.meta or event.control)
-        elif self.panning:
-            self.workspace.viewport.pan(event.x - self.last_x, event.y - self.last_y)
-            self.last_x = event.x
-            self.last_y = event.y
-        elif self.painting:
-            let point = self.on_axis(self.document_x(event.x), self.document_y(event.y))
-            self.workspace.painting.extend_stroke(point.x, point.y, pen_of(event, event_time()))
-        elif self.zooming:
-            # Scrubby zoom: every 100 points right doubles, left halves.
-            let dx = event.x - self.zoom_x
-            if math.abs(dx) >= 3.0:
-                self.zoom_moved = true
-            if self.zoom_moved:
-                self.workspace.viewport.zoom_about(self.zoom_start * math.pow(2.0, dx / 100.0) / self.workspace.viewport.zoom, self.zoom_x, self.zoom_y)
-        elif self.selection.active:
-            let marquee = not self.selection.lasso
-            let x = self.document_x(event.x)
-            let y = self.document_y(event.y)
-            self.selection.drag(self.workspace, self.snapper.snap_x(x) if marquee else x, self.snapper.snap_y(y) if marquee else y, event.shift, event.alt)
-        elif self.moving:
-            self.moved_to(event)
-            if self.move_pixels:
-                let dx = self.move_whole(self.move_now_x - self.move_x)
-                let dy = self.move_whole(self.move_now_y - self.move_y)
-                if dx != self.move_shown_x or dy != self.move_shown_y:
-                    self.workspace.selection.preview_move_selected(dx, dy, self.move_copy)
-                    self.move_shown_x = dx
-                    self.move_shown_y = dy
-        elif self.outline_moving:
-            let dx = int(math.floor(self.document_x(event.x) - self.outline_x + 0.5))
-            let dy = int(math.floor(self.document_y(event.y) - self.outline_y + 0.5))
-            if dx != self.outline_applied_x or dy != self.outline_applied_y:
-                self.workspace.selection.move_selection(dx - self.outline_applied_x, dy - self.outline_applied_y)
-                self.outline_applied_x = dx
-                self.outline_applied_y = dy
-
-    ## The Text tool let go at (`x`, `y`): a click on a text layer edits it; a
-    ## click elsewhere starts point text; a drag, text in a box that wide.
-    func place_text(self, x: float, y: float) -> unit!:
-        let workspace = self.workspace
-        let x0 = self.gradient_x
-        let y0 = self.gradient_y
-        let dragged = math.abs(x - x0) * workspace.viewport.zoom > 4.0
-        if not dragged:
-            let index = workspace.layers.text_layer_at(x0, y0, 6.0 / workspace.viewport.zoom)
-            if index >= 0:
-                if let edit = self.on_edit_text:
-                    edit(index)
-                return
-        if let place = self.on_text:
-            place(math.min(x0, x) if dragged else x0, math.min(y0, y) if dragged else y0, math.abs(x - x0) if dragged else 0.0)
-
-    ## Where a move has got to: the pointer, kept to an axis with Shift, and
-    ## pulled so the moved box's edges or middle meet what snaps.
-    func moved_to(self, event: Event):
-        self.move_now_x = event.x
-        self.move_now_y = event.y
-        if event.shift:
-            # Shift keeps the move to the axis it goes further along.
-            if math.abs(event.x - self.move_x) >= math.abs(event.y - self.move_y):
-                self.move_now_y = self.move_y
-            else:
-                self.move_now_x = self.move_x
-        let zoom = self.workspace.viewport.zoom
-        let dx = (self.move_now_x - self.move_x) / zoom
-        let dy = (self.move_now_y - self.move_y) / zoom
-        self.move_now_x += self.snapper.shift_x(self.move_left + dx, self.move_right + dx) * zoom
-        self.move_now_y += self.snapper.shift_y(self.move_top + dy, self.move_bottom + dy) * zoom
-
-    ## The button let go: finish the gesture in progress.
-    func release(self, event: Event) -> unit!:
-        let workspace = self.workspace
-        if self.ringing:
-            self.ringing = false
-            if let changed = self.on_changed:
-                changed()
-            return
-        if self.sizing and event.button == 1:
-            self.sizing = false
-            if let changed = self.on_changed:
-                changed()
-            return
         let x = self.document_x(event.x)
         let y = self.document_y(event.y)
-        self.panning = false
-        if self.adjust_dragging:
-            self.adjust_dragging = false
-            if let changed = self.on_changed:
-                changed()
-            return
-        if self.shape.active:
-            self.shape.drag(x, y, event.shift, event.alt)
-            self.shape.finish(workspace)
-            if let changed = self.on_changed:
-                changed()
-            return
-        if self.pen.holding():
-            self.pen.drag(x, y, event.alt, 6.0 / workspace.viewport.zoom)
-            self.pen.release(workspace)
-            if let changed = self.on_changed:
-                changed()
-            return
-        if self.guides.active:
-            self.guides.finish(workspace)
-        elif self.warping:
-            self.warping = false
-            if let warp = workspace.transforms.mesh_warp:
-                warp.release()
-        elif self.boxing:
-            self.boxing = false
-            self.end_box()
-            # The header's size readout follows the box once it is let go.
-            if workspace.image.crop_box != none:
-                if let changed = self.on_changed:
-                    changed()
-        elif self.zooming:
-            self.zooming = false
-            if not self.zoom_moved:
-                workspace.viewport.zoom_step(-1 if self.zoom_out else 1, self.zoom_x, self.zoom_y)
-        elif self.moving:
-            self.moving = false
-            self.moved_to(event)
-            let dx = self.move_whole(self.move_now_x - self.move_x)
-            let dy = self.move_whole(self.move_now_y - self.move_y)
-            if self.move_pixels:
-                self.move_pixels = false
-                if dx == 0 and dy == 0:
-                    workspace.previews.end_preview(false)
-                else:
-                    workspace.selection.preview_move_selected(dx, dy, self.move_copy)
-                    workspace.previews.end_preview(true)
-                    workspace.selection.move_selection(dx, dy)
-            else:
-                workspace.edits.move_layer(dx, dy)
-        elif self.outline_moving:
-            self.outline_moving = false
-            if self.outline_applied_x == 0 and self.outline_applied_y == 0:
-                # A click without a drag: the wand selects there, the others deselect.
-                if workspace.tools.tool == "wand":
-                    workspace.selection.select_wand(x, y, 0)
-                else:
-                    workspace.selection.deselect()
-        elif self.text_dragging:
-            self.text_dragging = false
-            self.place_text(x, y)
-        elif self.gradient_handle:
-            self.gradient_handle = false
-            if let edit = workspace.painting.gradient:
-                edit.grabbed = -1
-        elif self.gradient_dragging:
-            # A click without a drag keeps the live gradient, if one is up.
-            self.gradient_dragging = false
-            workspace.painting.finish_gradient(true)
-        elif self.selection.active:
-            self.selection.finish(workspace, x, y, event.shift, event.alt)
-        elif self.painting:
-            self.painting = false
-            let point = self.on_axis(x, y)
-            workspace.painting.extend_stroke(point.x, point.y, pen_of(event, event_time()))
-            workspace.painting.end_stroke()
-            self.stroke_end_x = point.x
-            self.stroke_end_y = point.y
-            self.has_stroke_end = true
+        for gesture in self.gestures:
+            if gesture.active():
+                gesture.drag(self.context, event, x, y)
+                return
 
-## Whether `tool` paints with the brush's tip, and so shows its outline.
-func brushed(tool: str) -> bool:
-    return tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
-
-## The digit a number key types, or -1.
-pub func digit_value(key: Key) -> int:
-    if key == Key.digit_0:
-        return 0
-    if key == Key.digit_1:
-        return 1
-    if key == Key.digit_2:
-        return 2
-    if key == Key.digit_3:
-        return 3
-    if key == Key.digit_4:
-        return 4
-    if key == Key.digit_5:
-        return 5
-    if key == Key.digit_6:
-        return 6
-    if key == Key.digit_7:
-        return 7
-    if key == Key.digit_8:
-        return 8
-    if key == Key.digit_9:
-        return 9
-    return -1
-
-## A texel index kept inside a 256-texel checker tile, leaving room for one texel.
-pub func clamp_texel(value: int) -> int:
-    return value if value >= 0 and value <= 255 else (0 if value < 0 else 255)
-
-## Texels from `start` to `end`, at least one and not past the tile.
-pub func texel_span(start: int, end: int) -> int:
-    let span = end - start
-    if span < 1:
-        return 1
-    return span if span <= 256 - start else 256 - start
+    ## The button let go: finish the gesture under way.
+    func release(self, event: Event) -> unit!:
+        let x = self.document_x(event.x)
+        let y = self.document_y(event.y)
+        self.pan.panning = false
+        for gesture in self.gestures:
+            if gesture.active():
+                gesture.release(self.context, event, x, y)
+                return
 
 ## How far to pan this frame for a pointer at `at` along a view `length`
 ## long: nothing inside, a fifth of the overshoot past an edge, at most 40.
@@ -1154,7 +425,3 @@ func past_edge(at: float, length: float) -> float:
     if at > length:
         return math.min(40.0, (at - length) * 0.2)
     return 0.0
-
-## Now in milliseconds, for a stroke point's pen: its velocity reads the time.
-func event_time() -> float:
-    return float(time.now() // 1000) / 1000.0

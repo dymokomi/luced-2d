@@ -1,0 +1,39 @@
+## The Text tool: let go where it was pressed, a click on a text layer edits
+## it and a click elsewhere starts point text; dragged, text in a box that
+## wide.
+from ui import Event
+from tool_handler import ToolHandler, ToolContext
+import math
+
+pub class TextTool: ToolHandler:
+    var pressed: bool = false
+    var start_x: float = 0.0
+    var start_y: float = 0.0
+
+    pub func active(self) -> bool:
+        return self.pressed
+
+    pub func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        if context.dialog_sample(x, y) or context.refuses_group("text") or context.picker_sample(event, x, y):
+            return
+        self.pressed = true
+        self.start_x = x
+        self.start_y = y
+
+    pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        return
+
+    pub func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:
+        self.pressed = false
+        let workspace = context.workspace
+        let x0 = self.start_x
+        let y0 = self.start_y
+        let dragged = math.abs(x - x0) * workspace.viewport.zoom > 4.0
+        if not dragged:
+            let index = workspace.layers.text_layer_at(x0, y0, 6.0 / workspace.viewport.zoom)
+            if index >= 0:
+                if let edit = context.on_edit_text:
+                    edit(index)
+                return
+        if let place = context.on_text:
+            place(math.min(x0, x) if dragged else x0, math.min(y0, y) if dragged else y0, math.abs(x - x0) if dragged else 0.0)

@@ -1,0 +1,87 @@
+## How the canvas view hands input to its tools. A press goes to the handler
+## of the tool in hand (view.luc keeps one per tool family); a handler that
+## starts a gesture reports it `active`, and the drags and the release go to
+## the active one. The handlers share a `ToolContext`: the workspace, what
+## pulls while a gesture snaps, and the callbacks to the window.
+from ui import Event
+from workspace import Workspace
+from snapping import Snapper
+import time
+
+pub interface ToolHandler:
+    ## Whether a gesture this handler started is under way.
+    func active(self) -> bool
+    ## A primary-button press at document point (`x`, `y`).
+    func press(self, context: ToolContext, event: Event, x: float, y: float) -> unit!
+    ## The pointer moved while the gesture is under way.
+    func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!
+    ## The button let go: the gesture ends.
+    func release(self, context: ToolContext, event: Event, x: float, y: float) -> unit!
+
+pub class ToolContext:
+    pub let workspace: Workspace
+    ## What pulls while a gesture snaps: the canvas, the guides, the layers.
+    pub let snapper: Snapper
+    ## Something the window shows changed (the header, the layers).
+    pub var on_changed: func() -> unit!? = none
+    ## Something a press could not do, said to the user: painting on a group.
+    pub var on_refused: func(str) -> unit!? = none
+    ## The Text tool: a new text layer at (x, y) wrapping in a box that wide
+    ## (0: point text), or the text layer at an index edited.
+    pub var on_text: func(float, float, float) -> unit!? = none
+    pub var on_edit_text: func(int) -> unit!? = none
+    ## The Eyedropper's handler: a painting or selection tool hands it the
+    ## press while the color picker samples from the canvas.
+    pub var eyedropper: ToolHandler? = none
+
+    pub func init(self, workspace: Workspace):
+        self.workspace = workspace
+        self.snapper = Snapper()
+
+    pub func changed(self) -> unit!:
+        if let changed = self.on_changed:
+            changed()
+
+    ## A dialog's eyedropper (Levels' black, gray or white point) takes the
+    ## click, whatever pixel tool is in hand; false when none waits.
+    pub func dialog_sample(self, x: float, y: float) -> bool!:
+        if not self.workspace.eyedroppers.sample_to(x, y):
+            return false
+        self.changed()
+        return true
+
+    ## Whether `tool` needs pixels and the selected layer is a group, which has
+    ## none: then say so, as Photoshop does, and do nothing.
+    pub func refuses_group(self, tool: str) -> bool!:
+        let paints = tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "gradient" or tool == "text" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
+        let canvas = self.workspace.canvas
+        let selected = self.workspace.layers.selected
+        # A group's mask is painted like any other.
+        if not paints or not canvas.layer_is_group(selected):
+            return false
+        if canvas.editing_mask() and canvas.layer_masked(selected) and tool != "text":
+            return false
+        if let refused = self.on_refused:
+            refused("The layer is a group: pick a layer inside it to paint on")
+        return true
+
+    ## While the color picker samples from the canvas, a press samples as the
+    ## Eyedropper's does; true when it took the press.
+    pub func picker_sample(self, event: Event, x: float, y: float) -> bool!:
+        if not self.workspace.colors.sampling:
+            return false
+        let eyedropper = self.eyedropper else return false
+        eyedropper.press(self, event, x, y)
+        return true
+
+## Whether `tool` paints with the brush's tip, and so shows its outline.
+pub func brushed(tool: str) -> bool:
+    return tool == "brush" or tool == "pencil" or tool == "eraser" or tool == "clone" or tool == "heal" or tool == "smear" or tool == "dodge" or tool == "burn"
+
+## Now in milliseconds, for a stroke point's pen: its velocity reads the time.
+pub func event_time() -> float:
+    return float(time.now() // 1000) / 1000.0
+
+## Now in milliseconds as a whole number, for double clicks.
+pub func now_ms() -> int:
+    return time.now() // 1000000
