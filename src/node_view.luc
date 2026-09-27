@@ -14,6 +14,11 @@ from node_gestures import NodeGestures
 import theme
 import math
 
+## The node text's size at 100%, and the smallest it is drawn at: below that
+## the rows go and the titles stay, at this size.
+let text_size: float = 14.0
+let smallest_text: float = 9.0
+
 ## A port's square, in view points.
 let port_size: float = 8.0
 ## Segments a wire's curve is drawn in.
@@ -23,6 +28,9 @@ pub class NodeView: Widget:
     let box: Layout
     pub let workspace: Workspace
     let font: Font
+    ## The node text at each whole size it has been drawn at, made when first wanted.
+    var sized: list[Font]
+    var sizes: list[int]
     pub let layout_state: NodeLayout
     pub let gestures: NodeGestures
     ## The last press, for the add menus to put a node there (view points).
@@ -37,6 +45,8 @@ pub class NodeView: Widget:
     pub func init(self, workspace: Workspace, font: Font) -> unit!:
         self.workspace = workspace
         self.font = font
+        self.sized = []
+        self.sizes = []
         self.layout_state = NodeLayout(workspace)
         self.gestures = NodeGestures()
         self.box = Layout()
@@ -142,13 +152,18 @@ pub class NodeView: Widget:
         let edge = 2.0 if picked else 1.0
         painter.rectangle(Rect(origin.x - edge, origin.y - edge, w + edge * 2.0, h + edge * 2.0), self.workspace.look.accent if picked else theme.grey(20.0))
         painter.rectangle(Rect(origin.x, origin.y, w, h), theme.surface_raised())
-        painter.rectangle(Rect(origin.x, origin.y, w, title_height * state.zoom), theme.grey(74.0))
+        # The text follows the zoom, to a smallest legible size; there the
+        # title stays, shortened to the box, its bar as tall as it needs,
+        # and the rows go.
+        let wanted = text_size * state.zoom
+        let font = self.font_at(math.max(smallest_text, wanted))
+        let bar = math.min(h, math.max(title_height * state.zoom, font.height() + 4.0))
+        painter.rectangle(Rect(origin.x, origin.y, w, bar), theme.grey(74.0))
         # The strip on the left of the title says what the node makes.
-        painter.rectangle(Rect(origin.x, origin.y, 3.0, title_height * state.zoom), self.port_color(info.output) if info.output >= 0 else theme.text())
-        if state.zoom >= 0.45:
-            painter.text(info.title, origin.x + 10.0, origin.y + (title_height * state.zoom - 14.0) * 0.5, theme.text(), self.font)
-        # The font keeps its size: below 75% the rows would overprint.
-        let labels = state.zoom >= 0.75
+        painter.rectangle(Rect(origin.x, origin.y, 3.0, bar), self.port_color(info.output) if info.output >= 0 else theme.text())
+        let title = fitted(info.title, font, w - 12.0)
+        painter.text(title, origin.x + 8.0, origin.y + (bar - font.height()) * 0.5, theme.text(), font)
+        let labels = wanted >= smallest_text
         let place = state.graph.place_of(node.id)
         var port = 0
         while port < info.inputs.length:
@@ -157,20 +172,36 @@ pub class NodeView: Widget:
             let wired = state.graph.link_into(node.id, port) >= 0
             self.draw_port(painter, at, input.port_type, wired)
             if labels:
-                painter.text(input.name, at.x + 10.0, at.y - 8.0, theme.text_muted(), self.font)
+                painter.text(input.name, at.x + 10.0 * state.zoom, at.y - font.height() * 0.5, theme.text_muted(), font)
                 # A socket's own value shows until a wire drives it.
                 if input.slot >= 0 and not wired and input.port_type == port_color:
                     let r = node_value(self.workspace, place, input.slot)
                     let g = node_value(self.workspace, place, input.slot + 1)
                     let b = node_value(self.workspace, place, input.slot + 2)
-                    painter.rectangle(Rect(at.x + w - 38.0, at.y - 6.0, 18.0, 12.0), theme.grey(20.0))
-                    painter.rectangle(Rect(at.x + w - 37.0, at.y - 5.0, 16.0, 10.0), Color(r, g, b))
+                    let z = state.zoom
+                    painter.rectangle(Rect(at.x + w - 38.0 * z, at.y - 6.0 * z, 18.0 * z, 12.0 * z), theme.grey(20.0))
+                    painter.rectangle(Rect(at.x + w - 37.0 * z, at.y - 5.0 * z, 16.0 * z, 10.0 * z), Color(r, g, b))
                 elif input.slot >= 0 and not wired:
                     let text = shown_number(node_value(self.workspace, place, input.slot), whole(info, input.slot))
-                    painter.text(text, at.x + w - 12.0 - self.font.measure(text), at.y - 8.0, theme.text(), self.font)
+                    painter.text(text, at.x + w - 12.0 * state.zoom - font.measure(text), at.y - font.height() * 0.5, theme.text(), font)
             port += 1
         if info.output >= 0:
             self.draw_port(painter, state.to_screen(state.output_at(node)), info.output, true)
+
+    ## The node font at `size` points, to the nearest whole size.
+    func font_at(self, size: float) -> Font!:
+        let rounded = int(math.round(size))
+        if rounded == int(text_size):
+            return self.font
+        var at = 0
+        while at < self.sizes.length:
+            if self.sizes[at] == rounded:
+                return self.sized[at]
+            at += 1
+        let made = Font(size = float(rounded))
+        self.sized.append(made)
+        self.sizes.append(rounded)
+        return made
 
     ## A port: a square of its type's color, hollow when nothing is wired to it.
     func draw_port(self, painter: Painter, at: Point, port_type: int, filled: bool) -> unit!:
@@ -232,6 +263,18 @@ pub class NodeView: Widget:
         if changed:
             if let tell = self.on_changed:
                 tell()
+
+## `text` shortened with an ellipsis to fit `width` points in `font`.
+func fitted(text: str, font: Font, width: float) -> str!:
+    if font.measure(text) <= width:
+        return text
+    var kept = text.length
+    while kept > 1:
+        kept -= 1
+        let shorter = text[0..<kept] + "…"
+        if font.measure(shorter) <= width:
+            return shorter
+    return text[0..<1]
 
 ## Whether parameter slot `slot` of a kind counts whole.
 func whole(info: KindInfo, slot: int) -> bool:

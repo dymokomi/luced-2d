@@ -125,7 +125,7 @@ pub class NodeLayout:
         let margin = 32.0
         self.zoom = math.clamp(math.min((width - margin * 2.0) / math.max(1.0, right - left), (height - margin * 2.0) / math.max(1.0, bottom - top)), 0.2, 1.0)
         # Nearly fitting, it stays large enough to read, its edges a little out.
-        if self.zoom > 0.6:
+        if self.zoom > 0.55:
             self.zoom = math.max(self.zoom, 0.8)
         self.pan_x = (width - (right - left) * self.zoom) * 0.5 - left * self.zoom
         self.pan_y = (height - (bottom - top) * self.zoom) * 0.5 - top * self.zoom
