@@ -12,6 +12,7 @@ from kit import Kit, SliderField
 from dynamics_rows import DynamicsRow
 from mask_editor import MaskEditor
 from brush_mask import BrushMask
+from brush_files import brush_mask_of
 from brush import Brush
 
 pub class BrushSettings:
@@ -253,7 +254,7 @@ pub class BrushSettings:
 ## as a brush image: Define Brush Preset's tip.
 pub func define_tip(workspace: Workspace) -> BrushMask!:
     let picture = workspace.canvas.selection_image(workspace.layers.selected_id(), merged = true)
-    return BrushMask.from_image(picture)
+    return brush_mask_of(picture)
 
 ## The names, in their index order.
 func texture_names() -> list[str]:

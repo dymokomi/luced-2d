@@ -6,6 +6,7 @@
 from toml import Table
 from brush import Brush, max_brush
 from brush_mask import BrushMask
+from brush_files import open_brush_mask, save_brush_mask, brush_mask_png_text, brush_mask_from_png_text
 from brush_dynamics import no_mappings, control_ids, parameter_ids
 from files import Entries
 import files
@@ -55,9 +56,9 @@ pub func load_brush(library: str, folder: str) -> SavedBrush!:
     let table = Table(text)
     let brush = brush_of(table)
     if table.boolean("tip.image", false):
-        brush.tip = BrushMask.open(paths.join(place, "tip.png"))
+        brush.tip = open_brush_mask(paths.join(place, "tip.png"))
     if table.boolean("texture.image", false):
-        brush.texture_image = BrushMask.open(paths.join(place, "texture.png"))
+        brush.texture_image = open_brush_mask(paths.join(place, "texture.png"))
     return SavedBrush(table.string("name", folder), folder, brush)
 
 ## Keep `saved` in its folder under `library`, replacing what was there.
@@ -96,9 +97,9 @@ pub func free_folder(library: str, name: str) -> str!:
 pub func export_brush(brush: Brush, name: str, path: str) -> unit!:
     var text = brush_text(brush, name)
     if let tip = brush.tip:
-        text = text + "#@ tip.png\n" + tip.png_text() + "\n"
+        text = text + "#@ tip.png\n" + brush_mask_png_text(tip) + "\n"
     if let image = brush.texture_image:
-        text = text + "#@ texture.png\n" + image.png_text() + "\n"
+        text = text + "#@ texture.png\n" + brush_mask_png_text(image) + "\n"
     files.write_text(path, text)
 
 ## The brush a `.l2dbrush` file at `path` holds; its name is the file's.
@@ -108,9 +109,9 @@ pub func import_brush(path: str) -> SavedBrush!:
     let table = Table(settings)
     let brush = brush_of(table)
     if let tip = image_text(text, "tip.png"):
-        brush.tip = BrushMask.from_png_text(tip)
+        brush.tip = brush_mask_from_png_text(tip)
     if let texture = image_text(text, "texture.png"):
-        brush.texture_image = BrushMask.from_png_text(texture)
+        brush.texture_image = brush_mask_from_png_text(texture)
     return SavedBrush(table.string("name", "Imported Brush"), "", brush)
 
 ## The base64 text after a `#@ name` line, up to the next such line.
@@ -125,7 +126,7 @@ func image_text(text: str, name: str) -> str?:
 func keep_image(mask: BrushMask?, path: str) -> unit!:
     if let image = mask:
         if not image.is_empty():
-            image.save(path)
+            save_brush_mask(image, path)
             return
     if present(path):
         files.delete_path(path)
