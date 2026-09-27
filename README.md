@@ -88,8 +88,20 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
 
 ## Structure
 
-- `src/workspace.luc`: the open document, its file, zoom, offset and selection.
-- `src/view.luc`: the canvas widget: checkerboard, the document, pan and zoom.
+- `src/workspace.luc`: the editing session, a thin coordinator of parts that
+  never import it and share `live.luc` (the shown canvas, its file and the
+  revision): `open_documents.luc` (tabs, switching, open/save/export),
+  `viewport.luc` (zoom, pan, view aids), `layer_picking.luc` and
+  `layer_commands.luc` (which layers are selected; edits on them),
+  `tool_state.luc`, `colors.luc` (foreground and background), `eyedroppers.luc`,
+  `painting.luc` (strokes, fills, the live gradient), `previews.luc`,
+  `transforms.luc`, `selection_commands.luc` and `image_commands.luc`.
+- `src/view.luc`: the canvas widget: it draws the document with the view aids
+  (`view_aids.luc`) and routes input — keys in `view_keys.luc`, a press to the
+  tool in hand's `ToolHandler` (`tool_handler.luc`), one file per family:
+  `paint_tools`, `gradient_tool`, `sample_tools`, `text_tool`,
+  `selection_tools`, `vector_tools`, `navigate_tools`, `move_tool`, and the
+  view's own gestures in `view_gestures.luc`.
 - `src/actions.luc`: one `Command` per action, as in luced; menus, the tool
   rail and shortcuts present the same instances, enabled by document state.
 - `src/settings.luc`, `src/settings_panel.luc`: `~/.luced-2d/settings.toml`
@@ -99,16 +111,18 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   Save/Cancel. Shortcuts are the application's own `Command`s: pick a row,
   record a chord in the field beneath; a conflict names the other holder.
 - `src/tabs.luc`: the open documents as tabs across the viewport (Photoshop's):
-  `Workspace` keeps a `Document` per tab and swaps the live canvas and view
+  `OpenDocuments` keeps a `Document` per tab and swaps the live canvas and view
   state on switch; New/Open make tabs, ⌘W closes, ⌥⌘] / ⌥⌘[ step.
-- `src/colors.luc`: the palette below the tool rail (foreground over
+- `src/palette.luc`, `src/color_picker.luc`: the palette below the tool rail (foreground over
   background, swap X, reset D) and the color editor after Photoshop's: a
   field and a strip whose channel a radio picks (H, S, B, R, G, B, L, a, b —
   the field plots the other two; plus OkLCh L, C, h, gamut-mapped by chroma), new-over-current preview, HSB / RGB / Lab / OkLCh /
   hex fields, a history of committed colors (saved in settings), live on the
   palette, canvas click samples while it is open. The color maths is
   luce-color's (`hsl`, `lab`, `space`, `transfer`).
-- `src/panels.luc`: the window: menu bar, contextual tool header (preset
+- `src/panels.luc`: the window (its commands wired in `panels_wiring.luc`,
+  the picker and text prompts in `panel_prompts.luc`, the menus' transforms in
+  `transform_flow.luc`; live-preview dialogs share `preview_session.luc`): menu bar, contextual tool header (preset
   menu, Size/Hardness/Opacity/Flow/Spacing scrubbers and Brush…, which opens
   the Brush Settings panel — an accordion of Brush Tip Shape, Shape Dynamics,
   Scattering, Texture, Color Dynamics and Transfer, one section open at a
