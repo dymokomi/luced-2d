@@ -1,0 +1,111 @@
+## The lifecycle every live-preview dialog shares (Adjust, Color Range,
+## Replace Color, Select and Mask, Layer Style): the dialog opens only when no
+## other is up and begins its session on the canvas; changes wait for the
+## next frame, so changes arriving faster than frames (a slider drag) are
+## shown once, the latest; and it closes keeping (OK, Apply) or dropping
+## (Cancel) what the session shows. The dialog supplies the session's steps
+## on the canvas; failures are told under the dialog's name.
+from ui import Dialog
+from kit import Kit
+
+pub class PreviewDialogSession:
+    pub let dialog: Dialog
+    let kit: Kit
+    ## Before a failure's message: "Color Range", "Cannot adjust".
+    let name: str
+    ## Whether the canvas has the session open.
+    pub var active: bool = false
+    ## A change waiting to be shown on the next frame.
+    var pending: bool = false
+    ## The dialog's steps: the session begun on the canvas, the change shown,
+    ## and the session ended, kept or dropped.
+    pub var begin: func() -> unit!? = none
+    pub var preview: func() -> unit!? = none
+    pub var finish: func(bool) -> unit!? = none
+    ## What the window does when the dialog opens, changes or closes (it
+    ## refreshes), and with a failure (a prompt says it).
+    pub var refreshed: func() -> unit!? = none
+    pub var failed: func(str) -> unit!? = none
+
+    pub func init(self, dialog: Dialog, kit: Kit, name: str):
+        self.dialog = dialog
+        self.kit = kit
+        self.name = name
+
+    ## The window's refresh and prompt, as `refreshed` and `failed`.
+    pub func report(self, refreshed: func() -> unit!, failed: func(str) -> unit!):
+        self.refreshed = refreshed
+        self.failed = failed
+
+    ## Begin a session for the dialog to open on; false when another dialog
+    ## is up or the session could not begin (the failure told). With
+    ## `restart`, a session still open (the dialog reopened on another
+    ## choice) is dropped first.
+    pub func open(self, restart: bool = false) -> bool!:
+        if not self.kit.may_open(self.dialog):
+            return false
+        if restart:
+            self.end(false)
+        if let begin = self.begin:
+            begin() catch failure:
+                self.fail(failure.message)
+                return false
+        self.active = true
+        return true
+
+    ## A change to show at the next frame (`poll`), if the session is open.
+    pub func request(self):
+        self.pending = self.active
+
+    ## Each frame: the change waiting, if any.
+    pub func poll(self) -> unit!:
+        if not self.pending:
+            return
+        self.pending = false
+        if self.active:
+            self.show()
+
+    ## Show the change waiting now rather than at the next frame, so what
+    ## the controls say is what is kept.
+    pub func flush(self) -> unit!:
+        if self.pending:
+            self.preview_now()
+
+    ## Show the change now; nothing waits for a frame.
+    pub func preview_now(self) -> unit!:
+        self.pending = false
+        self.show()
+
+    ## Hide the dialog and end the session, keeping (OK, Apply) or dropping
+    ## (Cancel) what it shows; the window refreshes.
+    pub func close(self, keep: bool) -> unit!:
+        self.dialog.hide()
+        self.pending = false
+        self.end(keep)
+        self.refresh()
+
+    ## End the session, if open, without closing the dialog.
+    pub func end(self, keep: bool) -> unit!:
+        if not self.active:
+            return
+        self.active = false
+        if let finish = self.finish:
+            finish(keep) catch failure:
+                self.fail(failure.message)
+
+    pub func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()
+
+    ## Tell `message` under the dialog's name.
+    pub func fail(self, message: str) -> unit!:
+        self.tell(f"{self.name}: {message}")
+
+    ## Tell `message` as it is.
+    pub func tell(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)
+
+    func show(self) -> unit!:
+        if let preview = self.preview:
+            preview()

@@ -12,6 +12,7 @@ from kit import Kit, SliderField
 import math
 from hex_color import hex_of_linear, linear_of_hex
 from swatch import Swatch
+from preview_session import PreviewDialogSession
 
 ## One slider: the style field it sets, and the factor from what it shows to
 ## what the field holds (percent to 0..1).
@@ -45,6 +46,9 @@ let style_fields: int = 40
 
 pub class StyleDialog:
     pub let dialog: Dialog
+    ## The dialog's lifecycle (preview_session.luc): the style shows live as
+    ## it is set, so there is no preview to show, only one to end.
+    pub let session: PreviewDialogSession
     let sliders: list[StyleSlider]
     ## The drop shadow's direction (the light's angle, Photoshop's) and distance,
     ## which set its x and y offsets together.
@@ -55,7 +59,6 @@ pub class StyleDialog:
     ## The layer's style fields when the dialog opened, for Cancel.
     var before: list[float]
     pub var changed: func() -> unit!? = none
-    pub var refreshed: func() -> unit!? = none
     ## Open the color picker on a color: its title, the hex to start from, and
     ## what to do with each change.
     pub var pick_color: func(str, str, func(str) -> unit!) -> unit!? = none
@@ -94,6 +97,9 @@ pub class StyleDialog:
         self.section(items, 34, 36, "Inner Glow", [self.slider(35, "Size", 0.0, 100.0, 1.0, " px"), self.slider(39, "Opacity", 0.0, 100.0, 0.01, "%")])
         items.append(HStack([Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
         self.dialog = Dialog(items, width = 440.0)
+        self.session = PreviewDialogSession(self.dialog, kit, "Layer Style")
+        self.session.begin = self.begin
+        self.session.finish = self.finish
         kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
     ## A slider for style field `field`; every change writes it.
@@ -119,8 +125,15 @@ pub class StyleDialog:
 
     ## Open on the selected layer's styles.
     pub func open(self) -> unit!:
-        if not self.kit.may_open(self.dialog):
+        if not self.session.open():
             return
+        self.show()
+        self.dialog.open()
+        self.session.refresh()
+
+    ## The session's start: a preview under way dropped, and the layer's
+    ## style kept for Cancel.
+    func begin(self) -> unit!:
         if self.workspace.previews.previewing():
             self.workspace.previews.end_preview(false)
         self.before = []
@@ -128,9 +141,6 @@ pub class StyleDialog:
         while field < style_fields:
             self.before.append(self.workspace.previews.style_value(field))
             field += 1
-        self.show()
-        self.dialog.open()
-        self.refresh()
 
     ## The controls as the layer's style is now.
     func show(self) -> unit!:
@@ -183,19 +193,16 @@ pub class StyleDialog:
         self.show()
 
     pub func apply(self) -> unit!:
-        self.dialog.hide()
-        self.refresh()
+        self.session.close(true)
 
-    ## Put the style back as it was when the dialog opened.
     pub func cancel(self) -> unit!:
-        if self.before.length == style_fields:
-            var field = 0
-            for value in self.before:
-                self.workspace.previews.set_style_value(field, value)
-                field += 1
-        self.dialog.hide()
-        self.refresh()
+        self.session.close(false)
 
-    func refresh(self) -> unit!:
-        if let refreshed = self.refreshed:
-            refreshed()
+    ## The session's end: Cancel puts the style back as it was when the dialog opened.
+    func finish(self, keep: bool) -> unit!:
+        if keep or self.before.length != style_fields:
+            return
+        var field = 0
+        for value in self.before:
+            self.workspace.previews.set_style_value(field, value)
+            field += 1

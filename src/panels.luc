@@ -150,11 +150,10 @@ pub class Panels:
         self.brush.on_failed = self.prompts.tell
         self.adjust = AdjustDialog(workspace, kit)
         self.adjust.changed = self.document_changed
-        self.adjust.refreshed = self.refresh
-        self.adjust.failed = self.prompts.tell
+        self.adjust.session.report(self.refresh, self.prompts.tell)
         self.style = StyleDialog(workspace, kit)
         self.style.changed = self.document_changed
-        self.style.refreshed = self.refresh
+        self.style.session.report(self.refresh, self.prompts.tell)
         self.style.pick_color = func (title: str, hex: str, changed: func(str) -> unit!) -> unit!:
             self.picker.open_for(title, hex, changed)
         self.layers_panel.open_style = self.style.open
@@ -192,16 +191,13 @@ pub class Panels:
         self.size_dialogs.report(self.refresh, self.prompts.tell)
         self.tabs.on_new = self.size_dialogs.new_canvas.open
         self.color_range = ColorRangeDialog(workspace, kit)
-        self.color_range.applied = self.refresh
-        self.color_range.failed = self.prompts.tell
+        self.color_range.session.report(self.refresh, self.prompts.tell)
         kit.bind(actions.color_range, self.color_range.open)
         self.replace_color = ReplaceColorDialog(workspace, kit)
-        self.replace_color.applied = self.refresh
-        self.replace_color.failed = self.prompts.tell
+        self.replace_color.session.report(self.refresh, self.prompts.tell)
         kit.bind(actions.replace_color, self.replace_color.open)
         self.select_mask = SelectMaskDialog(workspace, kit)
-        self.select_mask.applied = self.refresh
-        self.select_mask.failed = self.prompts.tell
+        self.select_mask.session.report(self.refresh, self.prompts.tell)
         kit.bind(actions.select_mask, self.select_mask.open)
         self.save_selection = SaveSelectionDialog(workspace, kit)
         self.save_selection.applied = self.refresh

@@ -10,42 +10,45 @@ from workspace import Workspace
 from kit import Kit
 from adjustment_controls import AdjustmentControls
 from adjustments import blur_kind, noise_kind, first_filter_kind
+from preview_session import PreviewDialogSession
 import time
 
 pub class AdjustDialog:
     pub let dialog: Dialog
-    let kit: Kit
+    ## The preview's lifecycle (preview_session.luc).
+    pub let session: PreviewDialogSession
     pub let title: Text
     pub let controls: AdjustmentControls
     ## The open kind, or -1.
     pub var kind: int = -1
     ## Add Noise's grain, the same while the dialog is open.
     var seed: int = 1
-    ## What the window does when the document changed, when the dialog opens or
-    ## closes, and when an adjustment cannot start.
+    ## What the window does when the document changed.
     pub var changed: func() -> unit!? = none
-    pub var refreshed: func() -> unit!? = none
-    pub var failed: func(str) -> unit!? = none
     let preview_box: Checkbox
     ## Whether the edit shows on the layer (Preview checked).
     var showing: bool = true
-    ## A control moved since the last preview.
-    var pending: bool = false
     let workspace: Workspace
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
-        self.kit = kit
         self.workspace = workspace
         self.title = Text("", font = kit.font)
         self.controls = AdjustmentControls(workspace, kit)
-        self.controls.changed = self.request_preview
-        self.controls.failed = self.fail
         var items: list[Widget] = [self.title, self.controls.view]
         # Preview unchecked shows the layer as it was, the settings kept (Alt-P toggles it).
         self.preview_box = kit.checkbox("Preview", self.toggle_preview)
         self.preview_box.set_checked(true)
         items.append(HStack([self.preview_box, kit.button("Reset", self.reset), Spacer(), kit.button("Cancel", self.cancel), kit.button("Apply", self.apply)], spacing = 8.0))
         self.dialog = Dialog(items, width = 440.0)
+        self.session = PreviewDialogSession(self.dialog, kit, "Cannot adjust")
+        self.session.begin = workspace.previews.begin_preview
+        self.session.preview = self.preview
+        self.session.finish = self.finish
+        # A control moved: preview at the next frame. Moves coming faster than a
+        # large picture renders are folded into one, so a drag never queues up
+        # work behind it.
+        self.controls.changed = self.session.request
+        self.controls.failed = self.session.tell
         kit.dialog_keys(self.dialog, self.cancel, self.apply)
 
     ## Adjust menu: `kind` on the selected layer's pixels.
@@ -66,12 +69,9 @@ pub class AdjustDialog:
     pub func filter(self, filter: int) -> unit!:
         self.start(first_filter_kind + filter)
 
+    ## Another kind chosen while the dialog is up drops the one before.
     func start(self, kind: int) -> unit!:
-        if not self.kit.may_open(self.dialog):
-            return
-        self.close_preview(false)
-        self.workspace.previews.begin_preview() catch failure:
-            self.fail(f"Cannot adjust: {failure.message}")
+        if not self.session.open(restart = true):
             return
         self.kind = kind
         self.showing = true
@@ -80,8 +80,8 @@ pub class AdjustDialog:
         self.controls.show(kind, [])
         self.title.set_text(self.controls.spec(kind).name)
         self.dialog.open()
-        self.refresh()
-        self.preview()
+        self.session.refresh()
+        self.session.preview_now()
 
     ## Show a page of the open kind (Levels' channel, a hue range, a tone).
     pub func show_page(self, kind: int, page: int) -> unit!:
@@ -91,28 +91,22 @@ pub class AdjustDialog:
     pub func set_control(self, kind: int, slot: int, value: float) -> unit!:
         self.controls.set_control(kind, slot, value)
         # From code, at once: nothing waits for a frame.
-        if self.pending:
-            self.preview()
+        self.session.flush()
 
-    func close_preview(self, keep: bool) -> unit!:
+    ## The session's end: the on-image adjustment disarmed, the preview kept or dropped.
+    func finish(self, keep: bool) -> unit!:
         self.controls.end_on_image()
-        if self.kind >= 0 and self.workspace.previews.previewing():
+        if self.workspace.previews.previewing():
             self.workspace.previews.end_preview(keep)
         self.kind = -1
 
-    pub func close(self, keep: bool) -> unit!:
-        self.close_preview(keep)
-        self.dialog.hide()
-        self.refresh()
-
     pub func apply(self) -> unit!:
         # What the controls say is what is kept, even if its frame has not come yet.
-        if self.pending:
-            self.preview()
-        self.close(true)
+        self.session.flush()
+        self.session.close(true)
 
     pub func cancel(self) -> unit!:
-        self.close(false)
+        self.session.close(false)
 
     ## Preview on or off (the checkbox, or Alt-P while the dialog is open).
     pub func toggle_preview(self) -> unit!:
@@ -120,29 +114,17 @@ pub class AdjustDialog:
             return
         self.showing = not self.showing
         self.preview_box.set_checked(self.showing)
-        self.preview()
+        self.session.preview_now()
 
     ## Put every setting of the open kind back to its default.
     func reset(self) -> unit!:
         if self.kind < 0:
             return
         self.controls.show(self.kind, [])
-        self.preview()
-
-    ## A control moved: preview at the next frame. Moves coming faster than a
-    ## large picture renders are folded into one, so a drag never queues up
-    ## work behind it.
-    pub func request_preview(self) -> unit!:
-        self.pending = true
-
-    ## Each frame: the preview a control asked for, if any.
-    pub func poll(self) -> unit!:
-        if self.pending:
-            self.preview()
+        self.session.preview_now()
 
     ## Show the open kind with the controls as they are, on the pixels' preview.
-    pub func preview(self) -> unit!:
-        self.pending = false
+    func preview(self) -> unit!:
         let kind = self.kind
         if kind < 0 or not self.workspace.previews.previewing():
             return
@@ -164,11 +146,3 @@ pub class AdjustDialog:
             self.workspace.previews.preview_adjust(kind, self.controls.numbers(kind))
         if let changed = self.changed:
             changed()
-
-    func refresh(self) -> unit!:
-        if let refreshed = self.refreshed:
-            refreshed()
-
-    func fail(self, message: str) -> unit!:
-        if let failed = self.failed:
-            failed(message)
