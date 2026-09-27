@@ -2,7 +2,8 @@ from ui import Font
 from gpu import Frame
 from workspace import Workspace
 from canvas import Canvas
-from panels import Panels, next_in_cycle
+from panels import Panels
+from panels_wiring import next_in_cycle
 from actions import Actions
 from view import CanvasView
 from view_aids import clamp_texel, texel_span

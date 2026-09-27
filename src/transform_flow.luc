@@ -1,0 +1,87 @@
+## Edit › Free Transform and its modes, Warp and Puppet Warp, Select ›
+## Transform Selection and Image › Crop from the menus: each starts on the
+## workspace, says in a prompt why it could not, and gives the canvas the keys
+## so Enter and Esc finish it. The header's Apply and Cancel finish whichever
+## box is up.
+from workspace import Workspace
+from view import CanvasView
+from prompts import Prompts
+
+pub class TransformFlow:
+    let workspace: Workspace
+    let view: CanvasView
+    let prompts: Prompts
+    ## The window refreshes after each.
+    pub var refreshed: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, view: CanvasView, prompts: Prompts):
+        self.workspace = workspace
+        self.view = view
+        self.prompts = prompts
+
+    ## Edit › Free Transform: the box goes up around the layer's pixels on the canvas.
+    pub func free_transform(self) -> unit!:
+        let started = self.workspace.transforms.begin_transform() catch failure:
+            self.prompts.tell(f"Cannot transform: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell("Nothing to transform: the layer has no pixels")
+        self.to_canvas()
+
+    ## Edit › Transform › Skew, Distort or Perspective: the free-transform box
+    ## (up already, or put up now) with its handles in that mode.
+    pub func transform_mode(self, mode: int) -> unit!:
+        let started = self.workspace.transforms.begin_transform_mode(mode) catch failure:
+            self.prompts.tell(f"Cannot transform: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell("Nothing to transform: the layer has no pixels")
+        self.to_canvas()
+
+    ## Edit › Transform › Warp or Edit › Puppet Warp on the selected layer.
+    pub func mesh_warp(self, puppet: bool) -> unit!:
+        let name = "Puppet Warp" if puppet else "Warp"
+        let started = self.workspace.transforms.begin_mesh_warp(puppet) catch failure:
+            self.prompts.tell(f"Cannot {name.lower()}: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell(f"Cannot {name.lower()} while something else is under way")
+        self.to_canvas()
+
+    ## Select › Transform Selection: the box goes up around the selection, moving its outline.
+    pub func transform_selection(self) -> unit!:
+        let started = self.workspace.transforms.begin_selection_transform() catch failure:
+            self.prompts.tell(f"Cannot transform the selection: {failure.message}")
+            return
+        if not started:
+            self.prompts.tell("Nothing selected to transform")
+        self.to_canvas()
+
+    ## The header's Apply or Cancel: a live gradient, the free transform, a
+    ## warp, or the Crop tool's box.
+    pub func finish_box(self, keep: bool) -> unit!:
+        let workspace = self.workspace
+        if workspace.painting.gradient != none:
+            workspace.painting.finish_gradient(keep)
+        elif workspace.transforms.transform != none:
+            workspace.transforms.finish_transform(keep)
+        elif workspace.transforms.mesh_warp != none:
+            workspace.transforms.finish_mesh_warp(keep)
+        else:
+            workspace.image.finish_crop(keep)
+        self.refresh()
+
+    pub func crop(self) -> unit!:
+        self.workspace.image.crop() catch failure:
+            self.prompts.tell(f"Cannot crop: {failure.message}")
+            return
+        self.refresh()
+
+    ## Enter and Esc go to the canvas.
+    func to_canvas(self) -> unit!:
+        self.view.layout().request_focus()
+        self.refresh()
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

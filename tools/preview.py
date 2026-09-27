@@ -487,7 +487,7 @@ SCENES = {
             editor.panels.refresh()''',
     'pickerwhite': '''            editor.workspace.choose_tool("brush")
             editor.workspace.colors.set_color(1.0, 1.0, 1.0)
-            editor.panels.pick_color(false)
+            editor.panels.panel_prompts.pick_color(false)
             editor.panels.refresh()''',
     'strokes': '''            editor.workspace.choose_tool("brush")
             editor.workspace.colors.set_color(0.9, 0.05, 0.05)
@@ -591,7 +591,7 @@ SCENES = {
             let zoom = editor.workspace.viewport.zoom
             let ox = area.x + editor.workspace.viewport.offset_x
             let oy = area.y + editor.workspace.viewport.offset_y
-            editor.panels.free_transform()
+            editor.panels.transform_flow.free_transform()
             let session = editor.workspace.transforms.transform else trap("a transform")
             let box = session.box
             print(f"TRANSFORM box {box.left},{box.top} {box.width}x{box.height}")
@@ -614,7 +614,7 @@ SCENES = {
             let zoom = editor.workspace.viewport.zoom
             let ox = area.x + editor.workspace.viewport.offset_x
             let oy = area.y + editor.workspace.viewport.offset_y
-            editor.panels.free_transform()
+            editor.panels.transform_flow.free_transform()
             let session = editor.workspace.transforms.transform else trap("a transform")
             let box = session.box
             let corner_x = box.left + box.width
@@ -698,7 +698,7 @@ SCENES = {
     'colorsliders': color_scene(3),
     'picker': '''            editor.workspace.choose_tool("brush")
             editor.workspace.colors.set_color(0.8069, 0.3515, 0.0497)
-            editor.panels.pick_color(false)
+            editor.panels.panel_prompts.pick_color(false)
             editor.panels.refresh()''',
     # Brush Settings docked short, over strokes of a painted tip with a
     # texture; the Brushes panel's thumbnails beside it.

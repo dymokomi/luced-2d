@@ -1,0 +1,96 @@
+## What the window opens for a color or a text layer: the color picker on a
+## palette swatch or on any color a dialog shows, the black-or-white choice a
+## swatch offers on a mask, as Compositor's does, and the text editor for the
+## Text tool. Each opens only when no other dialog is up.
+from ui import Text, HStack, Spacer, Dialog
+from workspace import Workspace
+from kit import Kit
+from color_picker import ColorPicker
+from text_editing import TextEditing
+from prompts import Prompts
+
+pub class PanelPrompts:
+    let workspace: Workspace
+    let kit: Kit
+    let picker: ColorPicker
+    let text_editing: TextEditing
+    let prompts: Prompts
+    ## The adjust dialog, whose Gradient Map opens the picker over it.
+    let adjust: Dialog
+    ## On a mask the palette offers only black (hide) and white (reveal).
+    pub let mask_prompt: Dialog
+    var mask_background: bool = false
+    pub var refreshed: func() -> unit!? = none
+
+    pub func init(self, workspace: Workspace, kit: Kit, picker: ColorPicker, text_editing: TextEditing, prompts: Prompts, adjust: Dialog) -> unit!:
+        self.workspace = workspace
+        self.kit = kit
+        self.picker = picker
+        self.text_editing = text_editing
+        self.prompts = prompts
+        self.adjust = adjust
+        let font = kit.font
+        self.mask_prompt = Dialog([Text("Mask color", font = font), HStack([kit.button("Black · Hide", self.choose_mask_black),
+                                   kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
+        kit.dialog_keys(picker.dialog, self.cancel_picker, self.accept_picker)
+        kit.dialog_keys(self.mask_prompt, self.hide_mask_prompt, self.keep_mask_prompt)
+
+    ## A palette swatch clicked: the picker opens for that color — or, on a
+    ## mask, the black/white choice.
+    pub func pick_color(self, background: bool) -> unit!:
+        self.mask_background = background
+        if self.workspace.canvas.editing_mask():
+            if self.kit.may_open(self.mask_prompt):
+                self.mask_prompt.open()
+            return
+        if not self.kit.may_open(self.picker.dialog):
+            return
+        self.picker.open(background)
+        self.refresh()
+
+    ## The picker on any color: its title, the "#rrggbb" it starts from, where changes go.
+    pub func pick_any_color(self, title: str, hex: str, changed: func(str) -> unit!) -> unit!:
+        if self.kit.may_open(self.picker.dialog) or self.adjust.is_open():
+            self.picker.open_for(title, hex, changed)
+
+    func cancel_picker(self) -> unit!:
+        self.picker.finish(false)
+
+    func accept_picker(self) -> unit!:
+        self.picker.finish(true)
+
+    func hide_mask_prompt(self) -> unit!:
+        self.mask_prompt.hide()
+
+    ## The mask prompt has no default choice: Enter leaves it open.
+    func keep_mask_prompt(self) -> unit!:
+        return
+
+    func choose_mask_black(self) -> unit!:
+        self.choose_mask_color(0.0)
+
+    func choose_mask_white(self) -> unit!:
+        self.choose_mask_color(1.0)
+
+    func choose_mask_color(self, value: float) -> unit!:
+        self.workspace.colors.set_palette(value, value, value, self.mask_background)
+        self.mask_prompt.hide()
+        self.refresh()
+
+    ## The Text tool clicked or dragged a new text layer into place; not while
+    ## another dialog is open, as the editor is one.
+    pub func place_text(self, x: float, y: float, box_width: float) -> unit!:
+        if not self.kit.may_open(self.text_editing.dialog):
+            return
+        self.prompts.attempt("Text", func () -> unit!:
+            self.text_editing.begin_new(x, y, box_width))
+
+    pub func edit_text(self, index: int) -> unit!:
+        if not self.kit.may_open(self.text_editing.dialog):
+            return
+        self.prompts.attempt("Text", func () -> unit!:
+            self.text_editing.begin_existing(index))
+
+    func refresh(self) -> unit!:
+        if let refreshed = self.refreshed:
+            refreshed()

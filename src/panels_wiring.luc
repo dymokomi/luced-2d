@@ -1,0 +1,379 @@
+## Every shared command wired to what the window does for it, in three
+## groups: the menus (File, Edit, Select, Image, View, and the tool and brush
+## keys), the dialogs, and the layers. panels.luc builds the window and hands
+## the parts here; most commands refresh the window after, and those that can
+## fail say why in a prompt (`Prompts.attempt`).
+from ui import Text
+from canvas import Canvas
+from workspace import Workspace
+from actions import Actions
+from kit import Kit
+from view import CanvasView
+from prompts import Prompts
+from document_files import DocumentFiles
+from transform_flow import TransformFlow
+from document_panel import DocumentSettings
+from settings_panel import SettingsDialog
+from adjust_dialog import AdjustDialog
+from style_dialog import StyleDialog
+from script_editor import ScriptEditor
+from adjustments import adjustments, applies_at_once, gradient_map, curves_adjustment
+from layer_transfer import copy_layers, paste_layers, layers_to_paste
+from transform_box import mode_skew, mode_distort, mode_perspective
+from units import unit_ids
+
+pub class PanelsWiring:
+    let actions: Actions
+    let kit: Kit
+    let workspace: Workspace
+    let prompts: Prompts
+    let refreshed: func() -> unit!
+
+    pub func init(self, actions: Actions, kit: Kit, workspace: Workspace, prompts: Prompts, refreshed: func() -> unit!):
+        self.actions = actions
+        self.kit = kit
+        self.workspace = workspace
+        self.prompts = prompts
+        self.refreshed = refreshed
+
+    # -- The menus.
+
+    ## File and Edit, Select and Image, and the View menu; the tool keys pick
+    ## tools through `choose_tool`, and `define_brush` is Edit › Define Brush Preset.
+    pub func menus(self, files: DocumentFiles, view: CanvasView, status: Text, flow: TransformFlow, settings: SettingsDialog,
+                   choose_tool: func(str) -> unit!, define_brush: func() -> unit!) -> unit!:
+        let actions = self.actions
+        let kit = self.kit
+        let workspace = self.workspace
+        kit.bind(actions.open_document, files.open_document)
+        kit.bind(actions.import_image, files.import_image)
+        kit.bind(actions.save, files.save)
+        kit.bind(actions.save_as, files.save_as)
+        kit.bind(actions.export_png, files.export_png)
+        kit.bind(actions.export_jpeg, files.export_jpeg)
+        kit.bind(actions.close_document, files.close_document)
+        kit.bind(actions.exit_app, files.quit)
+        kit.bind(actions.next_document, func () -> unit!:
+            workspace.documents.step(1)
+            self.refresh())
+        kit.bind(actions.previous_document, func () -> unit!:
+            workspace.documents.step(-1)
+            self.refresh())
+        kit.bind(actions.next_document_tab, func () -> unit!:
+            actions.next_document.trigger())
+        kit.bind(actions.previous_document_tab, func () -> unit!:
+            actions.previous_document.trigger())
+        # -- Edit.
+        kit.bind(actions.undo, func () -> unit!:
+            # During a free transform or a live gradient, undo drops it, as nothing is kept yet.
+            if workspace.transforms.transform != none:
+                workspace.transforms.finish_transform(false)
+            elif workspace.transforms.mesh_warp != none:
+                workspace.transforms.finish_mesh_warp(false)
+            elif workspace.painting.gradient != none:
+                workspace.painting.finish_gradient(false)
+            else:
+                workspace.undo()
+            self.refresh())
+        kit.bind(actions.redo, self.then_refresh(workspace.redo))
+        kit.bind(actions.redo_y, func () -> unit!:
+            actions.redo.trigger())
+        kit.bind(actions.fill, func () -> unit!:
+            workspace.painting.fill_selection(false)
+            self.refresh())
+        kit.bind(actions.fill_background, func () -> unit!:
+            workspace.painting.fill_selection(false, true)
+            self.refresh())
+        kit.bind(actions.fill_delete, func () -> unit!:
+            actions.fill.trigger())
+        kit.bind(actions.fill_background_delete, func () -> unit!:
+            actions.fill_background.trigger())
+        kit.bind(actions.clear, func () -> unit!:
+            # Its key (Backspace) takes a Polygonal Lasso corner back while one is drawn.
+            if view.polygon.active:
+                view.polygon.take_back()
+            else:
+                workspace.painting.fill_selection(true)
+            self.refresh())
+        kit.bind(actions.define_brush, define_brush)
+        kit.bind(actions.swap_colors, self.then_refresh(workspace.colors.swap_colors))
+        kit.bind(actions.reset_colors, self.then_refresh(workspace.colors.reset_colors))
+        kit.bind(actions.free_transform, flow.free_transform)
+        kit.bind(actions.transform_skew, func () -> unit!:
+            flow.transform_mode(mode_skew))
+        kit.bind(actions.transform_distort, func () -> unit!:
+            flow.transform_mode(mode_distort))
+        kit.bind(actions.transform_perspective, func () -> unit!:
+            flow.transform_mode(mode_perspective))
+        kit.bind(actions.transform_warp, func () -> unit!:
+            flow.mesh_warp(false))
+        kit.bind(actions.puppet_warp, func () -> unit!:
+            flow.mesh_warp(true))
+        kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
+            workspace.transforms.flip_layer(true)))
+        kit.bind(actions.flip_vertical, self.then_refresh(func () -> unit!:
+            workspace.transforms.flip_layer(false)))
+        # -- Select.
+        kit.bind(actions.select_all, self.then_refresh(workspace.selection.select_all))
+        kit.bind(actions.deselect, self.then_refresh(workspace.selection.deselect))
+        kit.bind(actions.inverse, self.then_refresh(workspace.selection.invert_selection))
+        let prompts = self.prompts
+        kit.bind(actions.expand, func () -> unit!:
+            prompts.ask("expand", "Expand the selection by, in pixels (1..512)", "4", "Expand"))
+        kit.bind(actions.contract, func () -> unit!:
+            prompts.ask("contract", "Contract the selection by, in pixels (1..512)", "4", "Contract"))
+        kit.bind(actions.feather, func () -> unit!:
+            prompts.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather"))
+        kit.bind(actions.border, func () -> unit!:
+            prompts.ask("border", "Border of the selection, width in pixels (1..200)", "10", "Border"))
+        kit.bind(actions.smooth, func () -> unit!:
+            prompts.ask("smooth", "Smooth the selection over, in pixels (1..100)", "2", "Smooth"))
+        kit.bind(actions.grow, self.then_refresh(func () -> unit!:
+            workspace.selection.grow_selection(true)))
+        kit.bind(actions.similar, self.then_refresh(func () -> unit!:
+            workspace.selection.grow_selection(false)))
+        kit.bind(actions.transform_selection, flow.transform_selection)
+        kit.bind(actions.quick_mask, self.then_refresh(workspace.selection.toggle_quick_mask))
+        # -- Image.
+        kit.bind(actions.crop, flow.crop)
+        kit.bind(actions.reveal_all, func () -> unit!:
+            if not workspace.image.reveal_all():
+                status.set_text("Nothing lies past the canvas")
+            self.refresh())
+        kit.bind(actions.flip_canvas_horizontal, self.then_refresh(func () -> unit!:
+            workspace.image.flip_canvas(true)))
+        kit.bind(actions.flip_canvas_vertical, self.then_refresh(func () -> unit!:
+            workspace.image.flip_canvas(false)))
+        self.view_menu(view, settings)
+        # -- The brush and tool keys.
+        kit.bind(actions.bigger, func () -> unit!:
+            workspace.tools.scale_brush(1.25)
+            self.refresh())
+        kit.bind(actions.smaller, func () -> unit!:
+            workspace.tools.scale_brush(0.8)
+            self.refresh())
+        kit.bind(actions.harder, func () -> unit!:
+            workspace.tools.harden_brush(0.25)
+            self.refresh())
+        kit.bind(actions.softer, func () -> unit!:
+            workspace.tools.harden_brush(-0.25)
+            self.refresh())
+        for command in actions.tools:
+            let tool = command.id()
+            kit.bind(command, func () -> unit!:
+                choose_tool(next_in_cycle(tool, workspace.tools.tool)))
+
+    ## The View menu: the view aids, kept in the settings as they change, and the zoom.
+    func view_menu(self, view: CanvasView, settings: SettingsDialog) -> unit!:
+        let actions = self.actions
+        let kit = self.kit
+        let viewport = self.workspace.viewport
+        let aid_changed = func () -> unit!:
+            settings.remember_view()
+            self.refresh()
+        kit.bind(actions.show_guides, func () -> unit!:
+            viewport.show_guides = not viewport.show_guides
+            aid_changed())
+        kit.bind(actions.snap, func () -> unit!:
+            viewport.snap = not viewport.snap
+            aid_changed())
+        kit.bind(actions.lock_guides, func () -> unit!:
+            viewport.lock_guides = not viewport.lock_guides
+            aid_changed())
+        kit.bind(actions.clear_guides, self.prompts.attempting("Clear Guides", func () -> unit!:
+            self.workspace.canvas.clear_guides()
+            self.workspace.touch()))
+        kit.bind(actions.show_transform_controls, func () -> unit!:
+            let transforms = self.workspace.transforms
+            transforms.show_transform_controls = not transforms.show_transform_controls
+            self.workspace.touch()
+            self.refresh())
+        kit.bind(actions.show_rulers, func () -> unit!:
+            viewport.show_rulers = not viewport.show_rulers
+            aid_changed())
+        kit.bind(actions.show_grid, func () -> unit!:
+            viewport.show_grid = not viewport.show_grid
+            aid_changed())
+        var unit_index = 0
+        for unit_name in unit_ids():
+            let chosen = unit_name
+            kit.bind(actions.units[unit_index], func () -> unit!:
+                viewport.units = chosen
+                aid_changed())
+            unit_index += 1
+        kit.bind(actions.fit, func () -> unit!:
+            viewport.fitted = false
+            self.refresh())
+        kit.bind(actions.actual_size, func () -> unit!:
+            let bounds = view.layout().bounds()
+            viewport.actual_size(bounds.width, bounds.height)
+            self.refresh())
+        kit.bind(actions.zoom_in, func () -> unit!:
+            self.zoom_by(view, 1))
+        kit.bind(actions.zoom_out, func () -> unit!:
+            self.zoom_by(view, -1))
+
+    ## Zoom In or Out: the next step, about the view's middle.
+    func zoom_by(self, view: CanvasView, direction: int) -> unit!:
+        let bounds = view.layout().bounds()
+        self.workspace.viewport.zoom_step(direction, bounds.width * 0.5, bounds.height * 0.5)
+        self.refresh()
+
+    # -- The dialogs.
+
+    ## The adjust dialog (Adjust menu, filters, Gaussian Blur, Add Noise),
+    ## Layer Style, the Script Editor, and the two settings dialogs.
+    pub func dialogs(self, adjust: AdjustDialog, style: StyleDialog, scripts: ScriptEditor, document_settings: DocumentSettings, settings: SettingsDialog) -> unit!:
+        let actions = self.actions
+        let kit = self.kit
+        kit.bind(actions.document_settings, func () -> unit!:
+            if kit.may_open(document_settings.dialog):
+                document_settings.open())
+        kit.bind(actions.settings, func () -> unit!:
+            if kit.may_open(settings.dialog):
+                settings.open())
+        kit.bind(actions.blur, adjust.blur)
+        kit.bind(actions.add_noise, adjust.add_noise)
+        kit.bind(actions.toggle_preview, adjust.toggle_preview)
+        var filter = 0
+        for command in actions.filters:
+            let chosen = filter
+            kit.bind(command, func () -> unit!:
+                adjust.filter(chosen))
+            filter += 1
+        # Open the adjustment's sliders with a live preview, or apply the ones
+        # that take no parameters (invert, desaturate) at once.
+        var kind = 0
+        for command in actions.adjustments:
+            let selected = kind
+            kit.bind(command, func () -> unit!:
+                if applies_at_once(selected):
+                    self.prompts.attempt("Adjust", func () -> unit!:
+                        self.workspace.previews.adjust(selected, []))
+                    return
+                adjust.open(selected))
+            kind += 1
+        kit.bind(actions.layer_style, style.open)
+        kit.bind(actions.script_editor, scripts.open)
+
+    # -- The layers.
+
+    ## Adjustment layers, the clipboard, order, masks, visibility and blend
+    ## modes; `toggle_mask` and `toggle_visibility` are the window's, which
+    ## Properties shares.
+    pub func layers(self, view: CanvasView, toggle_mask: func() -> unit!, toggle_visibility: func() -> unit!) -> unit!:
+        let actions = self.actions
+        let kit = self.kit
+        let workspace = self.workspace
+        let prompts = self.prompts
+        var layer_kinds: list[int] = []
+        for adjustment in adjustments():
+            if adjustment.layerable:
+                layer_kinds.append(adjustment.kind)
+        var at = 0
+        for command in actions.adjustment_layers:
+            let kind = layer_kinds[at]
+            at += 1
+            kit.bind(command, prompts.attempting("Adjustment Layer", func () -> unit!:
+                self.new_adjustment_layer(kind)))
+        kit.bind(actions.cut, prompts.attempting("Cut", func () -> unit!:
+            self.copy_or_cut(true)))
+        kit.bind(actions.copy, prompts.attempting("Copy", func () -> unit!:
+            self.copy_or_cut(false)))
+        kit.bind(actions.copy_merged, prompts.attempting("Copy Merged", func () -> unit!:
+            workspace.edits.copy_selection(true, false)))
+        kit.bind(actions.paste_in_place, prompts.attempting("Paste in Place", func () -> unit!:
+            if layers_to_paste():
+                paste_layers(workspace, true)
+            else:
+                workspace.edits.paste_in_place()
+            self.refresh()))
+        kit.bind(actions.paste, prompts.attempting("Paste", func () -> unit!:
+            if layers_to_paste():
+                paste_layers(workspace, false)
+                self.refresh()
+                return
+            # Paste lands in the middle of the view, as Photoshop's does.
+            let bounds = view.layout().bounds()
+            let x = (bounds.width * 0.5 - workspace.viewport.offset_x) / workspace.viewport.zoom
+            let y = (bounds.height * 0.5 - workspace.viewport.offset_y) / workspace.viewport.zoom
+            workspace.edits.paste(x, y)))
+        kit.bind(actions.layer_via_copy, prompts.attempting("Layer via Copy", func () -> unit!:
+            workspace.edits.layer_via_copy(false)))
+        kit.bind(actions.layer_via_cut, prompts.attempting("Layer via Cut", func () -> unit!:
+            workspace.edits.layer_via_copy(true)))
+        kit.bind(actions.layer_up, func () -> unit!:
+            workspace.edits.reorder(1)
+            self.refresh())
+        kit.bind(actions.layer_down, func () -> unit!:
+            workspace.edits.reorder(-1)
+            self.refresh())
+        kit.bind(actions.toggle_mask, toggle_mask)
+        kit.bind(actions.hide_all_mask, prompts.attempting("Add Mask", func () -> unit!:
+            workspace.edits.toggle_mask(true)))
+        kit.bind(actions.toggle_mask_enabled, prompts.attempting("Mask", workspace.edits.toggle_mask_enabled))
+        kit.bind(actions.toggle_mask_link, prompts.attempting("Mask", workspace.edits.toggle_mask_link))
+        kit.bind(actions.copy_mask, prompts.attempting("Copy Mask", workspace.edits.copy_mask))
+        kit.bind(actions.paste_mask, prompts.attempting("Paste Mask", workspace.edits.paste_mask))
+        kit.bind(actions.load_transparency, prompts.attempting("Load Transparency", workspace.edits.load_transparency))
+        kit.bind(actions.toggle_mask_editing, self.then_refresh(workspace.edits.toggle_mask_editing))
+        kit.bind(actions.toggle_visibility, toggle_visibility)
+        kit.bind(actions.next_blend, func () -> unit!:
+            workspace.edits.cycle_blend(1)
+            self.refresh())
+        kit.bind(actions.previous_blend, func () -> unit!:
+            workspace.edits.cycle_blend(-1)
+            self.refresh())
+        var mode = 0
+        for command in actions.blends:
+            let chosen = mode
+            kit.bind(command, func () -> unit!:
+                workspace.edits.set_blend(chosen)
+                self.refresh())
+            mode += 1
+
+    ## A new adjustment layer of `kind` at its defaults, above the selected
+    ## layer and selected: its settings show in Properties.
+    func new_adjustment_layer(self, kind: int) -> unit!:
+        let workspace = self.workspace
+        let spec = adjustments()[kind]
+        var numbers = spec.engine(spec.defaults())
+        if kind == gradient_map:
+            numbers = numbers + workspace.colors.colors_encoded()
+        # A new Curves layer starts straight, whatever a dialog last staged.
+        if kind == curves_adjustment:
+            var channel = 0
+            while channel < 4:
+                workspace.canvas.reset_curve(channel)
+                channel += 1
+        discard(workspace.previews.add_adjustment_layer(kind, spec.name, numbers))
+
+    ## Copy (Cut with `cut`): the selected pixels, or with none selected the
+    ## selected layers whole.
+    func copy_or_cut(self, cut: bool) -> unit!:
+        if self.workspace.canvas.has_selection():
+            Canvas.forget_copied_layers()
+            self.workspace.edits.copy_selection(false, cut)
+        else:
+            copy_layers(self.workspace, cut)
+        self.refresh()
+
+    ## `change` to the workspace, then refresh the window.
+    func then_refresh(self, change: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            change()
+            self.refresh()
+
+    func refresh(self) -> unit!:
+        self.refreshed()
+
+## Shift+L steps through the lassos as Photoshop's does: Polygonal, then
+## Magnetic, then back to the Lasso. Other shortcuts pick their own tool.
+pub func next_in_cycle(chosen: str, current: str) -> str:
+    if chosen != "polygon":
+        return chosen
+    if current == "polygon":
+        return "magnetic"
+    if current == "magnetic":
+        return "lasso"
+    return "polygon"

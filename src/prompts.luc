@@ -29,6 +29,21 @@ pub class Prompts:
     pub func tell(self, message: str) -> unit!:
         self.ask("", message, "", "OK")
 
+    ## Run a command's `step`; a failure (nothing selected, no image on the
+    ## clipboard, a group where pixels are needed) is told under `name`. The
+    ## window refreshes after it.
+    pub func attempt(self, name: str, step: func() -> unit!) -> unit!:
+        step() catch failure:
+            self.tell(f"{name}: {failure.message}")
+            return
+        if let refresh = self.refreshed:
+            refresh()
+
+    ## `attempt` as a command's action.
+    pub func attempting(self, name: str, step: func() -> unit!) -> func() -> unit!:
+        return func () -> unit!:
+            self.attempt(name, step)
+
     pub func cancel(self):
         self.mode = ""
         self.prompt.layout().set_visible(false)

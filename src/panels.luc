@@ -5,7 +5,7 @@
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
-from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, Rule, Dialog, ContextMenu, NumberField
+from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, Rule, ContextMenu, NumberField
 from input import Key
 from workspace import Workspace
 from actions import Actions
@@ -25,7 +25,6 @@ from brush import preset
 from brush_dynamics import no_mappings
 from adjust_dialog import AdjustDialog
 from style_dialog import StyleDialog
-from adjustments import adjustments, applies_at_once, gradient_map, curves_adjustment
 from properties import Properties
 from prompts import Prompts
 from document_files import DocumentFiles
@@ -40,15 +39,16 @@ from channel_dialogs import SaveSelectionDialog, LoadSelectionDialog
 from text_editing import TextEditing
 from script_editor import ScriptEditor
 from tool_rail import ToolRail
-from layer_transfer import copy_layers, paste_layers, layers_to_paste, send_layers
+from layer_transfer import send_layers
 from panel_catalog import PanelCatalog
 from panel_list import panel_entries
 from dock_layout import DockLayout
 from align import align_modes, align_layers
-from canvas import Canvas
 import math
 from units import unit_ids
-from transform_box import mode_skew, mode_distort, mode_perspective
+from transform_flow import TransformFlow
+from panel_prompts import PanelPrompts
+from panels_wiring import PanelsWiring
 
 pub class Panels:
     pub let body: VStack
@@ -91,14 +91,16 @@ pub class Panels:
     ## The palette below the tool rail and the picker its swatches open, as Compositor's.
     pub let palette: Palette
     pub let picker: ColorPicker
-    ## On a mask the palette offers only black (hide) and white (reveal), as Compositor's does.
-    pub let mask_prompt: Dialog
+    ## The picker and the mask's black/white choice on a swatch, the text
+    ## editor for the Text tool (panel_prompts.luc).
+    pub let panel_prompts: PanelPrompts
+    ## The menus' transforms and crop (transform_flow.luc).
+    pub let transform_flow: TransformFlow
     ## The workspace revision the panels last showed.
     var shown_revision: int = -1
     ## The load percentage the status bar shows while a picture opens: -1 when
     ## none is, -2 when the status bar says something else meanwhile.
     var shown_opening: int = -1
-    var mask_background: bool = false
     pub let document_settings: DocumentSettings
     pub let size_dialogs: SizeDialogs
     pub let color_range: ColorRangeDialog
@@ -127,8 +129,6 @@ pub class Panels:
         self.view.on_open_files = self.files.open_files
         self.view.keys.on_key_up = self.spring_back
         self.view.context.on_changed = self.refresh
-        self.view.context.on_text = self.place_text
-        self.view.context.on_edit_text = self.edit_text
         self.view.context.on_refused = self.prompts.tell
         self.tabs = DocumentTabs(workspace, font)
         self.tabs.on_switch = self.switch_document
@@ -146,7 +146,6 @@ pub class Panels:
         self.header = ToolHeader(workspace, kit)
         self.header.brush_settings = self.open_brush
         self.header.refreshed = self.refresh
-        self.header.finished = self.finish_box
         self.brush = BrushSettings(workspace, kit)
         self.brush.on_failed = self.prompts.tell
         self.adjust = AdjustDialog(workspace, kit)
@@ -162,21 +161,13 @@ pub class Panels:
         self.scripts = ScriptEditor(workspace, actions, kit)
         self.scripts.changed = self.refresh
         self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.style.open)
-        # Both places that show a Gradient Map pick its colors with the picker.
-        self.adjust.controls.map_colors.pick_color = self.pick_any_color
-        self.properties.adjustment.map_colors.pick_color = self.pick_any_color
         self.properties.changed = self.document_changed
         self.properties.refreshed = self.refresh
         self.crash = CrashDialog(kit)
         self.palette = Palette(workspace)
-        self.palette.on_pick = self.pick_color
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
         self.picker.committed = self.settings_dialog.remember
-        kit.dialog_keys(self.picker.dialog, self.cancel_picker, self.accept_picker)
-        self.mask_prompt = Dialog([Text("Mask color", font = font), HStack([kit.button("Black · Hide", self.choose_mask_black),
-                                   kit.button("White · Reveal", self.choose_mask_white), Spacer()], spacing = 8.0)], width = 300.0)
-        kit.dialog_keys(self.mask_prompt, self.hide_mask_prompt, self.keep_mask_prompt)
         self.document_settings = DocumentSettings(workspace, font)
         self.document_settings.applied = self.refresh
         kit.dialog_keys(self.document_settings.dialog, self.document_settings.cancel, self.document_settings.apply)
@@ -186,6 +177,17 @@ pub class Panels:
         self.text_editing.failed = self.prompts.tell
         self.header.type_controls.changed = self.text_editing.restyle
         kit.bind(actions.commit_text, self.text_editing.commit)
+        self.panel_prompts = PanelPrompts(workspace, kit, self.picker, self.text_editing, self.prompts, self.adjust.dialog)
+        self.panel_prompts.refreshed = self.refresh
+        self.palette.on_pick = self.panel_prompts.pick_color
+        # Both places that show a Gradient Map pick its colors with the picker.
+        self.adjust.controls.map_colors.pick_color = self.panel_prompts.pick_any_color
+        self.properties.adjustment.map_colors.pick_color = self.panel_prompts.pick_any_color
+        self.view.context.on_text = self.panel_prompts.place_text
+        self.view.context.on_edit_text = self.panel_prompts.edit_text
+        self.transform_flow = TransformFlow(workspace, self.view, self.prompts)
+        self.transform_flow.refreshed = self.refresh
+        self.header.finished = self.transform_flow.finish_box
         self.size_dialogs = SizeDialogs(workspace, actions, kit)
         self.size_dialogs.report(self.refresh, self.prompts.tell)
         self.tabs.on_new = self.size_dialogs.new_canvas.open
@@ -209,7 +211,11 @@ pub class Panels:
         self.load_selection.applied = self.refresh
         self.load_selection.failed = self.prompts.tell
         kit.bind(actions.load_selection, self.load_selection.open)
-        self.connect()
+        # Every shared command to what this window does for it (panels_wiring.luc).
+        let wiring = PanelsWiring(actions, kit, workspace, self.prompts, self.refresh)
+        wiring.menus(self.files, self.view, self.status, self.transform_flow, self.settings_dialog, self.choose_tool, self.define_brush)
+        wiring.dialogs(self.adjust, self.style, self.scripts, self.document_settings, self.settings_dialog)
+        wiring.layers(self.view, self.toggle_mask, self.toggle_visibility)
         # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
         # tool selected, and the palette below them.
         self.rail = ToolRail(actions, kit)
@@ -243,8 +249,8 @@ pub class Panels:
         self.catalog = PanelCatalog(self.dock, self.viewport_panel, workspace, kit, self.view, self.settings_dialog, self.layers_panel, self.properties, self.brush)
         self.catalog.refreshed = self.refresh
         self.catalog.failed = self.prompts.tell
-        self.catalog.open_picker = self.pick_color
-        self.catalog.pick_any_color = self.pick_any_color
+        self.catalog.open_picker = self.panel_prompts.pick_color
+        self.catalog.pick_any_color = self.panel_prompts.pick_any_color
         self.catalog.brush_chosen = func () -> unit!:
             self.choose_tool("brush")
         self.catalog.align_commands = actions.aligns
@@ -272,267 +278,11 @@ pub class Panels:
             window_index += 1
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
-                            self.prompts.prompt, self.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
+                            self.prompts.prompt, self.panel_prompts.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
                             self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
                             self.picker.dialog, self.color_range.dialog, self.replace_color.dialog, self.select_mask.dialog, self.save_selection.dialog, self.load_selection.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
-
-    ## Wire every shared command to what this window does for it.
-    func connect(self) -> unit!:
-        let actions = self.actions
-        let kit = self.kit
-        kit.bind(actions.open_document, self.files.open_document)
-        kit.bind(actions.import_image, self.files.import_image)
-        kit.bind(actions.save, self.files.save)
-        kit.bind(actions.save_as, self.files.save_as)
-        kit.bind(actions.export_png, self.files.export_png)
-        kit.bind(actions.export_jpeg, self.files.export_jpeg)
-        kit.bind(actions.close_document, self.files.close_document)
-        kit.bind(actions.exit_app, self.files.quit)
-        kit.bind(actions.next_document, func () -> unit!:
-            self.workspace.documents.step(1)
-            self.refresh())
-        kit.bind(actions.previous_document, func () -> unit!:
-            self.workspace.documents.step(-1)
-            self.refresh())
-        kit.bind(actions.document_settings, func () -> unit!:
-            if kit.may_open(self.document_settings.dialog):
-                self.document_settings.open())
-        kit.bind(actions.settings, func () -> unit!:
-            if kit.may_open(self.settings_dialog.dialog):
-                self.settings_dialog.open())
-        kit.bind(actions.undo, func () -> unit!:
-            # During a free transform or a live gradient, undo drops it, as nothing is kept yet.
-            if self.workspace.transforms.transform != none:
-                self.workspace.transforms.finish_transform(false)
-            elif self.workspace.transforms.mesh_warp != none:
-                self.workspace.transforms.finish_mesh_warp(false)
-            elif self.workspace.painting.gradient != none:
-                self.workspace.painting.finish_gradient(false)
-            else:
-                self.workspace.undo()
-            self.refresh())
-        kit.bind(actions.redo, self.then_refresh(self.workspace.redo))
-        kit.bind(actions.fill, func () -> unit!:
-            self.workspace.painting.fill_selection(false)
-            self.refresh())
-        kit.bind(actions.define_brush, self.define_brush)
-        kit.bind(actions.fill_background, func () -> unit!:
-            self.workspace.painting.fill_selection(false, true)
-            self.refresh())
-        kit.bind(actions.next_document_tab, func () -> unit!:
-            actions.next_document.trigger())
-        kit.bind(actions.previous_document_tab, func () -> unit!:
-            actions.previous_document.trigger())
-        kit.bind(actions.redo_y, func () -> unit!:
-            actions.redo.trigger())
-        kit.bind(actions.fill_delete, func () -> unit!:
-            actions.fill.trigger())
-        kit.bind(actions.fill_background_delete, func () -> unit!:
-            actions.fill_background.trigger())
-        kit.bind(actions.clear, func () -> unit!:
-            # Its key (Backspace) takes a Polygonal Lasso corner back while one is drawn.
-            if self.view.polygon.active:
-                self.view.polygon.take_back()
-            else:
-                self.workspace.painting.fill_selection(true)
-            self.refresh())
-        kit.bind(actions.swap_colors, self.then_refresh(self.workspace.colors.swap_colors))
-        kit.bind(actions.reset_colors, self.then_refresh(self.workspace.colors.reset_colors))
-        kit.bind(actions.select_all, self.then_refresh(self.workspace.selection.select_all))
-        kit.bind(actions.deselect, self.then_refresh(self.workspace.selection.deselect))
-        kit.bind(actions.inverse, self.then_refresh(self.workspace.selection.invert_selection))
-        kit.bind(actions.expand, func () -> unit!:
-            self.prompts.ask("expand", "Expand the selection by, in pixels (1..512)", "4", "Expand"))
-        kit.bind(actions.contract, func () -> unit!:
-            self.prompts.ask("contract", "Contract the selection by, in pixels (1..512)", "4", "Contract"))
-        kit.bind(actions.feather, func () -> unit!:
-            self.prompts.ask("feather", "Feather the selection's edge by, in pixels (1..512)", "4", "Feather"))
-        kit.bind(actions.border, func () -> unit!:
-            self.prompts.ask("border", "Border of the selection, width in pixels (1..200)", "10", "Border"))
-        kit.bind(actions.smooth, func () -> unit!:
-            self.prompts.ask("smooth", "Smooth the selection over, in pixels (1..100)", "2", "Smooth"))
-        kit.bind(actions.grow, self.then_refresh(func () -> unit!:
-            self.workspace.selection.grow_selection(true)))
-        kit.bind(actions.similar, self.then_refresh(func () -> unit!:
-            self.workspace.selection.grow_selection(false)))
-        kit.bind(actions.transform_selection, self.transform_selection)
-        kit.bind(actions.quick_mask, self.then_refresh(self.workspace.selection.toggle_quick_mask))
-        kit.bind(actions.crop, self.crop)
-        kit.bind(actions.reveal_all, func () -> unit!:
-            if not self.workspace.image.reveal_all():
-                self.status.set_text("Nothing lies past the canvas")
-            self.refresh())
-        kit.bind(actions.blur, self.adjust.blur)
-        kit.bind(actions.script_editor, self.scripts.open)
-        var filter = 0
-        for command in actions.filters:
-            let chosen = filter
-            kit.bind(command, func () -> unit!:
-                self.adjust.filter(chosen))
-            filter += 1
-        kit.bind(actions.free_transform, self.free_transform)
-        kit.bind(actions.transform_skew, func () -> unit!:
-            self.transform_mode(mode_skew))
-        kit.bind(actions.transform_distort, func () -> unit!:
-            self.transform_mode(mode_distort))
-        kit.bind(actions.transform_perspective, func () -> unit!:
-            self.transform_mode(mode_perspective))
-        kit.bind(actions.transform_warp, func () -> unit!:
-            self.mesh_warp(false))
-        kit.bind(actions.puppet_warp, func () -> unit!:
-            self.mesh_warp(true))
-        kit.bind(actions.flip_horizontal, self.then_refresh(func () -> unit!:
-            self.workspace.transforms.flip_layer(true)))
-        kit.bind(actions.flip_vertical, self.then_refresh(func () -> unit!:
-            self.workspace.transforms.flip_layer(false)))
-        kit.bind(actions.flip_canvas_horizontal, self.then_refresh(func () -> unit!:
-            self.workspace.image.flip_canvas(true)))
-        kit.bind(actions.flip_canvas_vertical, self.then_refresh(func () -> unit!:
-            self.workspace.image.flip_canvas(false)))
-        kit.bind(actions.layer_style, self.style.open)
-        kit.bind(actions.add_noise, self.adjust.add_noise)
-        var layer_kinds: list[int] = []
-        for adjustment in adjustments():
-            if adjustment.layerable:
-                layer_kinds.append(adjustment.kind)
-        var at = 0
-        for command in actions.adjustment_layers:
-            let kind = layer_kinds[at]
-            at += 1
-            kit.bind(command, self.attempting("Adjustment Layer", func () -> unit!:
-                self.new_adjustment_layer(kind)))
-        kit.bind(actions.cut, func () -> unit!:
-            self.attempt("Cut", func () -> unit!:
-                self.copy_or_cut(true)))
-        kit.bind(actions.copy, func () -> unit!:
-            self.attempt("Copy", func () -> unit!:
-                self.copy_or_cut(false)))
-        kit.bind(actions.copy_merged, func () -> unit!:
-            self.attempt("Copy Merged", func () -> unit!:
-                self.workspace.edits.copy_selection(true, false)))
-        kit.bind(actions.paste_in_place, func () -> unit!:
-            self.attempt("Paste in Place", func () -> unit!:
-                if layers_to_paste():
-                    paste_layers(self.workspace, true)
-                else:
-                    self.workspace.edits.paste_in_place()
-                self.refresh()))
-        kit.bind(actions.paste, func () -> unit!:
-            self.attempt("Paste", func () -> unit!:
-                if layers_to_paste():
-                    paste_layers(self.workspace, false)
-                    self.refresh()
-                    return
-                # Paste lands in the middle of the view, as Photoshop's does.
-                let bounds = self.view.layout().bounds()
-                let x = (bounds.width * 0.5 - self.workspace.viewport.offset_x) / self.workspace.viewport.zoom
-                let y = (bounds.height * 0.5 - self.workspace.viewport.offset_y) / self.workspace.viewport.zoom
-                self.workspace.edits.paste(x, y)))
-        kit.bind(actions.layer_via_copy, func () -> unit!:
-            self.attempt("Layer via Copy", func () -> unit!:
-                self.workspace.edits.layer_via_copy(false)))
-        kit.bind(actions.layer_via_cut, func () -> unit!:
-            self.attempt("Layer via Cut", func () -> unit!:
-                self.workspace.edits.layer_via_copy(true)))
-        kit.bind(actions.layer_up, func () -> unit!:
-            self.workspace.edits.reorder(1)
-            self.refresh())
-        kit.bind(actions.layer_down, func () -> unit!:
-            self.workspace.edits.reorder(-1)
-            self.refresh())
-        kit.bind(actions.toggle_mask, self.toggle_mask)
-        kit.bind(actions.hide_all_mask, self.attempting("Add Mask", func () -> unit!:
-            self.workspace.edits.toggle_mask(true)))
-        kit.bind(actions.toggle_mask_enabled, self.attempting("Mask", self.workspace.edits.toggle_mask_enabled))
-        kit.bind(actions.toggle_mask_link, self.attempting("Mask", self.workspace.edits.toggle_mask_link))
-        kit.bind(actions.copy_mask, self.attempting("Copy Mask", self.workspace.edits.copy_mask))
-        kit.bind(actions.toggle_preview, self.adjust.toggle_preview)
-        kit.bind(actions.paste_mask, self.attempting("Paste Mask", self.workspace.edits.paste_mask))
-        kit.bind(actions.load_transparency, self.attempting("Load Transparency", self.workspace.edits.load_transparency))
-        kit.bind(actions.toggle_mask_editing, self.then_refresh(self.workspace.edits.toggle_mask_editing))
-        kit.bind(actions.toggle_visibility, self.toggle_visibility)
-        kit.bind(actions.show_guides, func () -> unit!:
-            self.workspace.viewport.show_guides = not self.workspace.viewport.show_guides
-            self.view_changed())
-        kit.bind(actions.snap, func () -> unit!:
-            self.workspace.viewport.snap = not self.workspace.viewport.snap
-            self.view_changed())
-        kit.bind(actions.lock_guides, func () -> unit!:
-            self.workspace.viewport.lock_guides = not self.workspace.viewport.lock_guides
-            self.view_changed())
-        kit.bind(actions.clear_guides, self.attempting("Clear Guides", func () -> unit!:
-            self.workspace.canvas.clear_guides()
-            self.workspace.touch()))
-        kit.bind(actions.show_transform_controls, func () -> unit!:
-            self.workspace.transforms.show_transform_controls = not self.workspace.transforms.show_transform_controls
-            self.workspace.touch()
-            self.refresh())
-        kit.bind(actions.show_rulers, func () -> unit!:
-            self.workspace.viewport.show_rulers = not self.workspace.viewport.show_rulers
-            self.view_changed())
-        kit.bind(actions.show_grid, func () -> unit!:
-            self.workspace.viewport.show_grid = not self.workspace.viewport.show_grid
-            self.view_changed())
-        var unit_index = 0
-        for unit_name in unit_ids():
-            let chosen = unit_name
-            kit.bind(actions.units[unit_index], func () -> unit!:
-                self.workspace.viewport.units = chosen
-                self.view_changed())
-            unit_index += 1
-        kit.bind(actions.fit, func () -> unit!:
-            self.workspace.viewport.fitted = false
-            self.refresh())
-        kit.bind(actions.actual_size, func () -> unit!:
-            let bounds = self.view.layout().bounds()
-            self.workspace.viewport.actual_size(bounds.width, bounds.height)
-            self.refresh())
-        kit.bind(actions.zoom_in, func () -> unit!:
-            self.zoom_by(1))
-        kit.bind(actions.zoom_out, func () -> unit!:
-            self.zoom_by(-1))
-        kit.bind(actions.bigger, func () -> unit!:
-            self.workspace.tools.scale_brush(1.25)
-            self.refresh())
-        kit.bind(actions.smaller, func () -> unit!:
-            self.workspace.tools.scale_brush(0.8)
-            self.refresh())
-        kit.bind(actions.harder, func () -> unit!:
-            self.workspace.tools.harden_brush(0.25)
-            self.refresh())
-        kit.bind(actions.softer, func () -> unit!:
-            self.workspace.tools.harden_brush(-0.25)
-            self.refresh())
-        kit.bind(actions.next_blend, func () -> unit!:
-            self.workspace.edits.cycle_blend(1)
-            self.refresh())
-        kit.bind(actions.previous_blend, func () -> unit!:
-            self.workspace.edits.cycle_blend(-1)
-            self.refresh())
-        var kind = 0
-        for command in actions.adjustments:
-            let selected = kind
-            kit.bind(command, func () -> unit!:
-                self.adjust_kind(selected))
-            kind += 1
-        var mode = 0
-        for command in actions.blends:
-            let chosen = mode
-            kit.bind(command, func () -> unit!:
-                self.set_blend(chosen))
-            mode += 1
-        for command in actions.tools:
-            let tool = command.id()
-            kit.bind(command, func () -> unit!:
-                self.choose_tool(next_in_cycle(tool, self.workspace.tools.tool)))
-
-    ## `change` to the workspace, then refresh the window.
-    func then_refresh(self, change: func() -> unit!) -> func() -> unit!:
-        return func () -> unit!:
-            change()
-            self.refresh()
 
     # -- Tools and colors.
 
@@ -552,7 +302,6 @@ pub class Panels:
         self.workspace.choose_tool(tool)
         self.refresh()
 
-    ## Brush…: Brush Settings, floating the first time.
     ## Edit › Define Brush Preset…: the selection's pixels (the whole picture
     ## without one) become the tip of a new brush in the library, which is
     ## then the brush in hand, as Photoshop's.
@@ -570,163 +319,9 @@ pub class Panels:
         brushes.pick(brushes.rows.selected)
         self.refresh()
 
+    ## Brush…: Brush Settings, floating the first time.
     pub func open_brush(self) -> unit!:
         self.brush.open(self.dock)
-
-    ## A palette swatch clicked: the picker opens for that color — or, on a
-    ## mask, the black/white choice.
-    pub func pick_color(self, background: bool) -> unit!:
-        self.mask_background = background
-        if self.workspace.canvas.editing_mask():
-            if self.kit.may_open(self.mask_prompt):
-                self.mask_prompt.open()
-            return
-        if not self.kit.may_open(self.picker.dialog):
-            return
-        self.picker.open(background)
-        self.refresh()
-
-    ## The picker on any color: its title, the "#rrggbb" it starts from, where changes go.
-    func pick_any_color(self, title: str, hex: str, changed: func(str) -> unit!) -> unit!:
-        if self.kit.may_open(self.picker.dialog) or self.adjust.dialog.is_open():
-            self.picker.open_for(title, hex, changed)
-
-    func cancel_picker(self) -> unit!:
-        self.picker.finish(false)
-
-    func accept_picker(self) -> unit!:
-        self.picker.finish(true)
-
-    func hide_mask_prompt(self) -> unit!:
-        self.mask_prompt.hide()
-
-    ## The mask prompt has no default choice: Enter leaves it open.
-    func keep_mask_prompt(self) -> unit!:
-        return
-
-    func choose_mask_black(self) -> unit!:
-        self.choose_mask_color(0.0)
-
-    func choose_mask_white(self) -> unit!:
-        self.choose_mask_color(1.0)
-
-    func choose_mask_color(self, value: float) -> unit!:
-        self.workspace.colors.set_palette(value, value, value, self.mask_background)
-        self.mask_prompt.hide()
-        self.refresh()
-
-    ## The Text tool clicked or dragged a new text layer into place; not while
-    ## another dialog is open, as the editor is one.
-    func place_text(self, x: float, y: float, box_width: float) -> unit!:
-        if not self.kit.may_open(self.text_editing.dialog):
-            return
-        self.attempt("Text", func () -> unit!:
-            self.text_editing.begin_new(x, y, box_width))
-
-    func edit_text(self, index: int) -> unit!:
-        if not self.kit.may_open(self.text_editing.dialog):
-            return
-        self.attempt("Text", func () -> unit!:
-            self.text_editing.begin_existing(index))
-
-    ## Open the adjustment's sliders with a live preview, or apply the ones
-    ## that take no parameters (invert, desaturate) at once.
-    pub func adjust_kind(self, kind: int) -> unit!:
-        if applies_at_once(kind):
-            self.attempt("Adjust", func () -> unit!:
-                self.workspace.previews.adjust(kind, []))
-            return
-        self.adjust.open(kind)
-
-    ## A new adjustment layer of `kind` at its defaults, above the selected
-    ## layer and selected: its settings show in Properties.
-    func new_adjustment_layer(self, kind: int) -> unit!:
-        let spec = adjustments()[kind]
-        var numbers = spec.engine(spec.defaults())
-        if kind == gradient_map:
-            numbers = numbers + self.workspace.colors.colors_encoded()
-        # A new Curves layer starts straight, whatever a dialog last staged.
-        if kind == curves_adjustment:
-            var channel = 0
-            while channel < 4:
-                self.workspace.canvas.reset_curve(channel)
-                channel += 1
-        discard(self.workspace.previews.add_adjustment_layer(kind, spec.name, numbers))
-
-    ## Edit › Free Transform: the box goes up around the layer's pixels on the canvas.
-    pub func free_transform(self) -> unit!:
-        let started = self.workspace.transforms.begin_transform() catch failure:
-            self.prompts.tell(f"Cannot transform: {failure.message}")
-            return
-        if not started:
-            self.prompts.tell("Nothing to transform: the layer has no pixels")
-        # Enter and Esc go to the canvas.
-        self.view.layout().request_focus()
-        self.refresh()
-
-    ## Edit › Transform › Skew, Distort or Perspective: the free-transform box
-    ## (up already, or put up now) with its handles in that mode.
-    func transform_mode(self, mode: int) -> unit!:
-        let started = self.workspace.transforms.begin_transform_mode(mode) catch failure:
-            self.prompts.tell(f"Cannot transform: {failure.message}")
-            return
-        if not started:
-            self.prompts.tell("Nothing to transform: the layer has no pixels")
-        self.view.layout().request_focus()
-        self.refresh()
-
-    ## Edit › Transform › Warp or Edit › Puppet Warp on the selected layer.
-    func mesh_warp(self, puppet: bool) -> unit!:
-        let name = "Puppet Warp" if puppet else "Warp"
-        let started = self.workspace.transforms.begin_mesh_warp(puppet) catch failure:
-            self.prompts.tell(f"Cannot {name.lower()}: {failure.message}")
-            return
-        if not started:
-            self.prompts.tell(f"Cannot {name.lower()} while something else is under way")
-        self.view.layout().request_focus()
-        self.refresh()
-
-    ## Select › Transform Selection: the box goes up around the selection, moving its outline.
-    pub func transform_selection(self) -> unit!:
-        let started = self.workspace.transforms.begin_selection_transform() catch failure:
-            self.prompts.tell(f"Cannot transform the selection: {failure.message}")
-            return
-        if not started:
-            self.prompts.tell("Nothing selected to transform")
-        self.view.layout().request_focus()
-        self.refresh()
-
-    ## The header's Apply or Cancel: the free transform, or the Crop tool's box.
-    pub func finish_box(self, keep: bool) -> unit!:
-        if self.workspace.painting.gradient != none:
-            self.workspace.painting.finish_gradient(keep)
-        elif self.workspace.transforms.transform != none:
-            self.workspace.transforms.finish_transform(keep)
-        elif self.workspace.transforms.mesh_warp != none:
-            self.workspace.transforms.finish_mesh_warp(keep)
-        else:
-            self.workspace.image.finish_crop(keep)
-        self.refresh()
-
-    pub func crop(self) -> unit!:
-        self.workspace.image.crop() catch failure:
-            self.prompts.tell(f"Cannot crop: {failure.message}")
-            return
-        self.refresh()
-
-    ## Run a command's `step`; a failure (nothing selected, no image on the
-    ## clipboard, a group where pixels are needed) is said in the prompt under
-    ## `name`. The window refreshes after it.
-    func attempt(self, name: str, step: func() -> unit!) -> unit!:
-        step() catch failure:
-            self.prompts.tell(f"{name}: {failure.message}")
-            return
-        self.refresh()
-
-    ## `attempt` as a command's action.
-    func attempting(self, name: str, step: func() -> unit!) -> func() -> unit!:
-        return func () -> unit!:
-            self.attempt(name, step)
 
     # -- Layers.
 
@@ -739,31 +334,17 @@ pub class Panels:
         self.refresh()
 
     pub func toggle_mask(self) -> unit!:
-        self.attempt("Mask", func () -> unit!:
+        self.prompts.attempt("Mask", func () -> unit!:
             self.workspace.edits.toggle_mask())
 
     pub func toggle_clipped(self) -> unit!:
         self.workspace.edits.toggle_clipped()
         self.refresh()
 
-    pub func set_blend(self, mode: int) -> unit!:
-        self.workspace.edits.set_blend(mode)
-        self.refresh()
-
     # -- Documents.
 
     pub func switch_document(self, index: int) -> unit!:
         self.workspace.documents.switch_to(index)
-        self.refresh()
-
-    ## Copy (Cut with `cut`): the selected pixels, or with none selected the
-    ## selected layers whole.
-    func copy_or_cut(self, cut: bool) -> unit!:
-        if self.workspace.canvas.has_selection():
-            Canvas.forget_copied_layers()
-            self.workspace.edits.copy_selection(false, cut)
-        else:
-            copy_layers(self.workspace, cut)
         self.refresh()
 
     ## Layers dragged from the Layers panel and let go at window point
@@ -780,21 +361,10 @@ pub class Panels:
 
     # -- Showing the state.
 
-    ## A view aid changed: keep it and redraw.
-    func view_changed(self) -> unit!:
-        self.settings_dialog.remember_view()
-        self.refresh()
-
     ## A zoom typed in the status bar, in percent, about the view's middle.
     func type_zoom(self, percent: float) -> unit!:
         let bounds = self.view.layout().bounds()
         self.workspace.viewport.zoom_about(percent / 100.0 / self.workspace.viewport.zoom, bounds.width * 0.5, bounds.height * 0.5)
-        self.refresh()
-
-    ## Zoom In or Out: the next step, about the view's middle.
-    func zoom_by(self, direction: int) -> unit!:
-        let bounds = self.view.layout().bounds()
-        self.workspace.viewport.zoom_step(direction, bounds.width * 0.5, bounds.height * 0.5)
         self.refresh()
 
     ## The document's pixels changed without a structural change: redraw the
@@ -906,14 +476,3 @@ pub class Panels:
         self.focus_canvas_in -= 1
         if self.focus_canvas_in == 0:
             self.view.layout().request_focus()
-
-## Shift+L steps through the lassos as Photoshop's does: Polygonal, then
-## Magnetic, then back to the Lasso. Other shortcuts pick their own tool.
-pub func next_in_cycle(chosen: str, current: str) -> str:
-    if chosen != "polygon":
-        return chosen
-    if current == "polygon":
-        return "magnetic"
-    if current == "magnetic":
-        return "lasso"
-    return "polygon"
