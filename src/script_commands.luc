@@ -282,6 +282,8 @@ pub class ScriptCommands:
             workspace.resize_canvas(number(fields, 2), number(fields, 3), -number(fields, 0), -number(fields, 1))
         elif action == "flip_canvas":
             workspace.flip_canvas(flag(fields, 0))
+        elif action == "set_linear_blend":
+            workspace.set_linear_blend(flag(fields, 0))
         elif is_transform_action(action):
             apply_transform(workspace, action, fields)
         elif is_vector_action(action):

@@ -1,5 +1,5 @@
 ## Image › Document Settings…: the dialog for the document's size, resolution,
-## display unit and color profile.
+## display unit, color profile and how its colors blend.
 from ui import Widget, Font, Text, Button, HStack, Spacer, Size, Dialog, NumberField, Checkbox, Menu, Command
 from interop import Connection
 from workspace import Workspace
@@ -11,6 +11,8 @@ from units import unit_ids, unit_label, unit_suffix, pixels_per
 ## Size. With Resample the pixels are scaled to the new size; without it the
 ## canvas grows or shrinks around the picture, centred. The profile is assigned,
 ## not converted: the pixels keep their numbers and are read in the new space.
+## "Blend RGB Colors Using Gamma 1.0" is Photoshop's Color Settings option:
+## colors mix in linear light instead of as their sRGB-encoded values.
 pub class DocumentSettings:
     pub let dialog: Dialog
     let workspace: Workspace
@@ -21,6 +23,7 @@ pub class DocumentSettings:
     let units_menu: Menu
     let profile_menu: Menu
     let resample: Checkbox
+    pub let gamma: Checkbox
     let connections: list[Connection]
     ## The choices while the dialog is open.
     var units: str = "px"
@@ -54,6 +57,7 @@ pub class DocumentSettings:
             profile_commands.append(command)
         self.profile_menu = Menu("sRGB ▾", profile_commands, font = font)
         self.resample = Checkbox("Resample pixels", true, font = font)
+        self.gamma = Checkbox("Blend RGB Colors Using Gamma 1.0", false, font = font)
         let cancel = Button("Cancel", font = font)
         let apply = Button("Apply", font = font)
         self.connections.append(cancel.on_click(self.cancel))
@@ -63,6 +67,8 @@ pub class DocumentSettings:
                               self.row("Units", self.units_menu), self.row("Resolution", self.resolution_field),
                               self.row("Color profile", self.profile_menu), self.row("", self.resample),
                               Text("Unchecked, the canvas resizes around the picture.", font = font, muted = true),
+                              self.row("Blending", self.gamma),
+                              Text("Checked, colors mix in linear light rather than as sRGB values.", font = font, muted = true),
                               HStack([Spacer(), cancel, apply], spacing = 8.0)], width = 460.0, spacing = 10.0)
 
     func row(self, label: str, control: Widget) -> HStack!:
@@ -79,6 +85,7 @@ pub class DocumentSettings:
         self.profile = canvas.profile()
         self.profile_menu.set_text(self.profile + " ▾")
         self.resolution_field.set_value(canvas.resolution())
+        self.gamma.set_checked(canvas.linear_blend())
         self.choose_units(self.workspace.units)
         self.dialog.open()
 
@@ -111,6 +118,8 @@ pub class DocumentSettings:
         let canvas = self.workspace.canvas
         canvas.set_resolution(self.resolution_field.value())
         canvas.set_profile(self.profile)
+        if self.gamma.is_checked() != canvas.linear_blend():
+            self.workspace.set_linear_blend(self.gamma.is_checked())
         let per_unit = self.pixels_per_unit()
         let width = int(math.floor(self.width_field.value() * per_unit + 0.5))
         let height = int(math.floor(self.height_field.value() * per_unit + 0.5))

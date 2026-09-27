@@ -20,6 +20,12 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - Layers with names, visibility, opacity and all 26 Photoshop blend modes,
   composed on the GPU with a cache
   that re-renders only the tiles an edit touches.
+- Colors mix as Photoshop mixes them: as sRGB-encoded values, wherever they
+  mix — layers, brushes, fills, gradients, filters, resampling, the checkerboard
+  and Quick Mask's tint. A 50% black stroke on white is 128, not 188. Image ›
+  Document Settings' "Blend RGB Colors Using Gamma 1.0" mixes them in linear light
+  instead; it is saved with the document and undoable (half-opacity strokes:
+  [sRGB](docs/preview_blend.png), [gamma 1.0](docs/preview_blend_linear.png)).
 - Move tool (`V`): drag with a live preview, or nudge, the layer's pixels;
   Edit › Free Transform (cmd-T) scales, rotates and moves a layer with a live
   preview; Edit › Transform › Skew, Distort and Perspective (or cmd-,

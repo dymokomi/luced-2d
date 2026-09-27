@@ -1090,6 +1090,21 @@ func scripts() -> unit!:
     assert(workspace.canvas.undo_name() == "Inverse")
     commands.apply(parse_line("@l2d select_color_range\t9\t40\tfalse") else trap("line"))
     assert(workspace.canvas.undo_name() == "Color Range")
+    # Colors blend as sRGB values unless Document Settings' gamma 1.0 is on:
+    # a script and the dialog both turn it on, each one step.
+    assert(not workspace.canvas.linear_blend())
+    commands.apply(parse_line("@l2d set_linear_blend\ttrue") else trap("line"))
+    assert(workspace.canvas.linear_blend() and workspace.canvas.undo_name() == "Blend RGB Colors Using Gamma 1.0")
+    workspace.undo()
+    assert(not workspace.canvas.linear_blend())
+    panels.document_settings.open()
+    assert(not panels.document_settings.gamma.is_checked())
+    panels.document_settings.gamma.set_checked(true)
+    panels.document_settings.apply()
+    assert(workspace.canvas.linear_blend())
+    panels.document_settings.open()
+    assert(panels.document_settings.gamma.is_checked())
+    panels.document_settings.cancel()
     panels.close()
 
 ## The Script editor opens with a starter script that runs: dots on a layer.

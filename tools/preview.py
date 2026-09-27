@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders', 'brushtip', 'brushdynamics', 'brushtransfer', 'brushlist', 'brushround'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders', 'brushtip', 'brushdynamics', 'brushtransfer', 'brushlist', 'brushround', 'halfstrokes', 'halfstrokeslinear'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -31,6 +31,37 @@ def color_scene(mode):
             color.sliders.choose(1)
             color.show()
             editor.panels.refresh()''' % mode
+
+
+def half_strokes(linear):
+    """Black strokes at half opacity on white, crossing: 128 grey where the document
+    blends in sRGB (Photoshop's default), 188 with gamma 1.0; 64 or 137 where they cross."""
+    return ('''            editor.workspace.set_linear_blend(%s)
+            # One plain layer alone: the base scene's picture, text and Screen mode hidden.
+            let canvas = editor.workspace.canvas
+            canvas.set_layer(canvas.layer_id(0), false, 1.0)
+            canvas.set_layer(canvas.layer_id(2), false, 1.0)
+            canvas.set_layer(canvas.layer_id(1), true, 1.0, 0)
+            editor.workspace.select(1)
+            editor.workspace.canvas.select_all()
+            editor.workspace.set_color(1.0, 1.0, 1.0)
+            editor.workspace.brush.opacity = 1.0
+            editor.workspace.fill_selection(false)
+            editor.workspace.deselect()
+            editor.workspace.choose_tool("brush")
+            editor.workspace.set_color(0.0, 0.0, 0.0)
+            editor.workspace.brush.hardness = 1.0
+            editor.workspace.brush.diameter = 90.0
+            editor.workspace.brush.opacity = 0.5
+            for row in [220.0, 440.0, 660.0]:
+                editor.workspace.begin_stroke(160.0, row)
+                editor.workspace.extend_stroke(1240.0, row)
+                editor.workspace.end_stroke()
+            editor.workspace.begin_stroke(700.0, 120.0)
+            editor.workspace.extend_stroke(700.0, 760.0)
+            editor.workspace.end_stroke()
+            editor.workspace.touch()
+            editor.panels.refresh()''') % ('true' if linear else 'false')
 
 
 SCENES = {
@@ -237,6 +268,8 @@ SCENES = {
             editor.workspace.canvas.enter_quick_mask()
             editor.workspace.touch()
             editor.panels.refresh()''',
+    'halfstrokes': half_strokes(False),
+    'halfstrokeslinear': half_strokes(True),
     'guides': '''            discard(editor.workspace.canvas.add_guide(true, 700.0))
             discard(editor.workspace.canvas.add_guide(false, 300.0))
             editor.panels.refresh()''',

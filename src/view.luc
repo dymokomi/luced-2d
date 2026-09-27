@@ -205,14 +205,15 @@ pub class CanvasView: Widget:
         let y1 = math.min(size.height, top + float(workspace.height()) * workspace.zoom)
         if x1 > x0 and y1 > y0:
             self.draw_checker(painter, x0, y0, x1, y1)
+            # The canvas draws the checkerboard under the picture itself, so the
+            # two mix as the document blends its colors (sRGB unless gamma 1.0).
+            workspace.canvas.set_checker(8.0, theme.checker_light().red, theme.checker_dark().red)
             if self.moving and not self.move_pixels and not self.move_element:
                 let dx = (self.move_now_x - self.move_x) / workspace.zoom
                 let dy = (self.move_now_y - self.move_y) / workspace.zoom
                 workspace.canvas.draw_moving(target, whole, workspace.zoom, left, top, workspace.selected_id(), dx, dy)
             else:
                 workspace.canvas.draw(target, whole, workspace.zoom, left, top)
-            if workspace.show_grid:
-                self.draw_grid(painter, x0, y0, x1, y1)
             outline(painter, Rect(x0, y0, x1 - x0, y1 - y0), theme.border())
         # Marching ants along the selection's edge, at screen resolution, moving
         # with selected pixels being dragged; while a shape is being dragged its
@@ -227,6 +228,9 @@ pub class CanvasView: Widget:
                 ants_left += float(self.move_shown_x) * workspace.zoom
                 ants_top += float(self.move_shown_y) * workspace.zoom
             workspace.canvas.draw_selection(target, whole, workspace.zoom, ants_left, ants_top, self.ants)
+        # The grid over the picture and whatever tints it.
+        if workspace.show_grid and x1 > x0 and y1 > y0:
+            self.draw_grid(painter, x0, y0, x1, y1)
         self.selection.draw(painter, workspace.zoom, left, top, theme.text())
         # Another tool chosen mid-shape lets the polygon go.
         if self.polygon.active and workspace.tool != "polygon":

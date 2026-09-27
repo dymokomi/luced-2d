@@ -161,6 +161,7 @@ pub func snapshot(workspace: Workspace) -> str!:
     text = text + f"pub func height() -> int:\n    return {workspace.height()}\n\n"
     text = text + "pub func layers() -> list[str]:\n    return [" + names + "]\n\n"
     text = text + f"pub func selected() -> int:\n    return {workspace.selected}\n\n"
+    text = text + "pub func linear_blend() -> bool:\n    return " + ("true" if workspace.canvas.linear_blend() else "false") + "\n\n"
     text = text + "pub func path() -> str:\n    return " + quoted(workspace.path) + "\n"
     return text
 

@@ -36,6 +36,11 @@ pub func layer_names() -> list[str]:
 pub func selected_layer() -> int:
     return document.selected()
 
+## Whether the document blends its colors in linear light (Color Settings'
+## "Blend RGB Colors Using Gamma 1.0"); false: as sRGB values, Photoshop's default.
+pub func linear_blend() -> bool:
+    return document.linear_blend()
+
 ## The open document's file, or "" when it was never saved.
 pub func document_path() -> str:
     return document.path()
@@ -433,3 +438,8 @@ pub func crop(x: int, y: int, width: int, height: int):
 
 pub func flip_canvas(horizontal: bool = true):
     send("flip_canvas", [str(horizontal)])
+
+## Document Settings' "Blend RGB Colors Using Gamma 1.0": `on` mixes colors
+## in linear light from here on; off, as sRGB values, as Photoshop does. One step.
+pub func set_linear_blend(on: bool):
+    send("set_linear_blend", [str(on)])

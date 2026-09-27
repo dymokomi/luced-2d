@@ -99,6 +99,10 @@ The full, commented list is `scripting/luced.luc`.
   luced.link_nodes("tint", "clone", "Fill")
   ```
 - **Canvas:** `resize_image`, `resize_canvas`, `crop`, `flip_canvas`.
+- **Blending:** `set_linear_blend(on)` is Document Settings' "Blend RGB Colors Using
+  Gamma 1.0": on, colors mix in linear light; off (the default), as sRGB-encoded values,
+  as Photoshop mixes them. `linear_blend()` tells how the document blended when the
+  script started.
 
 The first action that fails stops the run. What ran before it stays, as one undo step,
 and the console says what failed.

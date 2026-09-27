@@ -794,6 +794,13 @@ pub class Workspace:
         self.touch()
         return true
 
+    ## Color Settings' "Blend RGB Colors Using Gamma 1.0" for the document:
+    ## on, colors mix in linear light; off (the default), as sRGB-encoded
+    ## values, as Photoshop's do. One undo step.
+    pub func set_linear_blend(self, on: bool) -> unit!:
+        self.canvas.set_linear_blend(on)
+        self.touch()
+
     ## Every layer resampled to `width` by `height`.
     pub func resize_image(self, width: int, height: int, smooth: bool = true) -> unit!:
         self.canvas.resize_image(width, height, smooth)
