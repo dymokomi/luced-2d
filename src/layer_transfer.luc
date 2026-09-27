@@ -6,6 +6,7 @@
 ## the same way, leaving the clipboard alone. luce-image keeps the copied
 ## layers; the system clipboard gets their pixels too, for other programs.
 from canvas import Canvas
+from system_hooks import announce_copied_layers, copy_picture, layers_on_clipboard
 from workspace import Workspace
 
 ## The selected layers to copy, bottom to top, leaving out any a selected
@@ -27,7 +28,9 @@ func outermost_selected(workspace: Workspace) -> list[int]!:
 func copy_selected(workspace: Workspace, quietly: bool) -> unit!:
     Canvas.forget_copied_layers()
     for id in outermost_selected(workspace):
-        workspace.canvas.copy_layer(id, quietly)
+        workspace.canvas.copy_layer(id)
+    if not quietly:
+        announce_copied_layers()
 
 ## Edit › Copy (Cut with `cut`) with nothing selected: the selected layers
 ## whole, and the selected layer's pixels for other programs when it has any.
@@ -37,14 +40,14 @@ pub func copy_layers(workspace: Workspace, cut: bool) -> unit!:
     let index = workspace.layers.selected
     let canvas = workspace.canvas
     if not canvas.layer_is_group(index) and canvas.layer_adjustment(index) < 0:
-        canvas.copy_selection(workspace.layers.selected_id(), false, false)
+        copy_picture(canvas.copy_selection(workspace.layers.selected_id(), false, false))
     if cut:
         workspace.edits.as_one("Cut Layers", func () -> unit!:
             workspace.edits.delete_layer())
 
 ## Whether Paste takes copied layers rather than an image.
 pub func layers_to_paste() -> bool!:
-    return Canvas.layers_on_clipboard()
+    return layers_on_clipboard()
 
 ## The copied layers above the selected layer, in its group, the topmost
 ## selected: where they were when the documents are the same size or

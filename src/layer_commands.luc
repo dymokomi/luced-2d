@@ -2,6 +2,7 @@
 ## one): new, delete, reorder, duplicate and merge; copy and paste; the
 ## appearance (visibility, opacity, blend, clipping); masks; and moves.
 from canvas import Canvas
+from system_hooks import copy_picture, clipboard_picture
 from live import Live
 from layer_picking import LayerPicking
 import math
@@ -100,7 +101,7 @@ pub class LayerCommands:
     ## selection) to the system clipboard, or the whole picture's with
     ## `merged`; with `cut` they leave the layer.
     pub func copy_selection(self, merged: bool, cut: bool) -> unit!:
-        self.live.canvas.copy_selection(self.layers.selected_id(), merged, cut)
+        copy_picture(self.live.canvas.copy_selection(self.layers.selected_id(), merged, cut))
         self.live.touch()
 
     ## The clipboard's image on a new layer just above the selected one, centred
@@ -110,7 +111,7 @@ pub class LayerCommands:
         let parent = canvas.layer_parent(self.layers.selected)
         let position = canvas.layer_position(self.layers.selected)
         self.as_one("Paste", func () -> unit!:
-            let id = canvas.paste(int(x), int(y))
+            let id = canvas.paste(clipboard_picture(), int(x), int(y))
             canvas.move_into(id, parent, position + 1)
             self.layers.select_id(id))
 
@@ -120,7 +121,7 @@ pub class LayerCommands:
         let parent = canvas.layer_parent(self.layers.selected)
         let position = canvas.layer_position(self.layers.selected)
         self.as_one("Paste in Place", func () -> unit!:
-            let id = canvas.paste_in_place()
+            let id = canvas.paste_in_place(clipboard_picture())
             canvas.move_into(id, parent, position + 1)
             self.layers.select_id(id))
 

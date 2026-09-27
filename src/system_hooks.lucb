@@ -1,0 +1,81 @@
+## What the engine leaves to the app: waking the window's loop when work
+## finished on a worker thread wants a frame, and the system clipboard's
+## pictures and text. luce-image and luce-canvas touch neither; they hand
+## pictures out and take them in.
+import clipboard
+import interop
+import memory
+import wake
+import window
+from canvas import Canvas
+from image import Image
+
+## Have the engine's workers wake the window's loop (which may sleep until
+## input) whenever they finish something a frame should take in.
+pub func connect_engine_wake():
+    wake.set_wake(wake_window)
+
+func wake_window():
+    window.wake() catch failure:
+        discard(failure)
+
+## Put `picture` on the system clipboard as PNG, with its RGBA for programs
+## that take pixels.
+pub func copy_picture(picture: interop.Reference[Image]) -> !:
+    let image = picture.value()
+    let width = try image.width()
+    let height = try image.height()
+    let encoded_png = try image.encode("png")
+    defer free(encoded_png) in memory.heap
+    let rgba = try image.rgba8()
+    defer free(rgba) in memory.heap
+    try clipboard.write_image(encoded_png, (u32)width, (u32)height, rgba)
+
+## The system clipboard's picture: its encoded file when it has one, else its
+## raw RGBA; failing when it holds none.
+pub func clipboard_picture() -> interop.Reference[Image]!:
+    let found = try clipboard.read_image() else error(interop.invalid, "the clipboard holds no image")
+    var held = found
+    defer held.destroy()
+    if held.encoded.length > 0:
+        return try Image.open_bytes(held.encoded)
+    return try Image.from_rgba8((usize)held.width, (usize)held.height, held.rgba)
+
+## The size of the picture on the system clipboard, for a new canvas that
+## fits it; 0 when there is none.
+pub func clipboard_picture_width() -> i64!:
+    let found = try clipboard.read_image() else return 0
+    var held = found
+    defer held.destroy()
+    return (i64)held.width
+
+pub func clipboard_picture_height() -> i64!:
+    let found = try clipboard.read_image() else return 0
+    var held = found
+    defer held.destroy()
+    return (i64)held.height
+
+## The copied layers' names on the system clipboard, a line each, so Paste
+## knows the layers are still what it holds.
+pub func announce_copied_layers() -> !:
+    let names = try Canvas.copied_layer_names()
+    defer names.release()
+    clipboard.write_text(names.value) catch failure:
+        # A clipboard without text (Linux, for now): the layers still paste here.
+        discard(failure)
+
+## Whether Paste should take the copied layers: the system clipboard still
+## holds what copying them put there, their pixels or their names.
+pub func layers_on_clipboard() -> bool!:
+    if Canvas.copied_layers() == 0:
+        return false
+    let found = clipboard.read_image() catch _:
+        return true
+    if let held = found:
+        var image = held
+        defer image.destroy()
+        return Canvas.copied_layers_held(true, (i64)image.width, (i64)image.height, "")
+    let text = clipboard.read_text() catch _:
+        return true
+    defer text.release()
+    return Canvas.copied_layers_held(false, 0, 0, text.value)

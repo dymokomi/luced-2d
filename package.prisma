@@ -37,9 +37,15 @@ def package "luced-2d" {
         str path = "../luce-textmate"
     }
 
+    def dependency "luce-canvas" {
+        str owner = "dymokomi"
+        str version = "^0.1.21"
+        str path = "../luce-canvas"
+    }
+
     def dependency "luce-image" {
         str owner = "dymokomi"
-        str version = "^0.39.0"
+        str version = "^0.40.0"
         str path = "../luce-image"
     }
 

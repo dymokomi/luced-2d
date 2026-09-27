@@ -2,8 +2,10 @@
 ## with `--script` a script headless (headless.luc).
 from app import Luce2D
 from headless import wants_headless, run_headless
+from system_hooks import connect_engine_wake
 
 pub func main(arguments: list[str]) -> int!:
+    connect_engine_wake()
     if wants_headless(arguments):
         return run_headless(arguments)
     let editor = Luce2D()

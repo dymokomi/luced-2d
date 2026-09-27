@@ -2,7 +2,7 @@
 ## resolution, starting from the image on the clipboard when there is one
 ## (the "Clipboard" button puts its size back).
 from ui import Text, HStack, Spacer, Dialog, NumberField, Button
-from canvas import Canvas
+from system_hooks import clipboard_picture_width, clipboard_picture_height
 from workspace import Workspace
 from kit import Kit
 
@@ -42,9 +42,9 @@ pub class NewCanvasDialog:
         self.dialog.open()
 
     func from_clipboard(self) -> unit!:
-        let width = Canvas.clipboard_image_width() catch failure:
+        let width = clipboard_picture_width() catch failure:
             return
-        let height = Canvas.clipboard_image_height() catch failure:
+        let height = clipboard_picture_height() catch failure:
             return
         if width > 0 and height > 0:
             self.width_field.set_value(float(width))

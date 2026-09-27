@@ -8,6 +8,7 @@ from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, VStack,
 from gpu import RenderTarget, Rect
 from input import EventKind, Cursor
 from brush_mask import BrushMask
+from system_hooks import clipboard_picture
 from kit import Kit, SliderField, outline
 import theme
 import math
@@ -198,7 +199,7 @@ pub class MaskEditor:
 
     ## Paste: the clipboard's image, grayscale, as the brush's.
     func paste(self) -> unit!:
-        let mask = BrushMask.from_clipboard() catch failure:
+        let mask = BrushMask.from_image(clipboard_picture()) catch failure:
             self.fail(f"Paste: {failure.message}")
             return
         self.use(mask)
