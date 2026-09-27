@@ -182,8 +182,8 @@ pub class PanelCatalog:
     func brushes_panel(self) -> BrushesPanel!:
         if let made = self.brushes:
             return made
-        let made = BrushesPanel(self.workspace, self.kit, self.settings.settings.brush_presets)
-        made.keep = self.settings.remember_brushes
+        let made = BrushesPanel(self.workspace, self.kit, self.brush)
+        made.failed = self.failed
         made.chosen = func () -> unit!:
             if let chose = self.brush_chosen:
                 chose()

@@ -1,0 +1,226 @@
+## The brush library on disk: `~/.luced-2d/brushes/`, a folder per saved
+## brush holding `brush.toml` (every setting and dynamics mapping) and, when
+## the brush has them, `tip.png` and `texture.png` (black where they paint).
+## A brush travels alone as one `.l2dbrush` file: the same TOML, then each
+## image as base64 PNG after a `#@ tip.png` or `#@ texture.png` line.
+from toml import Table
+from brush import Brush, max_brush
+from brush_mask import BrushMask
+from brush_dynamics import no_mappings, control_ids, parameter_ids
+from files import Entries
+import files
+import paths
+import ui
+
+## A saved brush: its name, the folder it lives in (a name under the library),
+## and the brush.
+pub class SavedBrush:
+    pub var name: str
+    pub var folder: str
+    pub let brush: Brush
+
+    pub func init(self, name: str, folder: str, brush: Brush):
+        self.name = name
+        self.folder = folder
+        self.brush = brush
+
+## The library's folder, made when missing: under `directory`, else under
+## `~/.luced-2d`.
+pub func library_path(directory: str = "") -> str!:
+    let parent = directory if directory != "" else paths.join(files.home_directory(), ".luced-2d")
+    files.ensure_directory(parent)
+    let library = paths.join(parent, "brushes")
+    files.ensure_directory(library)
+    return library
+
+## Every brush in `library`, by folder name; a folder that does not read as
+## a brush is passed over.
+pub func load_library(library: str) -> list[SavedBrush]!:
+    var found: list[SavedBrush] = []
+    let snapshot = Entries(library) catch failure:
+        return found
+    for index in 0..<snapshot.count():
+        let folder = snapshot.name(index) catch _:
+            continue
+        let saved = load_brush(library, folder) catch _:
+            continue
+        found.append(saved)
+    snapshot.close()
+    return found
+
+## The brush in `library`'s `folder`.
+pub func load_brush(library: str, folder: str) -> SavedBrush!:
+    let place = paths.join(library, folder)
+    let text = files.read_text(paths.join(place, "brush.toml"), limit = 65536)
+    let table = Table(text)
+    let brush = brush_of(table)
+    if table.boolean("tip.image", false):
+        brush.tip = BrushMask.open(paths.join(place, "tip.png"))
+    if table.boolean("texture.image", false):
+        brush.texture_image = BrushMask.open(paths.join(place, "texture.png"))
+    return SavedBrush(table.string("name", folder), folder, brush)
+
+## Keep `saved` in its folder under `library`, replacing what was there.
+pub func save_brush(library: str, saved: SavedBrush) -> unit!:
+    let place = paths.join(library, saved.folder)
+    files.ensure_directory(place)
+    files.write_text(paths.join(place, "brush.toml"), brush_text(saved.brush, saved.name))
+    keep_image(saved.brush.tip, paths.join(place, "tip.png"))
+    keep_image(saved.brush.texture_image, paths.join(place, "texture.png"))
+
+## Remove `folder` and everything in it from `library`.
+pub func delete_brush(library: str, folder: str) -> unit!:
+    files.delete_path(paths.join(library, folder), recursive = true)
+
+## A folder name for `name` not yet used in `library`: its letters and digits
+## in lower case, dashes between, numbered when taken.
+pub func free_folder(library: str, name: str) -> str!:
+    var base = ""
+    for character in name.lower():
+        if (character >= "a" and character <= "z") or (character >= "0" and character <= "9"):
+            base += character
+        elif base != "" and not base.ends_with("-"):
+            base += "-"
+    if base.ends_with("-"):
+        base = base[..<base.length - 1]
+    if base == "":
+        base = "brush"
+    var folder = base
+    var number = 2
+    while present(paths.join(library, folder)):
+        folder = f"{base}-{number}"
+        number += 1
+    return folder
+
+## Write `brush` named `name` to one `.l2dbrush` file at `path`, images and all.
+pub func export_brush(brush: Brush, name: str, path: str) -> unit!:
+    var text = brush_text(brush, name)
+    if let tip = brush.tip:
+        text = text + "#@ tip.png\n" + tip.png_text() + "\n"
+    if let image = brush.texture_image:
+        text = text + "#@ texture.png\n" + image.png_text() + "\n"
+    files.write_text(path, text)
+
+## The brush a `.l2dbrush` file at `path` holds; its name is the file's.
+pub func import_brush(path: str) -> SavedBrush!:
+    let text = files.read_text(path, limit = 64 * 1024 * 1024)
+    let settings = text[..<(text.index_of("#@ ") else text.length)]
+    let table = Table(settings)
+    let brush = brush_of(table)
+    if let tip = image_text(text, "tip.png"):
+        brush.tip = BrushMask.from_png_text(tip)
+    if let texture = image_text(text, "texture.png"):
+        brush.texture_image = BrushMask.from_png_text(texture)
+    return SavedBrush(table.string("name", "Imported Brush"), "", brush)
+
+## The base64 text after a `#@ name` line, up to the next such line.
+func image_text(text: str, name: str) -> str?:
+    let marker = "#@ " + name + "\n"
+    let start = text.index_of(marker) else return none
+    let rest = text[start + marker.length..]
+    let end = rest.index_of("#@ ") else rest.length
+    return rest[..<end].trim()
+
+## Keep `mask` at `path` as PNG, or remove the file when there is none.
+func keep_image(mask: BrushMask?, path: str) -> unit!:
+    if let image = mask:
+        if not image.is_empty():
+            image.save(path)
+            return
+    if present(path):
+        files.delete_path(path)
+
+# -- The TOML form.
+
+## The texture kinds' names in files, by kind.
+func texture_ids() -> list[str]:
+    return ["none", "grain", "canvas", "dots", "image"]
+
+## `brush`'s settings as brush.toml text, named `name`.
+pub func brush_text(brush: Brush, name: str) -> str:
+    var text = "# A luced-2d brush.\n"
+    text = text + f"name = {quoted(name)}\n\n"
+    text = text + f"[tip]\ndiameter = {brush.diameter}\nhardness = {brush.hardness}\nopacity = {brush.opacity}\nflow = {brush.flow}\n"
+    text = text + f"spacing = {brush.spacing}\nangle = {brush.angle}\nroundness = {brush.roundness}\nsmoothing = {brush.smoothing}\n"
+    text = text + f"image = {flag(has_image(brush.tip))}\n\n"
+    text = text + f"[jitter]\nsize = {brush.size_jitter}\nangle = {brush.angle_jitter}\nroundness = {brush.roundness_jitter}\nflow = {brush.flow_jitter}\n"
+    text = text + f"hue = {brush.hue_jitter}\nsaturation = {brush.saturation_jitter}\nbrightness = {brush.brightness_jitter}\n"
+    text = text + f"scatter = {brush.scatter}\ncount = {brush.scatter_count}\n\n"
+    text = text + f"[texture]\nkind = \"{texture_ids()[brush.texture]}\"\nscale = {brush.texture_scale}\ndepth = {brush.texture_depth}\n"
+    let mode = "subtract" if brush.texture_mode == 1 else "multiply"
+    text = text + f"mode = \"{mode}\"\ninvert = {flag(brush.texture_invert)}\nimage = {flag(has_image(brush.texture_image))}\n\n"
+    text = text + "[dynamics]\n"
+    var index = 0
+    for id in parameter_ids():
+        let mapping = brush.dynamics[index]
+        text = text + f"{id}_control = \"{control_ids()[mapping.control]}\"\n{id}_minimum = {mapping.minimum}\n{id}_curve = {mapping.curve}\n{id}_steps = {mapping.steps}\n"
+        index += 1
+    return text
+
+## The brush a brush.toml table describes; what it lacks keeps the default,
+## and a value out of range is an error.
+pub func brush_of(table: Table) -> Brush!:
+    let brush = Brush()
+    brush.preset = table.string("name", "Brush")
+    brush.diameter = table.number("tip.diameter", brush.diameter, 1.0, max_brush)
+    brush.hardness = table.number("tip.hardness", brush.hardness, 0.0, 1.0)
+    brush.opacity = table.number("tip.opacity", brush.opacity, 0.01, 1.0)
+    brush.flow = table.number("tip.flow", brush.flow, 0.01, 1.0)
+    brush.spacing = table.number("tip.spacing", brush.spacing, 0.01, 5.0)
+    brush.angle = table.number("tip.angle", brush.angle, -180.0, 180.0)
+    brush.roundness = table.number("tip.roundness", brush.roundness, 0.05, 1.0)
+    brush.smoothing = table.number("tip.smoothing", brush.smoothing, 0.0, 100.0)
+    brush.size_jitter = table.number("jitter.size", 0.0, 0.0, 1.0)
+    brush.angle_jitter = table.number("jitter.angle", 0.0, 0.0, 1.0)
+    brush.roundness_jitter = table.number("jitter.roundness", 0.0, 0.0, 1.0)
+    brush.flow_jitter = table.number("jitter.flow", 0.0, 0.0, 1.0)
+    brush.hue_jitter = table.number("jitter.hue", 0.0, 0.0, 1.0)
+    brush.saturation_jitter = table.number("jitter.saturation", 0.0, 0.0, 1.0)
+    brush.brightness_jitter = table.number("jitter.brightness", 0.0, 0.0, 1.0)
+    brush.scatter = table.number("jitter.scatter", 0.0, 0.0, 10.0)
+    brush.scatter_count = int(table.number("jitter.count", 1.0, 1.0, 16.0))
+    brush.texture = index_of(texture_ids(), table.string("texture.kind", "none"), "texture kind")
+    brush.texture_scale = table.number("texture.scale", 1.0, 0.1, 10.0)
+    brush.texture_depth = table.number("texture.depth", 0.5, 0.0, 1.0)
+    brush.texture_mode = index_of(["multiply", "subtract"], table.string("texture.mode", "multiply"), "texture mode")
+    brush.texture_invert = table.boolean("texture.invert", false)
+    let mappings = no_mappings()
+    var index = 0
+    for id in parameter_ids():
+        let mapping = mappings[index]
+        mapping.control = index_of(control_ids(), table.string(f"dynamics.{id}_control", "off"), "dynamics control")
+        mapping.minimum = table.number(f"dynamics.{id}_minimum", 0.0, 0.0, 1.0)
+        mapping.curve = table.number(f"dynamics.{id}_curve", 0.0, -1.0, 1.0)
+        mapping.steps = int(table.number(f"dynamics.{id}_steps", 25.0, 1.0, 10000.0))
+        index += 1
+    brush.dynamics = mappings
+    return brush
+
+func index_of(names: list[str], name: str, what: str) -> int!:
+    var index = 0
+    for known in names:
+        if known == name:
+            return index
+        index += 1
+    error(ui.invalid, f"unknown {what} {quoted(name)}")
+
+## Whether anything is at `path`.
+func present(path: str) -> bool:
+    let kind = files.path_kind(path) catch _:
+        return false
+    discard(kind)
+    return true
+
+func has_image(mask: BrushMask?) -> bool:
+    if let image = mask:
+        let empty = image.is_empty() catch _:
+            recover true
+        return not empty
+    return false
+
+## `text` as a TOML basic string.
+func quoted(text: str) -> str:
+    return "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+func flag(value: bool) -> str:
+    return "true" if value else "false"

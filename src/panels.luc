@@ -20,7 +20,9 @@ from settings import Store
 from settings_panel import SettingsDialog
 from kit import Kit
 from tool_header import ToolHeader
-from brush_settings import BrushSettings
+from brush_settings import BrushSettings, define_tip
+from brush import preset
+from brush_dynamics import no_mappings
 from adjust_dialog import AdjustDialog
 from style_dialog import StyleDialog
 from adjustments import adjustments, applies_at_once, gradient_map, curves_adjustment
@@ -144,6 +146,7 @@ pub class Panels:
         self.header.refreshed = self.refresh
         self.header.finished = self.finish_box
         self.brush = BrushSettings(workspace, kit)
+        self.brush.on_failed = self.prompts.tell
         self.adjust = AdjustDialog(workspace, kit)
         self.adjust.changed = self.document_changed
         self.adjust.refreshed = self.refresh
@@ -312,6 +315,7 @@ pub class Panels:
         kit.bind(actions.fill, func () -> unit!:
             self.workspace.fill_selection(false)
             self.refresh())
+        kit.bind(actions.define_brush, self.define_brush)
         kit.bind(actions.fill_background, func () -> unit!:
             self.workspace.fill_selection(false, true)
             self.refresh())
@@ -547,6 +551,23 @@ pub class Panels:
         self.refresh()
 
     ## Brush…: Brush Settings, floating the first time.
+    ## Edit › Define Brush Preset…: the selection's pixels (the whole picture
+    ## without one) become the tip of a new brush in the library, which is
+    ## then the brush in hand, as Photoshop's.
+    pub func define_brush(self) -> unit!:
+        let tip = define_tip(self.workspace) catch failure:
+            self.prompts.tell(f"Define Brush Preset: {failure.message}")
+            return
+        let brush = preset("Hard Round", math.max(float(tip.width()), float(tip.height())), 1.0)
+        brush.dynamics = no_mappings()
+        brush.spacing = 0.1
+        brush.tip = tip
+        self.catalog.open("brushes")
+        let brushes = self.catalog.brushes else return
+        brushes.add(brush, f"Sampled Brush {brushes.saved.length + 1}")
+        brushes.pick(brushes.rows.selected)
+        self.refresh()
+
     pub func open_brush(self) -> unit!:
         self.brush.open(self.dock)
 

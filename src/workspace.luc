@@ -6,6 +6,7 @@
 from canvas import Canvas
 from theme import Look
 from brush import Brush, preset
+from brush_dynamics import PenSample
 from documents import Document, title_of, blank_canvas
 from hex_color import hex_of_linear, linear_of_hex
 import math
@@ -810,18 +811,23 @@ pub class Workspace:
         self.brush.hardness = math.max(0.0, math.min(1.0, self.brush.hardness + step))
         self.touch()
 
-    ## Start a stroke on the selected layer at a document point; `pressure` is
-    ## the stylus's, 0..1, or zero from a mouse. A hidden layer takes no paint.
-    pub func begin_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
+    ## Start a stroke on the selected layer at a document point with `pen`
+    ## (none from a script: a full press). A hidden layer takes no paint. The
+    ## pen's eraser end erases with the brush or pencil, as Photoshop's does.
+    pub func begin_stroke(self, x: float, y: float, pen: PenSample? = none) -> unit!:
         if not self.canvas.layer_visible(self.selected):
             return
-        self.brush.apply(self.canvas, self.red, self.green, self.blue, self.erasing)
+        let sample = pen else PenSample()
+        let flipped = sample.eraser and (self.tool == "brush" or self.tool == "pencil")
+        self.brush.apply(self.canvas, self.red, self.green, self.blue, self.erasing or flipped)
+        self.brush.apply_images(self.canvas)
         self.canvas.set_retouch(self.retouch_kind())
         self.canvas.set_clone_options(self.clone_aligned, self.clone_all)
         self.canvas.set_brush_aliased(self.tool == "pencil")
         self.canvas.set_tone(self.tone_range, self.tone_exposure)
         self.canvas.set_smudge_spacing(self.smudge_spacing)
-        self.canvas.begin_stroke(self.selected_id(), x, y, pressure if pressure > 0.0 else 1.0)
+        self.canvas.begin_stroke(self.selected_id(), x, y, sample.pressure if sample.pressure > 0.0 else 1.0, sample.azimuth, sample.altitude,
+                                 sample.rotation, sample.tangential, sample.time)
         self.touch()
 
     ## The canvas's retouching tool for the active tool: 0 plain paint, 1 clone
@@ -867,10 +873,12 @@ pub class Workspace:
         self.canvas.set_clone_source(x, y)
         self.touch()
 
-    ## Continue the stroke in progress, if any, to a document point.
-    pub func extend_stroke(self, x: float, y: float, pressure: float = 0.0) -> unit!:
+    ## Continue the stroke in progress, if any, to a document point with `pen`.
+    pub func extend_stroke(self, x: float, y: float, pen: PenSample? = none) -> unit!:
         if self.canvas.painting():
-            self.canvas.extend_stroke(x, y, pressure if pressure > 0.0 else 1.0)
+            let sample = pen else PenSample()
+            self.canvas.extend_stroke(x, y, sample.pressure if sample.pressure > 0.0 else 1.0, sample.azimuth, sample.altitude,
+                                      sample.rotation, sample.tangential, sample.time)
             self.touch()
 
     ## Esc mid-stroke: end the stroke and take back what it painted.

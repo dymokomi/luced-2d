@@ -1,7 +1,10 @@
-## The brush, in Photoshop's units: size and edge, strength, tip shape,
-## dynamics (jitters 0..1, pen-pressure controls), scattering and texture;
+## The brush, in Photoshop's units: size and edge, strength, tip shape (round
+## or a sampled image), jitters 0..1, dynamics (brush_dynamics.luc: what the
+## pen and the stroke drive), scattering and texture (built-in or an image);
 ## the built-in presets; and pushing it all to the canvas before a stroke.
 from canvas import Canvas
+from brush_mask import BrushMask
+from brush_dynamics import Mapping, default_mappings, no_mappings, copy_mappings, mapped
 import math
 
 pub class Brush:
@@ -18,8 +21,8 @@ pub class Brush:
     pub var size_jitter: float = 0.0
     pub var angle_jitter: float = 0.0
     pub var roundness_jitter: float = 0.0
-    pub var pressure_size: bool = true
-    pub var pressure_flow: bool = false
+    ## What drives each parameter (brush_dynamics.parameter_names order).
+    pub var dynamics: list[Mapping]
     ## Scattering: spread as a fraction of the diameter, dabs per step.
     pub var scatter: float = 0.0
     pub var scatter_count: int = 1
@@ -27,21 +30,85 @@ pub class Brush:
     pub var hue_jitter: float = 0.0
     pub var saturation_jitter: float = 0.0
     pub var brightness_jitter: float = 0.0
-    ## Texture: 0 none, 1 grain, 2 canvas, 3 dots; its scale and depth.
+    ## Texture: 0 none, 1 grain, 2 canvas, 3 dots, 4 `texture_image`; its
+    ## scale, depth, mode (0 multiply, 1 subtract) and whether it is inverted.
     pub var texture: int = 0
     pub var texture_scale: float = 1.0
     pub var texture_depth: float = 0.5
+    pub var texture_mode: int = 0
+    pub var texture_invert: bool = false
+    ## A sampled tip (none: the round one) and the texture's own image.
+    pub var tip: BrushMask? = none
+    pub var texture_image: BrushMask? = none
     ## The preset these settings started from.
     pub var preset: str = "Hard Round"
 
+    pub func init(self):
+        self.dynamics = default_mappings()
+
     ## Push every setting to `canvas` for the next stroke, painting in the
-    ## linear color `red`, `green`, `blue`, or erasing.
+    ## linear color `red`, `green`, `blue`, or erasing. The tip and texture
+    ## images go separately (`apply_images`).
     pub func apply(self, canvas: Canvas, red: float, green: float, blue: float, erasing: bool) -> unit!:
         canvas.set_brush(self.diameter, self.hardness, self.opacity, self.flow, red, green, blue, erasing)
         canvas.set_brush_shape(self.spacing, self.angle, self.roundness, self.smoothing)
         canvas.set_brush_dynamics(self.size_jitter, self.angle_jitter, self.roundness_jitter, self.scatter, self.scatter_count,
-                                  self.flow_jitter, self.hue_jitter, self.saturation_jitter, self.brightness_jitter, self.pressure_size, self.pressure_flow)
-        canvas.set_brush_texture(self.texture, self.texture_scale, self.texture_depth)
+                                  self.flow_jitter, self.hue_jitter, self.saturation_jitter, self.brightness_jitter)
+        var index = 0
+        for mapping in self.dynamics:
+            canvas.set_brush_dynamic(index, mapping.control, mapping.minimum, mapping.curve, mapping.steps)
+            index += 1
+        # The image texture without an image paints untextured.
+        let kind = 0 if self.texture == 4 and self.texture_image == none else self.texture
+        canvas.set_brush_texture(kind, self.texture_scale, self.texture_depth, self.texture_mode, self.texture_invert)
+
+    ## Push the sampled tip and the texture image to `canvas`; an empty tip
+    ## paints round. The canvas keeps what it already has when they match.
+    pub func apply_images(self, canvas: Canvas) -> unit!:
+        if let tip = self.tip:
+            if tip.is_empty():
+                canvas.set_brush_tip(b"", 0, 0)
+            else:
+                canvas.set_brush_tip(tip.coverage(), tip.width(), tip.height())
+        else:
+            canvas.set_brush_tip(b"", 0, 0)
+        if let image = self.texture_image:
+            canvas.set_brush_texture_image(image.coverage(), image.width(), image.height())
+        else:
+            canvas.set_brush_texture_image(b"", 0, 0)
+
+    ## A brush of its own with the same settings and copies of the images.
+    pub func copy(self) -> Brush!:
+        let copied = Brush()
+        copied.diameter = self.diameter
+        copied.hardness = self.hardness
+        copied.opacity = self.opacity
+        copied.flow = self.flow
+        copied.spacing = self.spacing
+        copied.angle = self.angle
+        copied.roundness = self.roundness
+        copied.smoothing = self.smoothing
+        copied.size_jitter = self.size_jitter
+        copied.angle_jitter = self.angle_jitter
+        copied.roundness_jitter = self.roundness_jitter
+        copied.dynamics = copy_mappings(self.dynamics)
+        copied.scatter = self.scatter
+        copied.scatter_count = self.scatter_count
+        copied.flow_jitter = self.flow_jitter
+        copied.hue_jitter = self.hue_jitter
+        copied.saturation_jitter = self.saturation_jitter
+        copied.brightness_jitter = self.brightness_jitter
+        copied.texture = self.texture
+        copied.texture_scale = self.texture_scale
+        copied.texture_depth = self.texture_depth
+        copied.texture_mode = self.texture_mode
+        copied.texture_invert = self.texture_invert
+        if let tip = self.tip:
+            copied.tip = tip.copy()
+        if let image = self.texture_image:
+            copied.texture_image = image.copy()
+        copied.preset = self.preset
+        return copied
 
     ## [ and ]: the diameter by `factor`, always by at least a pixel, 1..max_brush.
     pub func scale(self, factor: float):
@@ -72,7 +139,8 @@ pub func preset(name: str, diameter: float, opacity: float) -> Brush!:
         brush.hardness = 0.0
         brush.flow = 0.1
         brush.spacing = 0.05
-        brush.pressure_flow = true
+        brush.dynamics = no_mappings()
+        brush.dynamics[1] = mapped(1)
     elif name == "Chalk":
         brush.hardness = 0.9
         brush.roundness = 0.8

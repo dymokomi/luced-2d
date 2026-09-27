@@ -1,0 +1,126 @@
+## The Brushes panel's list: a row per brush with its name and a stroke drawn
+## with it (its tip, size taper under pressure, angle, roundness and
+## spacing), as Photoshop's stroke thumbnails. A click picks the brush; a
+## double-click on a saved brush's name renames it there.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Image
+from gpu import RenderTarget, Rect
+from input import EventKind, Cursor
+from brush import Brush
+from brush_mask import BrushMask
+from theme import Look
+import theme
+import math
+import time
+
+## The thumbnail stroke's size in points.
+pub let stroke_width: int = 196
+pub let stroke_height: int = 34
+
+## The thumbnail of `brush`: its stroke, black on white, as RGBA.
+pub func stroke_thumbnail(brush: Brush, blank: BrushMask) -> bytes!:
+    # A pen's press eases the size in and out when pressure drives it.
+    let size = brush.dynamics[0]
+    let taper = 1.0 if size.control != 1 else math.max(0.15, size.minimum)
+    let diameter = math.min(14.0, math.max(3.0, brush.diameter))
+    if let tip = brush.tip:
+        if not tip.is_empty():
+            return tip.stroke_preview(stroke_width, stroke_height, false, diameter, brush.hardness, brush.spacing, brush.angle, brush.roundness, taper)
+    return blank.stroke_preview(stroke_width, stroke_height, true, diameter, brush.hardness, brush.spacing, brush.angle, brush.roundness, taper)
+
+pub class BrushList: Widget:
+    let box: Layout
+    let font: Font
+    ## The window's accent, for the picked row.
+    let look: func() -> Look
+    let row_height: float = 58.0
+    ## The rows' names and thumbnails.
+    var names: list[str]
+    var thumbnails: list[Image]
+    ## The picked row, or -1.
+    pub var selected: int = -1
+    ## Rows before this one are built in: they cannot be renamed.
+    pub var first_saved: int = 0
+    var last_row: int = -1
+    var last_time: int = 0
+    ## A row picked.
+    pub var on_pick: func(int) -> unit!? = none
+    ## A double-click on saved row `row`'s name, at (x, y).
+    pub var on_rename: func(int, float, float) -> unit!? = none
+
+    pub func init(self, font: Font, look: func() -> Look) -> unit!:
+        self.font = font
+        self.look = look
+        self.box = Layout()
+        self.box.set_focusable(true)
+        self.box.set_cursor(Cursor.pointer)
+        self.box.set_flex()
+        self.names = []
+        self.thumbnails = []
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(float(stroke_width) + 16.0, self.row_height * float(self.names.length))
+
+    ## The rows: names and thumbnail strokes (RGBA, stroke_width × stroke_height).
+    pub func set_rows(self, names: list[str], strokes: list[bytes]) -> unit!:
+        self.names = names
+        var images: list[Image] = []
+        for stroke in strokes:
+            let image = Image(stroke_width, stroke_height)
+            image.write(stroke)
+            images.append(image)
+        self.thumbnails = images
+        if self.selected >= names.length:
+            self.selected = names.length - 1
+        self.box.invalidate()
+
+    ## Where row `row` starts.
+    pub func row_top(self, row: int) -> float:
+        return self.row_height * float(row)
+
+    ## Where names start.
+    pub func name_left(self) -> float:
+        return 8.0
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        let size = target.size()
+        painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
+        let focused = self.box.contains_focus()
+        var row = 0
+        while row < self.names.length:
+            let top = self.row_top(row)
+            let picked = row == self.selected
+            if picked:
+                let look = self.look()
+                painter.rectangle(Rect(0.0, top, size.width, self.row_height), look.accent if focused else look.selection_inactive)
+            let ink = theme.on_accent() if picked and focused else theme.text()
+            painter.text(self.names[row], self.name_left(), top + 5.0, ink, self.font)
+            if row < self.thumbnails.length:
+                painter.image(self.thumbnails[row], Rect(8.0, top + 20.0, float(stroke_width), float(stroke_height)))
+            painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
+            row += 1
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
+            return
+        self.box.request_focus()
+        let row = int(math.floor(event.y / self.row_height))
+        if event.y < 0.0 or row >= self.names.length:
+            return
+        let now = time.now() // 1000000
+        let again = row == self.last_row and now - self.last_time <= 400
+        self.last_row = row
+        self.last_time = now
+        self.selected = row
+        self.box.invalidate()
+        if again and row >= self.first_saved and event.y - self.row_top(row) < 20.0:
+            self.last_row = -1
+            if let rename = self.on_rename:
+                rename(row, self.name_left(), self.row_top(row) + 2.0)
+            return
+        if let pick = self.on_pick:
+            pick(row)

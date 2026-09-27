@@ -1,0 +1,203 @@
+## The Brush Settings editors for a brush's tip and texture: a square pad
+## showing the image (black where it paints) that a simple round brush paints
+## on or erases, with its size, and Clear, Invert, Paste (the clipboard's
+## image, made grayscale and fitted), Load… (a picture file) and, for the tip,
+## From Selection (Define Brush Preset). Every edit goes to the brush in hand
+## at once: the next stroke paints with it.
+from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, VStack, HStack, Button, Spacer, ButtonStyle
+from gpu import RenderTarget, Rect
+from input import EventKind, Cursor
+from brush_mask import BrushMask
+from kit import Kit, SliderField, outline
+import theme
+import math
+
+## The pad's side in points.
+pub let pad_side: float = 256.0
+
+## A square the mask is shown in and painted on: the mask fitted inside it.
+pub class MaskPad: Widget:
+    let box: Layout
+    let image: Image
+    ## The mask shown, or none (an empty pad); the pad paints on it.
+    pub var mask: BrushMask? = none
+    ## The painting brush's radius in pad points, and whether it erases.
+    pub var radius: float = 8.0
+    pub var erasing: bool = false
+    ## A drag in progress, and where it last was in mask pixels.
+    var dragging: bool = false
+    var last_x: float = 0.0
+    var last_y: float = 0.0
+    ## Whether the image must be written again before it is drawn.
+    var stale: bool = true
+    ## The first press on an empty pad: the holder makes a mask for it.
+    pub var on_needed: func() -> BrushMask!? = none
+    ## Something was painted.
+    pub var on_edited: func() -> unit!? = none
+
+    pub func init(self) -> unit!:
+        self.box = Layout()
+        self.box.set_cursor(Cursor.crosshair)
+        self.image = Image(int(pad_side), int(pad_side))
+
+    pub func layout(self) -> Layout:
+        return self.box
+
+    pub func measure(self, available: Constraints) -> Size!:
+        return Size(pad_side, pad_side)
+
+    ## Show `mask` (none for an empty pad).
+    pub func show(self, mask: BrushMask?) -> unit!:
+        self.mask = mask
+        self.refresh()
+
+    ## Draw the mask again: it changed elsewhere.
+    pub func refresh(self) -> unit!:
+        self.stale = true
+        self.box.invalidate()
+
+    pub func draw(self, target: RenderTarget) -> unit!:
+        let painter = Painter(target)
+        painter.rectangle(Rect(0.0, 0.0, pad_side, pad_side), theme.checker_light())
+        if let mask = self.mask:
+            if self.stale:
+                self.image.write(mask.preview(int(pad_side)))
+                self.stale = false
+            painter.image(self.image, Rect(0.0, 0.0, pad_side, pad_side))
+        outline(painter, Rect(0.0, 0.0, pad_side, pad_side), theme.border())
+        painter.close()
+
+    pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.pointer_down and event.button == 0 and event.inside:
+            if self.mask == none:
+                if let needed = self.on_needed:
+                    self.mask = needed()
+            self.dragging = true
+            self.last_x = self.mask_x(event.x)
+            self.last_y = self.mask_y(event.y)
+            self.paint(self.last_x, self.last_y, self.last_x, self.last_y)
+        elif event.kind == EventKind.pointer_moved and self.dragging:
+            let x = self.mask_x(event.x)
+            let y = self.mask_y(event.y)
+            self.paint(self.last_x, self.last_y, x, y)
+            self.last_x = x
+            self.last_y = y
+        elif (event.kind == EventKind.pointer_up and event.button == 0) or event.cancelled:
+            self.dragging = false
+
+    ## A segment of the painting brush on the mask, black or erasing to white.
+    func paint(self, x0: float, y0: float, x1: float, y1: float) -> unit!:
+        let mask = self.mask else return
+        mask.line(x0, y0, x1, y1, math.max(0.5, self.radius * self.scale()), 0.8, 0.0 if self.erasing else 1.0)
+        self.refresh()
+        if let edited = self.on_edited:
+            edited()
+
+    ## Mask pixels a pad point spans: the mask's longer side fills the pad.
+    func scale(self) -> float!:
+        return self.longest() / pad_side
+
+    ## The mask's longer side in pixels.
+    func longest(self) -> float!:
+        let mask = self.mask else return pad_side
+        return math.max(float(mask.width()), float(mask.height()))
+
+    func mask_x(self, x: float) -> float!:
+        let mask = self.mask else return x
+        return x * self.scale() - (self.longest() - float(mask.width())) * 0.5
+
+    func mask_y(self, y: float) -> float!:
+        let mask = self.mask else return y
+        return y * self.scale() - (self.longest() - float(mask.height())) * 0.5
+
+## A pad with its tools under it. `take` sets the brush's image (none clears
+## it), `current` reads it; `failed` hears what could not be done.
+pub class MaskEditor:
+    pub let pad: MaskPad
+    pub let content: VStack
+    let kit: Kit
+    let paint_button: Button
+    let erase_button: Button
+    let size: SliderField
+    let take: func(BrushMask?) -> unit!
+    ## Where a picture file is chosen: its path, or "" when none was.
+    pub var choose_file: func() -> str!? = none
+    ## Something failed, and why.
+    pub var on_failed: func(str) -> unit!? = none
+
+    ## `extra` buttons go after Load… (the tip's From Selection).
+    pub func init(self, kit: Kit, take: func(BrushMask?) -> unit!, extra: list[Widget]) -> unit!:
+        self.kit = kit
+        self.take = take
+        self.pad = MaskPad()
+        self.pad.on_needed = self.blank
+        self.paint_button = kit.button("Paint", func () -> unit!:
+            self.set_erasing(false))
+        self.erase_button = kit.button("Erase", func () -> unit!:
+            self.set_erasing(true))
+        self.size = kit.slider_field(1.0, 64.0, 8.0, 0, " pt", func (value: float) -> unit!:
+            self.pad.radius = value * 0.5)
+        let edits = HStack([kit.button("Clear", self.clear), kit.button("Invert", self.invert)], spacing = 6.0)
+        var sources: list[Widget] = [kit.button("Paste", self.paste), kit.button("Load…", self.load)]
+        for widget in extra:
+            sources.append(widget)
+        let tools = HStack([self.paint_button, self.erase_button, self.size.row], spacing = 6.0)
+        self.content = VStack([HStack([self.pad, Spacer()], spacing = 0.0), tools, edits, HStack(sources, spacing = 6.0)], spacing = 6.0)
+        self.set_erasing(false)
+
+    ## Show `mask`, the brush's image (none: nothing yet).
+    pub func show(self, mask: BrushMask?) -> unit!:
+        self.pad.show(mask)
+
+    ## Say edits went to the brush: the pad's own mask is the brush's.
+    pub func set_edited(self, edited: func() -> unit!):
+        self.pad.on_edited = edited
+
+    func set_erasing(self, erasing: bool) -> unit!:
+        self.pad.erasing = erasing
+        self.paint_button.set_style(ButtonStyle.sunken if erasing else ButtonStyle.selected)
+        self.erase_button.set_style(ButtonStyle.selected if erasing else ButtonStyle.sunken)
+
+    ## A new empty mask for the brush, the pad's size.
+    func blank(self) -> BrushMask!:
+        let mask = BrushMask.create(256, 256)
+        self.take(mask)
+        return mask
+
+    ## Clear: the brush has no image (a tip goes back to round).
+    func clear(self) -> unit!:
+        self.take(none)
+        self.pad.show(none)
+
+    func invert(self) -> unit!:
+        let mask = self.pad.mask else self.blank()
+        mask.invert()
+        self.take(mask)
+        self.pad.show(mask)
+
+    ## Paste: the clipboard's image, grayscale, as the brush's.
+    func paste(self) -> unit!:
+        let mask = BrushMask.from_clipboard() catch failure:
+            self.fail(f"Paste: {failure.message}")
+            return
+        self.use(mask)
+
+    ## Load…: a picture file, grayscale, as the brush's.
+    func load(self) -> unit!:
+        let choose = self.choose_file else return
+        let path = choose()
+        if path == "":
+            return
+        let mask = BrushMask.open(path) catch failure:
+            self.fail(f"Could not load {path}: {failure.message}")
+            return
+        self.use(mask)
+
+    ## `mask` as the brush's image, shown.
+    pub func use(self, mask: BrushMask) -> unit!:
+        self.take(mask)
+        self.pad.show(mask)
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.on_failed:
+            failed(message)

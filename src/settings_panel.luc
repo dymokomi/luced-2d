@@ -254,7 +254,7 @@ pub class SettingsDialog:
         self.apply()
 
     ## The picker committed `hex`: it heads the history, which is saved at once.
-    ## Keep the Swatches panel's colors, or the Brushes panel's presets, in the file.
+    ## Keep the Swatches panel's colors in the file.
     pub func remember_swatches(self, text: str) -> unit!:
         self.settings.swatches = text
         self.store.save(self.settings)
@@ -263,10 +263,6 @@ pub class SettingsDialog:
     pub func remember_color_mode(self, mode: str, model: str) -> unit!:
         self.settings.color_mode = mode
         self.settings.color_model = model
-        self.store.save(self.settings)
-
-    pub func remember_brushes(self, text: str) -> unit!:
-        self.settings.brush_presets = text
         self.store.save(self.settings)
 
     pub func remember(self, hex: str) -> unit!:

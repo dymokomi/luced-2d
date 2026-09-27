@@ -1,128 +1,225 @@
-## The Brushes panel, as Photoshop's: the built-in presets and the ones saved
-## here, by name with their size. A click makes that the brush (and picks the
-## Brush tool); "+" saves the brush in hand as a new preset; the bin deletes
-## the selected saved one. Saved presets live in settings.toml.
-from ui import Panel, ListView, ListItem, Shelf, Spacer, Size
+## The Brushes panel, as Photoshop's: the built-in presets, then the brushes
+## saved in the library (brush_library.luc), each with a stroke thumbnail. A
+## click makes that the brush (and picks the Brush tool). The shelf saves the
+## brush in hand as a new brush, saves it over the picked saved one,
+## duplicates, renames (also a double-click on the name) and deletes, and
+## imports and exports `.l2dbrush` files to share.
+from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ScrollView
 from workspace import Workspace
-from brush import Brush, preset_names, max_brush
+from brush import Brush, preset, preset_names, max_brush
+from brush_mask import BrushMask
+from brush_library import SavedBrush, library_path, load_library, save_brush, delete_brush, free_folder, export_brush, import_brush
+from brush_list import BrushList, stroke_thumbnail
+from brush_settings import BrushSettings
 from kit import Kit
+from theme import Look
 import math
-
-## A saved preset: a name and the settings that make the brush.
-pub class SavedBrush:
-    pub let name: str
-    pub let diameter: float
-    pub let hardness: float
-    pub let opacity: float
-    pub let flow: float
-    pub let spacing: float
-    pub let angle: float
-    pub let roundness: float
-
-    pub func init(self, name: str, diameter: float, hardness: float, opacity: float, flow: float, spacing: float, angle: float, roundness: float):
-        self.name = name
-        self.diameter = diameter
-        self.hardness = hardness
-        self.opacity = opacity
-        self.flow = flow
-        self.spacing = spacing
-        self.angle = angle
-        self.roundness = roundness
-
-    ## Its text form: the fields separated by commas.
-    pub func text(self) -> str:
-        return f"{self.name},{self.diameter},{self.hardness},{self.opacity},{self.flow},{self.spacing},{self.angle},{self.roundness}"
-
-## The presets in the settings' text, one per ';'; malformed ones are left out.
-pub func saved_brushes(text: str) -> list[SavedBrush]:
-    var brushes: list[SavedBrush] = []
-    for item in text.split(";"):
-        let fields = item.split(",")
-        if fields.length != 8 or fields[0].trim() == "":
-            continue
-        var numbers: list[float] = []
-        for field in fields[1..]:
-            let number = float(field.trim()) catch _:
-                break
-            numbers.append(number)
-        if numbers.length == 7:
-            brushes.append(SavedBrush(fields[0].trim(), numbers[0], numbers[1], numbers[2], numbers[3], numbers[4], numbers[5], numbers[6]))
-    return brushes
 
 pub class BrushesPanel:
     pub let panel: Panel
-    let presets: ListView
+    pub let rows: BrushList
     let workspace: Workspace
+    let settings: BrushSettings
+    let rename_field: TextField
+    ## The library's folder and what it holds.
+    pub let library: str
     pub var saved: list[SavedBrush]
-    ## Where the saved presets are kept after a change, as the settings' text.
-    pub var keep: func(str) -> unit!? = none
-    ## A preset picked: the window picks the Brush tool and refreshes.
+    ## A 1 × 1 mask the round thumbnails are drawn through.
+    let blank: BrushMask
+    ## The saved row being renamed, or -1.
+    var renaming: int = -1
+    ## A brush picked: the window picks the Brush tool and refreshes.
     pub var chosen: func() -> unit!? = none
+    ## Something failed, and why.
+    pub var failed: func(str) -> unit!? = none
 
-    pub func init(self, workspace: Workspace, kit: Kit, text: str) -> unit!:
+    ## The library under `directory` (the home folder's `.luced-2d` by default).
+    pub func init(self, workspace: Workspace, kit: Kit, settings: BrushSettings, directory: str = "") -> unit!:
         self.workspace = workspace
-        self.saved = saved_brushes(text)
-        self.presets = ListView(self.items(), font = kit.font)
-        self.presets.layout().set_flex()
-        kit.keep(self.presets.on_activate(self.pick))
-        let shelf = Shelf([kit.shelf_button("plus", self.save_current), Spacer(), kit.shelf_button("trash", self.delete_selected)])
-        self.panel = Panel("Brushes", self.presets, minimum = Size(200.0, 140.0), footer = shelf, id = "brushes")
+        self.settings = settings
+        self.library = library_path(directory)
+        self.saved = load_library(self.library)
+        self.blank = BrushMask.create(1, 1)
+        self.rows = BrushList(kit.font, self.look)
+        self.rows.on_pick = self.pick
+        self.rows.on_rename = self.begin_rename
+        self.rename_field = TextField("", font = kit.font, cells = 16.0)
+        let field_box = self.rename_field.layout()
+        field_box.set_popup(true)
+        field_box.set_modal(false)
+        field_box.set_visible(false)
+        kit.keep(self.rename_field.on_commit(self.finish_rename))
+        let scroller = ScrollView(self.rows)
+        scroller.layout().set_flex()
+        let content = VStack([scroller, self.rename_field], spacing = 0.0)
+        content.layout().set_flex()
+        let shelf = Shelf([kit.shelf_button("plus", self.save_new), kit.shelf_button("save", self.save_over), kit.shelf_button("duplicate", self.duplicate),
+                           kit.shelf_button("text-tool", self.rename_selected), kit.shelf_button("import", self.import_file), kit.shelf_button("export", self.export_file),
+                           Spacer(), kit.shelf_button("trash", self.delete_selected)])
+        self.panel = Panel("Brushes", content, minimum = Size(220.0, 160.0), footer = shelf, id = "brushes")
+        self.show()
 
-    ## The rows: the built-ins by name, then the saved ones with their size.
-    func items(self) -> list[ListItem]:
-        var rows: list[ListItem] = []
+    ## The window's accent and selection colors.
+    func look(self) -> Look:
+        return self.workspace.look
+
+    ## The rows again: the built-ins, then the saved brushes by name.
+    pub func show(self) -> unit!:
+        var names: list[str] = []
+        var strokes: list[bytes] = []
         for name in preset_names():
-            rows.append(ListItem(text = name))
-        for brush in self.saved:
-            rows.append(ListItem(text = f"{brush.name}  ·  {int(brush.diameter)} px"))
-        return rows
+            names.append(name)
+            strokes.append(stroke_thumbnail(preset(name, 24.0, 1.0), self.blank))
+        for saved in self.saved:
+            names.append(saved.name)
+            strokes.append(stroke_thumbnail(saved.brush, self.blank))
+        self.rows.first_saved = preset_names().length
+        self.rows.set_rows(names, strokes)
 
-    ## Row `index` picked: a built-in keeps the size and strength in hand, as
-    ## the header's preset menu does; a saved one brings its own.
-    func pick(self, index: int) -> unit!:
+    ## The saved brush on row `row`, when it is one.
+    func saved_at(self, row: int) -> SavedBrush?:
+        let index = row - preset_names().length
+        if index < 0 or index >= self.saved.length:
+            return none
+        return self.saved[index]
+
+    ## Row `row` picked: a built-in keeps the size and strength in hand, as the
+    ## header's preset menu does; a saved brush brings its own, as a copy, so
+    ## painting changes nothing saved until Save.
+    pub func pick(self, row: int) -> unit!:
         let names = preset_names()
-        if index < 0:
+        if row < 0:
             return
-        if index < names.length:
-            self.workspace.apply_preset(names[index])
-        elif index - names.length < self.saved.length:
-            let saved = self.saved[index - names.length]
-            let brush = Brush()
-            brush.diameter = math.max(1.0, math.min(max_brush, saved.diameter))
-            brush.hardness = saved.hardness
-            brush.opacity = saved.opacity
-            brush.flow = saved.flow
-            brush.spacing = saved.spacing
-            brush.angle = saved.angle
-            brush.roundness = saved.roundness
+        if row < names.length:
+            self.workspace.apply_preset(names[row])
+        elif let saved = self.saved_at(row):
+            let brush = saved.brush.copy()
+            brush.diameter = math.max(1.0, math.min(max_brush, brush.diameter))
             brush.preset = saved.name
             self.workspace.brush = brush
             self.workspace.touch()
+        self.settings.show()
         if let done = self.chosen:
             done()
 
-    ## "+": the brush in hand as "Brush N".
-    func save_current(self) -> unit!:
-        let b = self.workspace.brush
-        self.saved.append(SavedBrush(f"Brush {self.saved.length + 1}", b.diameter, b.hardness, b.opacity, b.flow, b.spacing, b.angle, b.roundness))
-        self.changed()
-        self.presets.select(preset_names().length + self.saved.length - 1)
+    ## "+": the brush in hand saved as a new brush, "Brush N".
+    pub func save_new(self) -> unit!:
+        self.add(self.workspace.brush.copy(), f"Brush {self.saved.length + 1}")
 
-    ## The bin: the selected saved preset goes; the built-ins stay.
-    func delete_selected(self) -> unit!:
-        let index = self.presets.selected_index() - preset_names().length
-        if index < 0 or index >= self.saved.length:
+    ## Keep `brush` in the library as `name`, and pick its row.
+    pub func add(self, brush: Brush, name: str) -> unit!:
+        let saved = SavedBrush(name, free_folder(self.library, name), brush)
+        save_brush(self.library, saved) catch failure:
+            self.fail(f"Could not save the brush: {failure.message}")
             return
-        discard(self.saved.remove_at(index))
-        self.changed()
+        brush.preset = name
+        self.saved.append(saved)
+        self.show()
+        self.rows.selected = preset_names().length + self.saved.length - 1
 
-    func changed(self) -> unit!:
-        self.presets.set_items(self.items())
-        var texts: list[str] = []
-        for brush in self.saved:
-            texts.append(brush.text())
-        if let save = self.keep:
-            save(texts.join(";"))
+    ## Save: the brush in hand over the picked saved brush (a built-in is
+    ## saved as a new one).
+    pub func save_over(self) -> unit!:
+        let found = self.saved_at(self.rows.selected)
+        if found == none:
+            self.save_new()
+            return
+        let saved = found else return
+        let kept = SavedBrush(saved.name, saved.folder, self.workspace.brush.copy())
+        save_brush(self.library, kept) catch failure:
+            self.fail(f"Could not save the brush: {failure.message}")
+            return
+        self.saved[self.rows.selected - preset_names().length] = kept
+        self.show()
 
-    pub func show(self) -> unit!:
-        return
+    ## Duplicate: a copy of the picked brush, built-in or saved, as a new one.
+    pub func duplicate(self) -> unit!:
+        let row = self.rows.selected
+        if row < 0:
+            return
+        if let saved = self.saved_at(row):
+            self.add(saved.brush.copy(), saved.name + " copy")
+        elif row < preset_names().length:
+            let name = preset_names()[row]
+            self.add(preset(name, self.workspace.brush.diameter, self.workspace.brush.opacity), name + " copy")
+
+    ## Rename the picked saved brush, typed where its name is.
+    pub func rename_selected(self) -> unit!:
+        let row = self.rows.selected
+        if self.saved_at(row) == none:
+            return
+        self.begin_rename(row, self.rows.name_left(), self.rows.row_top(row) + 2.0)
+
+    func begin_rename(self, row: int, x: float, y: float) -> unit!:
+        let saved = self.saved_at(row) else return
+        self.renaming = row
+        self.rename_field.set_text(saved.name)
+        let field_box = self.rename_field.layout()
+        field_box.set_popup_point(x - 4.0, y)
+        field_box.set_visible(true)
+        field_box.request_focus()
+
+    func finish_rename(self, name: str) -> unit!:
+        let row = self.renaming
+        self.renaming = -1
+        self.rename_field.layout().set_visible(false)
+        self.rename(row, name) catch failure:
+            self.fail(f"Could not rename the brush: {failure.message}")
+
+    ## Saved row `row` named `name` (trimmed; an empty name changes nothing).
+    pub func rename(self, row: int, name: str) -> unit!:
+        let saved = self.saved_at(row) else return
+        let trimmed = name.trim()
+        if trimmed == "" or trimmed == saved.name:
+            return
+        saved.name = trimmed
+        save_brush(self.library, saved)
+        self.show()
+
+    ## The bin: the picked saved brush leaves the library; built-ins stay.
+    pub func delete_selected(self) -> unit!:
+        let row = self.rows.selected
+        let saved = self.saved_at(row) else return
+        delete_brush(self.library, saved.folder) catch failure:
+            self.fail(f"Could not delete the brush: {failure.message}")
+            return
+        discard(self.saved.remove_at(row - preset_names().length))
+        self.rows.selected = -1
+        self.show()
+
+    ## Import: a `.l2dbrush` file chosen in the open panel joins the library.
+    pub func import_file(self) -> unit!:
+        let app = self.settings.app else return
+        let path = app.open_file("Import a brush (.l2dbrush)") catch failure:
+            self.fail(f"Could not import: {failure.message}")
+            return
+        if path != "":
+            self.import_path(path)
+
+    ## The brush in the `.l2dbrush` file at `path`, added to the library.
+    pub func import_path(self, path: str) -> unit!:
+        let imported = import_brush(path) catch failure:
+            self.fail(f"Could not import {path}: {failure.message}")
+            return
+        self.add(imported.brush, imported.name)
+
+    ## Export: the picked brush (the one in hand when none is) to a file.
+    pub func export_file(self) -> unit!:
+        let app = self.settings.app else return
+        let chosen = self.export_choice()
+        let path = app.save_file("Export the brush to share", chosen.name + ".l2dbrush") catch failure:
+            self.fail(f"Could not export: {failure.message}")
+            return
+        if path != "":
+            export_brush(chosen.brush, chosen.name, path) catch failure:
+                self.fail(f"Could not export: {failure.message}")
+
+    ## What Export writes: the picked saved brush, else the brush in hand.
+    pub func export_choice(self) -> SavedBrush:
+        if let saved = self.saved_at(self.rows.selected):
+            return saved
+        return SavedBrush(self.workspace.brush.preset, "", self.workspace.brush)
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.failed:
+            failed(message)

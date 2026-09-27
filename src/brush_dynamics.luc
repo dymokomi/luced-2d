@@ -1,0 +1,96 @@
+## Brush dynamics: what drives each brush parameter, as Photoshop's
+## "Control:" menus extended to the pen's tilt, azimuth, rotation and
+## airbrush wheel. The parameters and controls are numbered as luce-image's
+## `Canvas.set_brush_dynamic` takes them; `pen_of` turns a pointer event into
+## the pen sample a stroke point carries.
+from ui import Event
+from input import PointerKind
+
+## One parameter's mapping: its control (a `control_names` index), the
+## fraction left at the control's 0, the response curve (-1 firm .. 1 soft)
+## and, for Fade, its length in dabs.
+pub class Mapping:
+    pub var control: int = 0
+    pub var minimum: float = 0.0
+    pub var curve: float = 0.0
+    pub var steps: int = 25
+
+    pub func copy(self) -> Mapping:
+        let copied = Mapping()
+        copied.control = self.control
+        copied.minimum = self.minimum
+        copied.curve = self.curve
+        copied.steps = self.steps
+        return copied
+
+## The parameters a mapping can drive, in luce-image's order.
+pub func parameter_names() -> list[str]:
+    return ["Size", "Flow", "Opacity", "Angle", "Roundness", "Scatter", "Texture Depth", "Hue Jitter", "Saturation Jitter", "Brightness Jitter"]
+
+## The controls, in luce-image's order.
+pub func control_names() -> list[str]:
+    return ["Off", "Pen Pressure", "Pen Tilt", "Azimuth", "Rotation", "Stylus Wheel", "Direction", "Velocity", "Fade"]
+
+## The stable ids the brush files use for the controls.
+pub func control_ids() -> list[str]:
+    return ["off", "pressure", "tilt", "azimuth", "rotation", "wheel", "direction", "velocity", "fade"]
+
+## The stable ids the brush files use for the parameters.
+pub func parameter_ids() -> list[str]:
+    return ["size", "flow", "opacity", "angle", "roundness", "scatter", "texture_depth", "hue", "saturation", "brightness"]
+
+## Every parameter off.
+pub func no_mappings() -> list[Mapping]:
+    var mappings: list[Mapping] = []
+    for _ in parameter_names():
+        mappings.append(Mapping())
+    return mappings
+
+## The usual start: pen pressure drives the size, the rest off.
+pub func default_mappings() -> list[Mapping]:
+    let mappings = no_mappings()
+    mappings[0] = mapped(1)
+    return mappings
+
+## A mapping: `control` driving from `minimum` through `curve`, Fade over `steps`.
+pub func mapped(control: int, minimum: float = 0.0, curve: float = 0.0, steps: int = 25) -> Mapping:
+    let made = Mapping()
+    made.control = control
+    made.minimum = minimum
+    made.curve = curve
+    made.steps = steps
+    return made
+
+## A copy of every mapping.
+pub func copy_mappings(mappings: list[Mapping]) -> list[Mapping]:
+    var copied: list[Mapping] = []
+    for mapping in mappings:
+        copied.append(mapping.copy())
+    return copied
+
+## A pen sample for a stroke point: pressure 0..1 (0 from a mouse, which
+## luce-image reads as a full press), the lean's azimuth and altitude in
+## degrees (a mouse stands upright), barrel rotation, the airbrush wheel and
+## the time in milliseconds.
+pub class PenSample:
+    pub var pressure: float = 0.0
+    pub var azimuth: float = 0.0
+    pub var altitude: float = 90.0
+    pub var rotation: float = 0.0
+    pub var tangential: float = 0.0
+    pub var time: float = 0.0
+    ## Whether the pen's eraser end sent it.
+    pub var eraser: bool = false
+
+## The pen in a pointer event at `time` milliseconds.
+pub func pen_of(event: Event, time: float) -> PenSample:
+    let pen = PenSample()
+    pen.time = time
+    pen.pressure = event.pressure
+    if event.pointer_kind == PointerKind.pen or event.pointer_kind == PointerKind.eraser:
+        pen.azimuth = event.azimuth
+        pen.altitude = event.altitude
+        pen.rotation = event.rotation
+        pen.tangential = event.tangential
+        pen.eraser = event.pointer_kind == PointerKind.eraser
+    return pen

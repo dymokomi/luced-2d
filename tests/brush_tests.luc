@@ -1,0 +1,215 @@
+## Brushes: the pen reaching the stroke through the view, the dynamics and
+## images in Brush Settings, the library on disk and the Brushes panel.
+from ui import Font, Event
+from input import EventKind, PointerKind
+from workspace import Workspace
+from panels import Panels
+from view import CanvasView
+from actions import Actions
+from brush import Brush, preset
+from brush_mask import BrushMask
+from brush_dynamics import pen_of, no_mappings, mapped
+from brush_library import SavedBrush, library_path, load_library, save_brush, free_folder, export_brush, import_brush, brush_of, brush_text
+from brush_settings import define_tip
+from brushes_panel import BrushesPanel
+from kit import Kit
+from toml import Table
+import paths
+import files
+
+pub func brush_tests(arguments: list[str]) -> unit!:
+    let directory = paths.join(arguments[0], "brush-library")
+    files.ensure_directory(directory)
+    pen_samples()
+    pen_strokes()
+    sampled_tips()
+    library_round_trip(directory)
+    shared_files(directory)
+    panel_library(paths.join(directory, "panel"))
+
+## A pen event becomes the pen sample a stroke point carries; a mouse's is a
+## full press standing upright.
+func pen_samples() -> unit!:
+    let pen = pen_of(Event(kind = EventKind.pointer_moved, pointer_kind = PointerKind.pen, pressure = 0.4, azimuth = 90.0, altitude = 50.0, rotation = 30.0, tangential = 0.5), 12.0)
+    assert(pen.pressure == 0.4 and pen.azimuth == 90.0 and pen.altitude == 50.0 and pen.rotation == 30.0 and pen.tangential == 0.5 and pen.time == 12.0 and not pen.eraser)
+    let eraser = pen_of(Event(kind = EventKind.pointer_moved, pointer_kind = PointerKind.eraser, pressure = 1.0, altitude = 90.0), 0.0)
+    assert(eraser.eraser)
+    let mouse = pen_of(Event(kind = EventKind.pointer_moved, pointer_kind = PointerKind.mouse), 0.0)
+    assert(mouse.pressure == 0.0 and mouse.altitude == 90.0 and not mouse.eraser)
+
+## A light pen press with pressure driving the size paints a thinner line than
+## a full one; the pen's eraser end erases with the Brush tool.
+func pen_strokes() -> unit!:
+    let workspace = Workspace(120, 80)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let view = panels.view
+    workspace.fitted = true
+    workspace.zoom = 1.0
+    workspace.offset_x = 0.0
+    workspace.offset_y = 0.0
+    panels.choose_tool("brush")
+    workspace.set_color(1.0, 0.0, 0.0)
+    workspace.brush = preset("Hard Round", 20.0, 1.0)
+    workspace.brush.dynamics[0] = mapped(1, 0.0)
+    # A light press across the top, a full one across the bottom.
+    stroke(view, 10.0, 20.0, 110.0, 20.0, PointerKind.pen, 0.2)
+    stroke(view, 10.0, 60.0, 110.0, 60.0, PointerKind.pen, 1.0)
+    assert(alpha_at(workspace, 60, 20) > 0.99 and alpha_at(workspace, 60, 60) > 0.99)
+    # 6 pixels off the line: inside the full dab (radius 10), outside the light one (2).
+    assert(alpha_at(workspace, 60, 26) < 0.01 and alpha_at(workspace, 60, 66) > 0.99)
+    # The eraser end takes the full line away where it passes.
+    stroke(view, 60.0, 50.0, 60.0, 70.0, PointerKind.eraser, 1.0)
+    assert(alpha_at(workspace, 60, 60) < 0.01 and alpha_at(workspace, 30, 60) > 0.99)
+    panels.close()
+
+## A drag with a pen of `kind` at `pressure` from one point to another.
+func stroke(view: CanvasView, x0: float, y0: float, x1: float, y1: float, kind: PointerKind, pressure: float) -> unit!:
+    view.event(Event(kind = EventKind.pointer_down, x = x0, y = y0, button = 0, inside = true, pointer_kind = kind, pressure = pressure, altitude = 90.0))
+    view.event(Event(kind = EventKind.pointer_moved, x = x1, y = y1, inside = true, pointer_kind = kind, pressure = pressure, altitude = 90.0))
+    view.event(Event(kind = EventKind.pointer_up, x = x1, y = y1, button = 0, inside = true, pointer_kind = kind, pressure = pressure, altitude = 90.0))
+
+func alpha_at(workspace: Workspace, x: int, y: int) -> float!:
+    workspace.canvas.pick(x, y)
+    return workspace.canvas.picked_alpha()
+
+## A painted tip in the brush paints its shape; Define Brush takes the
+## selection as a tip; the Brush Settings editors put their images on the
+## brush in hand.
+func sampled_tips() -> unit!:
+    let workspace = Workspace(100, 60)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    panels.choose_tool("brush")
+    workspace.set_color(0.0, 0.0, 1.0)
+    # A tip that paints only its left half.
+    let tip = BrushMask.create(32, 32)
+    tip.clear(1.0)
+    var y = 0.0
+    while y < 32.0:
+        tip.line(24.0, y, 32.0, y, 8.0, 1.0, 0.0)
+        y += 2.0
+    workspace.brush = preset("Hard Round", 30.0, 1.0)
+    workspace.brush.dynamics = no_mappings()
+    workspace.brush.tip = tip
+    workspace.begin_stroke(50.0, 30.0)
+    workspace.end_stroke()
+    assert(alpha_at(workspace, 40, 30) > 0.99 and alpha_at(workspace, 60, 30) < 0.01)
+    # Define Brush: the selected pixels of the picture, dark painting.
+    workspace.canvas.select_rectangle(35, 15, 30, 30)
+    let defined = define_tip(workspace)
+    assert(defined.width() == 30 and defined.height() == 30 and not defined.is_empty())
+    # The tip editor's image goes on the brush at once; Clear takes it off.
+    let settings = panels.brush
+    settings.tip_editor.use(defined)
+    assert(workspace.brush.tip != none)
+    settings.show()
+    panels.close()
+
+## A brush with dynamics, a tip and a texture image saves to the library
+## and reads back the same.
+func library_round_trip(directory: str) -> unit!:
+    let brush = sample_brush()
+    let library = library_path(directory)
+    let folder = free_folder(library, "Test Ink / 2")
+    assert(folder == "test-ink-2")
+    save_brush(library, SavedBrush("Test Ink / 2", folder, brush))
+    assert(free_folder(library, "Test Ink / 2") == "test-ink-2-2")
+    var found = false
+    for saved in load_library(library):
+        if saved.folder == folder:
+            found = true
+            assert(saved.name == "Test Ink / 2")
+            same_brush(saved.brush, brush)
+    assert(found)
+    # A value the file gets wrong is an error, not a silent default.
+    let wrong = brush_of(Table("[texture]\nkind = \"weave\"\n")) catch failure:
+        discard(failure)
+        return
+    discard(wrong)
+    assert(false)
+
+## A `.l2dbrush` file carries the brush whole, images included.
+func shared_files(directory: str) -> unit!:
+    let brush = sample_brush()
+    let path = paths.join(directory, "shared.l2dbrush")
+    export_brush(brush, "Shared \"Ink\"", path)
+    let imported = import_brush(path)
+    assert(imported.name == "Shared \"Ink\"")
+    same_brush(imported.brush, brush)
+
+## The Brushes panel: "+" saves the brush in hand, Duplicate copies it,
+## Rename and Delete change the library, and a saved brush picked is a copy.
+func panel_library(directory: str) -> unit!:
+    files.ensure_directory(directory)
+    let workspace = Workspace(60, 40)
+    let panels = Panels(workspace, Actions(), Font())
+    let kit = Kit(Font())
+    let panel = BrushesPanel(workspace, kit, panels.brush, directory)
+    let built_in = panel.saved.length
+    workspace.brush = sample_brush()
+    panel.save_new()
+    assert(panel.saved.length == built_in + 1 and load_library(panel.library).length == built_in + 1)
+    let row = panel.rows.selected
+    panel.duplicate()
+    assert(panel.saved.length == built_in + 2 and panel.saved[panel.saved.length - 1].name.ends_with(" copy"))
+    panel.rename(row, "  Renamed  ")
+    var names: list[str] = []
+    for saved in load_library(panel.library):
+        names.append(saved.name)
+    assert("Renamed" in names)
+    # Picking the saved brush gives a copy: painting settings do not touch the library.
+    panel.pick(row)
+    assert(workspace.brush.diameter == 48.0 and workspace.brush.preset == "Renamed")
+    workspace.brush.diameter = 5.0
+    assert(panel.saved[row - panel.rows.first_saved].brush.diameter == 48.0)
+    # Save writes the brush in hand over the picked one.
+    panel.rows.selected = row
+    panel.save_over()
+    assert(load_library(panel.library)[0].brush.diameter == 5.0 or load_library(panel.library)[1].brush.diameter == 5.0)
+    panel.rows.selected = row
+    panel.delete_selected()
+    assert(panel.saved.length == built_in + 1 and load_library(panel.library).length == built_in + 1)
+    # A built-in picked keeps the size in hand.
+    panel.pick(1)
+    assert(workspace.brush.preset == "Soft Round" and workspace.brush.diameter == 5.0)
+    kit.close()
+    panels.close()
+
+## A brush with a bit of everything.
+func sample_brush() -> Brush!:
+    let brush = Brush()
+    brush.diameter = 48.0
+    brush.spacing = 0.1
+    brush.angle = 30.0
+    brush.size_jitter = 0.25
+    brush.texture = 4
+    brush.texture_mode = 1
+    brush.texture_invert = true
+    brush.texture_scale = 2.0
+    # Written through whole mappings: `list[i].field = x` over-retains in Luce 0.8.16.
+    brush.dynamics[3] = mapped(3)
+    brush.dynamics[1] = mapped(5, 0.25, -0.5)
+    brush.dynamics[2] = mapped(8, steps = 40)
+    let tip = BrushMask.create(40, 20)
+    tip.dab(12.0, 10.0, 8.0, 0.5, 1.0)
+    brush.tip = tip
+    let texture = BrushMask.create(16, 16)
+    texture.clear(1.0)
+    texture.dab(8.0, 8.0, 4.0, 1.0, 0.0)
+    brush.texture_image = texture
+    return brush
+
+## Whether two brushes have the same settings, dynamics and images.
+func same_brush(a: Brush, b: Brush) -> unit!:
+    assert(brush_text(a, "x") == brush_text(b, "x"))
+    same_mask(a.tip, b.tip)
+    same_mask(a.texture_image, b.texture_image)
+
+func same_mask(a: BrushMask?, b: BrushMask?) -> unit!:
+    if a == none or b == none:
+        assert(a == none and b == none)
+        return
+    let first = a else return
+    let second = b else return
+    assert(first.width() == second.width() and first.height() == second.height() and first.coverage() == second.coverage())

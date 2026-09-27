@@ -19,6 +19,7 @@ from pen_tool import PenTool
 from vector_overlay import VectorOverlay
 from vectors import pick_element
 from tool_cursor import cursor_for, draw_magnifier
+from brush_dynamics import PenSample, pen_of
 import theme
 import math
 import time
@@ -714,7 +715,7 @@ pub class CanvasView: Widget:
             let marquee = tool != "lasso"
             self.selection.begin(workspace, self.snapper.snap_x(x) if marquee else x, self.snapper.snap_y(y) if marquee else y, tool == "lasso", tool == "ellipse", event.shift, event.alt)
         else:
-            self.begin_painting(x, y, event.shift, event.pressure)
+            self.begin_painting(x, y, event.shift, pen_of(event, event_time()))
 
     ## Whether `tool` needs pixels and the selected layer is a group, which has
     ## none: then say so, as Photoshop does, and do nothing.
@@ -731,13 +732,13 @@ pub class CanvasView: Widget:
 
     ## Start painting at a document point. With Shift, a straight line first
     ## runs from where the last stroke ended, and the stroke keeps to one axis.
-    func begin_painting(self, x: float, y: float, shift: bool, pressure: float) -> unit!:
+    func begin_painting(self, x: float, y: float, shift: bool, pen: PenSample) -> unit!:
         let workspace = self.workspace
         if shift and self.has_stroke_end:
-            workspace.begin_stroke(self.stroke_end_x, self.stroke_end_y, pressure)
-            workspace.extend_stroke(x, y, pressure)
+            workspace.begin_stroke(self.stroke_end_x, self.stroke_end_y, pen)
+            workspace.extend_stroke(x, y, pen)
         else:
-            workspace.begin_stroke(x, y, pressure)
+            workspace.begin_stroke(x, y, pen)
         self.painting = workspace.canvas.painting()
         self.axis = 0 if shift else -1
         self.stroke_x = x
@@ -944,7 +945,7 @@ pub class CanvasView: Widget:
             self.last_y = event.y
         elif self.painting:
             let point = self.on_axis(self.document_x(event.x), self.document_y(event.y))
-            self.workspace.extend_stroke(point.x, point.y, event.pressure)
+            self.workspace.extend_stroke(point.x, point.y, pen_of(event, event_time()))
         elif self.zooming:
             # Scrubby zoom: every 100 points right doubles, left halves.
             let dx = event.x - self.zoom_x
@@ -1096,7 +1097,7 @@ pub class CanvasView: Widget:
         elif self.painting:
             self.painting = false
             let point = self.on_axis(x, y)
-            workspace.extend_stroke(point.x, point.y, event.pressure)
+            workspace.extend_stroke(point.x, point.y, pen_of(event, event_time()))
             workspace.end_stroke()
             self.stroke_end_x = point.x
             self.stroke_end_y = point.y
@@ -1149,3 +1150,7 @@ func past_edge(at: float, length: float) -> float:
     if at > length:
         return math.min(40.0, (at - length) * 0.2)
     return 0.0
+
+## Now in milliseconds, for a stroke point's pen: its velocity reads the time.
+func event_time() -> float:
+    return float(time.now() // 1000) / 1000.0

@@ -38,7 +38,7 @@ from alpha_channels import row_shown, row_picked, next_alpha_name
 from vectors import active_element, next_path_name
 from node_view import NodeView
 from free_transform import begin_free_transform
-from brushes_panel import saved_brushes
+from brush_tests import brush_tests
 from align import align_layers
 from dock_layout import parse_layout
 from gpu import Rect
@@ -103,6 +103,7 @@ pub func main(arguments: list[str]) -> int!:
     vector_panel(arguments)
     node_editor(arguments)
     color_panel_modes()
+    brush_tests(arguments)
     print("PASS luced-2d workspace, view and panels")
     return 0
 
@@ -1231,7 +1232,7 @@ func window_command(actions: Actions, id: str) -> Command!:
 ## The panel catalog: the Window menu opens a panel beside the Layers and
 ## Properties column, ticked; again, it closes and comes back as it was; with
 ## that column closed a new panel docks right of the viewport; Brush Settings
-## floats. The Swatches and Brushes texts survive their round trips.
+## floats. The Swatches text survives its round trip.
 func panel_catalog() -> unit!:
     let workspace = Workspace(300, 200)
     let actions = Actions()
@@ -1273,14 +1274,10 @@ func panel_catalog() -> unit!:
     assert(panels.dock.is_floating(panels.brush.panel))
     # The texts the panels keep in the settings.
     assert(swatches_of("#FF0000 nonsense #00ff00") == ["#ff0000", "#00ff00"])
-    let brushes = saved_brushes("Big,120,0.5,1,1,0.25,0,1;broken;Tiny,2,1,0.5,1,0.1,45,0.5")
-    assert(brushes.length == 2 and brushes[0].name == "Big" and brushes[0].diameter == 120.0 and brushes[1].angle == 45.0)
-    assert(saved_brushes(brushes[0].text())[0].hardness == 0.5)
     let kept = Settings()
     kept.swatches = "#123456"
-    kept.brush_presets = brushes[0].text()
     let reread = Settings(kept.serialize())
-    assert(reread.swatches == "#123456" and reread.brush_presets == brushes[0].text())
+    assert(reread.swatches == "#123456")
     # File › Exit on a changed document asks rather than ending the run.
     panels.files.quit()
     panels.close()

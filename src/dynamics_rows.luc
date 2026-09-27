@@ -1,0 +1,65 @@
+## One brush parameter's dynamics in Brush Settings, as Photoshop's
+## "Control:" rows: a menu of what drives it (Off, Pen Pressure, Pen Tilt,
+## Azimuth, Rotation, Stylus Wheel, Direction, Velocity, Fade), the curve
+## beside it, the minimum under it, and Fade's length when Fade drives it.
+from ui import Widget, Menu, Command, NumberField, HStack
+from kit import Kit, SliderField
+from brush_dynamics import Mapping, control_names
+
+pub class DynamicsRow:
+    ## The rows to put in a section.
+    pub let rows: list[Widget]
+    let menu: Menu
+    let curve: NumberField
+    let minimum: SliderField
+    let steps: NumberField
+    let steps_row: Widget
+    ## The mapping edited: the brush's, read again by `show`.
+    var mapping: Mapping
+    ## An edit happened.
+    let changed: func() -> unit!
+    ## Whether the parameter has a minimum: the angle turns instead.
+    let has_minimum: bool
+
+    pub func init(self, kit: Kit, label: str, changed: func() -> unit!, has_minimum: bool = true) -> unit!:
+        self.changed = changed
+        self.has_minimum = has_minimum
+        self.mapping = Mapping()
+        var commands: list[Command] = []
+        var index = 0
+        for name in control_names():
+            let chosen = index
+            let command = Command(name, id = f"dynamics_{label}_{index}")
+            kit.bind(command, func () -> unit!:
+                self.mapping.control = chosen
+                self.show(self.mapping)
+                self.changed())
+            commands.append(command)
+            index += 1
+        self.menu = Menu("Off ▾", commands, font = kit.font)
+        self.curve = NumberField(0.0, -100.0, 100.0, 1.0, 0, suffix = "%", font = kit.font, cells = 5.0)
+        kit.keep(self.curve.on_change(func (value: float) -> unit!:
+            self.mapping.curve = value / 100.0
+            self.changed()))
+        self.minimum = kit.slider_field(0.0, 100.0, 0.0, 0, "%", func (value: float) -> unit!:
+            self.mapping.minimum = value / 100.0
+            self.changed())
+        self.steps = NumberField(25.0, 1.0, 10000.0, 1.0, 0, font = kit.font, cells = 6.0)
+        kit.keep(self.steps.on_change(func (value: float) -> unit!:
+            self.mapping.steps = int(value)
+            self.changed()))
+        self.steps_row = kit.dialog_row("Fade Steps", self.steps)
+        self.rows = [kit.dialog_row(label + " Control", HStack([self.menu, kit.caption("Curve", 36.0), self.curve], spacing = 6.0)),
+                     kit.dialog_row("Minimum", self.minimum.row), self.steps_row]
+
+    ## Show and edit `mapping`.
+    pub func show(self, mapping: Mapping) -> unit!:
+        self.mapping = mapping
+        self.menu.set_text(control_names()[mapping.control] + " ▾")
+        self.curve.set_value(mapping.curve * 100.0)
+        self.minimum.set_value(mapping.minimum * 100.0)
+        self.steps.set_value(float(mapping.steps))
+        # Minimum and curve matter once something drives the parameter; the
+        # length only for Fade.
+        self.rows[1].layout().set_visible(mapping.control != 0 and self.has_minimum)
+        self.steps_row.layout().set_visible(mapping.control == 8)

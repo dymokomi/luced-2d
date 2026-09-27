@@ -39,8 +39,6 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     brush.angle = number(table, "brush.angle", brush.angle, -180.0, 180.0)
     brush.roundness = number(table, "brush.roundness", brush.roundness, 0.01, 1.0)
     brush.smoothing = number(table, "brush.smoothing", brush.smoothing, 0.0, 100.0)
-    brush.pressure_size = boolean(table, "brush.pressure_size", brush.pressure_size)
-    brush.pressure_flow = boolean(table, "brush.pressure_flow", brush.pressure_flow)
     let selecting = workspace.selecting
     selecting.mode = int(number(table, "selection.mode", float(selecting.mode), 0.0, 3.0))
     selecting.feather = int(number(table, "selection.feather", float(selecting.feather), 0.0, 250.0))
@@ -85,8 +83,7 @@ pub func serialize_tools(workspace: Workspace) -> str:
     var text = "# luced-2d's tool options, kept when the window closes.\n\n"
     text = text + f"[tool]\ncurrent = \"{workspace.tool}\"\n\n"
     text = text + f"[brush]\npreset = \"{brush.preset}\"\ndiameter = {brush.diameter}\nhardness = {brush.hardness}\nopacity = {brush.opacity}\nflow = {brush.flow}\n"
-    text = text + f"spacing = {brush.spacing}\nangle = {brush.angle}\nroundness = {brush.roundness}\nsmoothing = {brush.smoothing}\n"
-    text = text + f"pressure_size = {flag(brush.pressure_size)}\npressure_flow = {flag(brush.pressure_flow)}\n\n"
+    text = text + f"spacing = {brush.spacing}\nangle = {brush.angle}\nroundness = {brush.roundness}\nsmoothing = {brush.smoothing}\n\n"
     text = text + f"[selection]\nmode = {selecting.mode}\nfeather = {selecting.feather}\nantialias = {flag(selecting.antialias)}\nsample = {selecting.sample}\n"
     text = text + f"all_layers = {flag(selecting.all_layers)}\ntolerance = {workspace.tolerance}\ncontiguous = {flag(workspace.contiguous)}\n\n"
     text = text + f"[type]\nfamily = \"{typing.family}\"\nstyle = \"{typing.style}\"\nsize = {typing.size}\nalignment = {typing.alignment}\n\n"

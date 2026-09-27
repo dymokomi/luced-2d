@@ -41,7 +41,15 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
 - A foreground color swatch in the tool header opens a color editor (RGB
   sliders and hex), beside quick swatches.
 - Brush and eraser (`B`, `E`, `[` `]` for size) painted on the GPU with soft
-  edges and no dab artefacts; undo and redo of strokes.
+  edges and no dab artefacts; undo and redo of strokes. Pens on macOS,
+  Windows (Windows Ink) and Linux (XInput 2): pressure, tilt, azimuth,
+  barrel rotation and the airbrush wheel drive any brush parameter through
+  Brush Settings' dynamics (with stroke direction, velocity and fade), and
+  the eraser end erases.
+- Brushes with sampled tips and texture images, painted, pasted or loaded
+  in Brush Settings' editors or made from the selection (Edit › Define Brush
+  Preset…), kept in a library (`~/.luced-2d/brushes/`, a folder per brush:
+  `brush.toml`, `tip.png`, `texture.png`) and shared as `.l2dbrush` files.
 - Pan with two-finger scroll, hand tool (`H`) or space-drag; zoom about the
   pointer with a touchpad pinch, the mouse wheel, cmd/ctrl-scroll, the zoom
   tool (`Z`), `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
@@ -96,9 +104,9 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   luce-color's (`hsl`, `lab`, `space`, `transfer`).
 - `src/panels.luc`: the window: menu bar, contextual tool header (preset
   menu, Size/Hardness/Opacity/Flow/Spacing scrubbers and Brush…, which opens
-  the Brush Settings dialog — an accordion of Tip Shape, Shape Dynamics,
+  the Brush Settings panel — an accordion of Brush Tip Shape, Shape Dynamics,
   Scattering, Texture, Color Dynamics and Transfer, one section open at a
-  time), then a dock of panes after
+  time, with a control row per dynamic parameter and tip and texture editors), then a dock of panes after
   eleusis-layout (see `docs/ELEUSIS_UI.md`): the Viewport with its tool rail,
   Layers with its actions on a shelf at the bottom, Properties for the
   selected layer (name field, blend menu, opacity slider and field, flag
@@ -112,8 +120,8 @@ python3 tools/preview.py   # macOS: captures a real Metal frame into docs/previe
   the group after Split Right/Down) and by the Window menu, which ticks the
   open ones. A panel is made on first use and kept when closed. Each lives in
   its own file (`color_panel.luc`, `swatches_panel.luc`, `brushes_panel.luc`,
-  `history_panel.luc`, `navigator_panel.luc`, `info_panel.luc`); swatches and
-  saved brush presets are kept in settings.toml. File › Exit (Quit, ⌘Q, on
+  `history_panel.luc`, `navigator_panel.luc`, `info_panel.luc`); swatches are
+  kept in settings.toml, brushes in the library (`brush_library.luc`). File › Exit (Quit, ⌘Q, on
   macOS) asks about unsaved documents first.
 - `src/layers.luc`: the layer list with thumbnails, masks and clipping.
 - `src/theme.luc`: the look, eleusis-layout's greys and orange.

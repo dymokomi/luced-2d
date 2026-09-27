@@ -24,6 +24,9 @@ with tempfile.TemporaryDirectory(prefix='luced-2d-tests-') as temp:
     project = Path(temp) / 'application'
     shutil.copytree(ROOT / 'src', project / 'src')
     shutil.copy2(ROOT / 'tests/main.luc', project / 'src/main.luc')
+    # Test modules beside main.luc (brush_tests.luc) join the program.
+    for module in (ROOT / 'tests').glob('*_tests.luc'):
+        shutil.copy2(module, project / 'src' / module.name)
     # The application's own dependencies, each taken from the checkout beside this one.
     manifest = (ROOT / 'package.prisma').read_text()
     dependencies = ''.join('    def dependency "%s" {\n        str owner = "dymokomi"\n        str version = "%s"\n        str path = %s\n    }\n' % (name, version, json.dumps(str(ROOT.parent / name)))

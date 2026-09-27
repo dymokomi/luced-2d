@@ -1,11 +1,17 @@
-## Brush Settings: Photoshop's sections — Tip Shape, Shape Dynamics,
+## Brush Settings: Photoshop's sections — Brush Tip Shape, Shape Dynamics,
 ## Scattering, Texture, Color Dynamics, Transfer — as an accordion, one open
-## at a time, each rows of a slider and a number field. Edits go straight to
-## the workspace; the next stroke paints with them. A dockable panel: it opens
-## floating over the workspace and docks wherever the user puts it.
-from ui import VStack, Size, Spacer, Menu, Command, Widget, DStack, Panel, Checkbox, Accordion
+## at a time. Each section is rows of a slider and a number field, and the
+## dynamics rows (dynamics_rows.luc) of the parameters it holds; the tip and
+## the texture each have an editor (mask_editor.luc) to paint, paste or load
+## them. Edits go straight to the workspace's brush; the next stroke paints
+## with them. A dockable panel: it opens floating over the workspace and docks
+## wherever the user puts it.
+from ui import VStack, Size, Spacer, Menu, Command, Widget, DStack, Panel, Checkbox, Accordion, ScrollView, Application
 from workspace import Workspace
 from kit import Kit, SliderField
+from dynamics_rows import DynamicsRow
+from mask_editor import MaskEditor
+from brush_mask import BrushMask
 
 pub class BrushSettings:
     pub let panel: Panel
@@ -13,16 +19,35 @@ pub class BrushSettings:
     let kit: Kit
     ## The rows in the order `show` writes them.
     let rows: list[SliderField]
-    let checks: list[Checkbox]
+    ## A dynamics row per parameter, in brush_dynamics.parameter_names order.
+    let dynamics: list[DynamicsRow]
     let texture_menu: Menu
+    let mode_menu: Menu
+    let invert_box: Checkbox
+    pub let tip_editor: MaskEditor
+    pub let texture_editor: MaskEditor
+    let sections: Accordion
+    ## Where pictures are chosen for Load…, and failures told.
+    pub var app: Application? = none
+    pub var on_failed: func(str) -> unit!? = none
 
     pub func init(self, workspace: Workspace, kit: Kit) -> unit!:
         self.workspace = workspace
         self.kit = kit
         self.rows = []
-        self.checks = []
+        self.dynamics = []
         self.texture_menu = Menu("None ▾", self.texture_commands(), font = kit.font)
-        var tip: list[Widget] = []
+        self.mode_menu = Menu("Multiply ▾", self.mode_commands(), font = kit.font)
+        self.invert_box = kit.checkbox("Invert", func () -> unit!:
+            self.workspace.brush.texture_invert = not self.workspace.brush.texture_invert
+            self.workspace.touch())
+        self.tip_editor = MaskEditor(kit, self.take_tip, [kit.button("From Selection", self.tip_from_selection)])
+        self.texture_editor = MaskEditor(kit, self.take_texture, [])
+        for editor in [self.tip_editor, self.texture_editor]:
+            editor.choose_file = self.choose_picture
+            editor.on_failed = self.fail
+            editor.set_edited(self.workspace.touch)
+        var tip: list[Widget] = [self.tip_editor.content]
         tip.append(self.row("Spacing", 1.0, 500.0, "%", func (value: float) -> unit!:
             self.workspace.brush.spacing = value / 100.0))
         tip.append(self.row("Angle", -180.0, 180.0, "°", func (value: float) -> unit!:
@@ -34,39 +59,54 @@ pub class BrushSettings:
         var shape: list[Widget] = []
         shape.append(self.row("Size Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.size_jitter = value / 100.0))
+        self.mapping(shape, "Size", true)
         shape.append(self.row("Angle Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.angle_jitter = value / 100.0))
+        self.mapping(shape, "Angle", false)
         shape.append(self.row("Roundness Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.roundness_jitter = value / 100.0))
-        shape.append(self.check("Pen pressure controls size", func () -> unit!:
-            self.workspace.brush.pressure_size = not self.workspace.brush.pressure_size))
+        self.mapping(shape, "Roundness", true)
         var scattering: list[Widget] = []
         scattering.append(self.row("Scatter", 0.0, 1000.0, "%", func (value: float) -> unit!:
             self.workspace.brush.scatter = value / 100.0))
+        self.mapping(scattering, "Scatter", true)
         scattering.append(self.row("Count", 1.0, 16.0, "", func (value: float) -> unit!:
             self.workspace.brush.scatter_count = int(value)))
-        var texture: list[Widget] = [kit.dialog_row("Pattern", self.texture_menu)]
+        var texture: list[Widget] = [kit.dialog_row("Pattern", self.texture_menu), self.texture_editor.content]
         texture.append(self.row("Scale", 10.0, 1000.0, "%", func (value: float) -> unit!:
             self.workspace.brush.texture_scale = value / 100.0))
         texture.append(self.row("Depth", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.texture_depth = value / 100.0))
+        self.mapping(texture, "Depth", true)
+        texture.append(kit.dialog_row("Mode", self.mode_menu))
+        texture.append(self.invert_box)
         var color_rows: list[Widget] = []
         color_rows.append(self.row("Hue Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.hue_jitter = value / 100.0))
+        self.mapping(color_rows, "Hue", true)
         color_rows.append(self.row("Saturation Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.saturation_jitter = value / 100.0))
+        self.mapping(color_rows, "Saturation", true)
         color_rows.append(self.row("Brightness Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.brightness_jitter = value / 100.0))
+        self.mapping(color_rows, "Brightness", true)
         var transfer: list[Widget] = []
         transfer.append(self.row("Flow Jitter", 0.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.brush.flow_jitter = value / 100.0))
-        transfer.append(self.check("Pen pressure controls flow", func () -> unit!:
-            self.workspace.brush.pressure_flow = not self.workspace.brush.pressure_flow))
+        self.mapping(transfer, "Flow", true)
+        self.mapping(transfer, "Opacity", true)
         var sections: list[Widget] = []
         for rows in [tip, shape, scattering, texture, color_rows, transfer]:
             sections.append(VStack(rows, spacing = 6.0, padding = 6.0))
-        let stack = Accordion(["Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = kit.font, open = 0)
-        self.panel = Panel("Brush Settings", VStack([stack, Spacer()], spacing = 0.0, padding = 6.0), minimum = Size(320.0, 240.0), id = "brush_settings")
+        self.sections = Accordion(["Brush Tip Shape", "Shape Dynamics", "Scattering", "Texture", "Color Dynamics", "Transfer"], sections, font = kit.font, open = 0)
+        # Rows keep their height: a short panel scrolls rather than squashing them.
+        let scroller = ScrollView(VStack([self.sections, Spacer()], spacing = 0.0, padding = 6.0))
+        scroller.layout().set_flex()
+        self.panel = Panel("Brush Settings", scroller, minimum = Size(340.0, 240.0), id = "brush_settings")
+
+    ## Open section `index` (0 Brush Tip Shape .. 5 Transfer).
+    pub func open_section(self, index: int) -> unit!:
+        self.sections.open_section(index)
 
     ## One setting: a captioned slider and field, `apply` taking each edit.
     func row(self, label: str, minimum: float, maximum: float, suffix: str, apply: func(float) -> unit!) -> Widget!:
@@ -76,14 +116,15 @@ pub class BrushSettings:
         self.rows.append(pair)
         return self.kit.dialog_row(label, pair.row)
 
-    func check(self, label: str, toggle: func() -> unit!) -> Widget!:
-        let box = self.kit.checkbox(label, func () -> unit!:
-            toggle()
-            self.workspace.touch())
-        self.checks.append(box)
-        return box
+    ## The next parameter's dynamics rows, added to `rows`; `minimum` says
+    ## whether a minimum means anything (the angle turns instead).
+    func mapping(self, rows: list[Widget], label: str, minimum: bool) -> unit!:
+        let made = DynamicsRow(self.kit, label, self.workspace.touch, minimum)
+        self.dynamics.append(made)
+        for widget in made.rows:
+            rows.append(widget)
 
-    ## The texture menu's entries: picking one sets the pattern.
+    ## The pattern menu's entries: picking one sets the texture.
     func texture_commands(self) -> list[Command]!:
         var kinds: list[Command] = []
         var kind = 0
@@ -92,25 +133,80 @@ pub class BrushSettings:
             let command = Command(name, id = f"texture_{kind}")
             self.kit.bind(command, func () -> unit!:
                 self.workspace.brush.texture = chosen
+                self.workspace.touch()
                 self.show())
             kinds.append(command)
             kind += 1
         return kinds
 
+    func mode_commands(self) -> list[Command]!:
+        var modes: list[Command] = []
+        var mode = 0
+        for name in mode_names():
+            let chosen = mode
+            let command = Command(name, id = f"texture_mode_{mode}")
+            self.kit.bind(command, func () -> unit!:
+                self.workspace.brush.texture_mode = chosen
+                self.workspace.touch()
+                self.show())
+            modes.append(command)
+            mode += 1
+        return modes
+
+    ## The tip editor's image as the brush's tip (none: the round tip).
+    func take_tip(self, mask: BrushMask?) -> unit!:
+        self.workspace.brush.tip = mask
+        self.workspace.touch()
+
+    ## The texture editor's image as the brush's texture, which then uses it.
+    func take_texture(self, mask: BrushMask?) -> unit!:
+        self.workspace.brush.texture_image = mask
+        if mask != none:
+            self.workspace.brush.texture = 4
+        self.workspace.touch()
+        self.show()
+
+    ## From Selection: the selected pixels of the whole picture as the tip,
+    ## as Photoshop's Define Brush Preset takes them.
+    pub func tip_from_selection(self) -> unit!:
+        let mask = define_tip(self.workspace) catch failure:
+            self.fail(f"From Selection: {failure.message}")
+            return
+        self.tip_editor.use(mask)
+
+    ## A picture file chosen in the open panel, or "".
+    func choose_picture(self) -> str!:
+        let app = self.app else return ""
+        return app.open_file("Load a picture as the brush's image: dark paints, light does not")
+
+    func fail(self, message: str) -> unit!:
+        if let failed = self.on_failed:
+            failed(message)
+
     ## Show the workspace's brush, in the rows' order.
     pub func show(self) -> unit!:
-        let w = self.workspace
-        let values = [w.brush.spacing * 100.0, w.brush.angle, w.brush.roundness * 100.0, w.brush.smoothing,
-                      w.brush.size_jitter * 100.0, w.brush.angle_jitter * 100.0, w.brush.roundness_jitter * 100.0,
-                      w.brush.scatter * 100.0, float(w.brush.scatter_count), w.brush.texture_scale * 100.0, w.brush.texture_depth * 100.0,
-                      w.brush.hue_jitter * 100.0, w.brush.saturation_jitter * 100.0, w.brush.brightness_jitter * 100.0, w.brush.flow_jitter * 100.0]
+        let b = self.workspace.brush
+        let values = [b.spacing * 100.0, b.angle, b.roundness * 100.0, b.smoothing,
+                      b.size_jitter * 100.0, b.angle_jitter * 100.0, b.roundness_jitter * 100.0,
+                      b.scatter * 100.0, float(b.scatter_count), b.texture_scale * 100.0, b.texture_depth * 100.0,
+                      b.hue_jitter * 100.0, b.saturation_jitter * 100.0, b.brightness_jitter * 100.0, b.flow_jitter * 100.0]
         var index = 0
         for value in values:
             self.rows[index].set_value(value)
             index += 1
-        self.checks[0].set_checked(w.brush.pressure_size)
-        self.checks[1].set_checked(w.brush.pressure_flow)
-        self.texture_menu.set_text(texture_names()[w.brush.texture] + " ▾")
+        # The rows follow parameter_names; Size, Angle, Roundness, Scatter,
+        # Texture Depth, Hue, Saturation, Brightness, Flow, Opacity is the
+        # order they were built in.
+        let order = [0, 3, 4, 5, 6, 7, 8, 9, 1, 2]
+        index = 0
+        for row in self.dynamics:
+            row.show(b.dynamics[order[index]])
+            index += 1
+        self.texture_menu.set_text(texture_names()[b.texture] + " ▾")
+        self.mode_menu.set_text(mode_names()[b.texture_mode] + " ▾")
+        self.invert_box.set_checked(b.texture_invert)
+        self.tip_editor.show(b.tip)
+        self.texture_editor.show(b.texture_image)
 
     ## Show the panel: floating the first time, else brought forward wherever
     ## it was left, floating or docked.
@@ -121,6 +217,15 @@ pub class BrushSettings:
         else:
             dock.float(self.panel)
 
+## The selected pixels of the whole picture (all of it without a selection)
+## as a brush image: Define Brush Preset's tip.
+pub func define_tip(workspace: Workspace) -> BrushMask!:
+    let picture = workspace.canvas.selection_image(workspace.selected_id(), merged = true)
+    return BrushMask.from_image(picture)
+
 ## The names, in their index order.
 func texture_names() -> list[str]:
-    return ["None", "Grain", "Canvas", "Dots"]
+    return ["None", "Grain", "Canvas", "Dots", "Image"]
+
+func mode_names() -> list[str]:
+    return ["Multiply", "Subtract"]

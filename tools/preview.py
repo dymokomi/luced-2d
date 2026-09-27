@@ -17,7 +17,7 @@ parser.add_argument('--base', type=Path, default=ROOT.parent / 'luce-base/build/
 parser.add_argument('--luce', type=Path, default=ROOT.parent / 'luce/build/luce')
 parser.add_argument('--output', type=Path, default=ROOT / 'docs/preview.png')
 parser.add_argument('--zoom', type=float, help='the view zoom to capture at, after the scene')
-parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders'], default='style', help='which dialog to open in the capture')
+parser.add_argument('--scene', choices=['style', 'picker', 'settings', 'brush', 'documents', 'zoom', 'pan', 'crash', 'drop', 'swatch', 'rulers', 'document', 'white', 'brushdock', 'zoomhold', 'pickerwhite', 'strokes', 'selmove', 'clipboard', 'movetool', 'ellipsedrag', 'selmovedrag', 'transform', 'crop', 'flip', 'croppress', 'groups', 'adjustlayer', 'huesat', 'noise', 'retouch', 'closeprompt', 'jpeg', 'distort', 'layermenu', 'rename', 'canvassize', 'imagesize', 'polygon', 'guides', 'text', 'newcancel', 'channels', 'channelgray', 'quickmask', 'channelundo', 'vector', 'nodes', 'nodeart', 'colortriangle', 'colorsquare', 'colorwheel', 'colorsliders', 'brushtip', 'brushdynamics', 'brushlist'], default='style', help='which dialog to open in the capture')
 arguments = parser.parse_args()
 arguments.output.resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -667,13 +667,47 @@ SCENES = {
             editor.workspace.set_color(0.8069, 0.3515, 0.0497)
             editor.panels.pick_color(false)
             editor.panels.refresh()''',
+    # Brush Settings docked short, over strokes of a painted tip with a
+    # texture; the Brushes panel's thumbnails beside it.
+    'brushtip': """            editor.workspace.select(1)
+            editor.workspace.choose_tool("brush")
+            let tip = BrushMask.create(64, 64)
+            tip.line(8.0, 32.0, 56.0, 32.0, 6.0, 0.6, 1.0)
+            tip.line(32.0, 8.0, 32.0, 56.0, 3.0, 0.9, 1.0)
+            editor.workspace.brush = preset("Hard Round", 60.0, 1.0)
+            editor.workspace.brush.tip = tip
+            editor.workspace.brush.texture = 2
+            editor.workspace.brush.texture_depth = 0.8
+            editor.workspace.set_color(0.05, 0.2, 0.7)
+            editor.workspace.begin_stroke(150.0, 200.0)
+            editor.workspace.extend_stroke(600.0, 300.0)
+            editor.workspace.extend_stroke(1100.0, 200.0)
+            editor.workspace.end_stroke()
+            editor.panels.catalog.open("brushes")
+            editor.panels.open_brush()
+            editor.panels.refresh()
+            editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
+            editor.panels.refresh()""",
+    'brushlist': """            editor.workspace.choose_tool("brush")
+            editor.panels.open_brush()
+            editor.panels.refresh()
+            editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
+            editor.panels.catalog.open("brushes")
+            editor.panels.refresh()""",
+    'brushdynamics': """            editor.workspace.choose_tool("brush")
+            editor.workspace.brush.dynamics[3] = mapped(3)
+            editor.panels.open_brush()
+            editor.panels.refresh()
+            editor.panels.dock.move(editor.panels.brush.panel, editor.panels.properties.panel, DockPosition.tab)
+            editor.panels.brush.open_section(1)
+            editor.panels.refresh()""",
 }
 SCENE = SCENES[arguments.scene]
 if arguments.zoom:
     SCENE += '\n            editor.workspace.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('from brush_mask import BrushMask\nfrom brush import preset\n' if 'BrushMask' in SCENE else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
