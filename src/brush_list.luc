@@ -3,11 +3,14 @@
 ## spacing), as Photoshop's stroke thumbnails, under a header per group that
 ## a click folds and unfolds, as Photoshop's brush folders. A click picks the
 ## brush; a double-click on a saved brush's name renames it there. Rows are
-## addressed by brush index, whatever line they are drawn on, and a stroke is
-## drawn only once its row first shows.
+## addressed by brush index, whatever line they are drawn on. The list
+## scrolls itself and draws only the lines in sight, so a library of a
+## thousand brushes never needs a texture its whole height; strokes are drawn
+## a few a frame, those in sight first, so unfolding a group of hundreds
+## never stalls the window.
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Image
 from gpu import RenderTarget, Rect
-from input import EventKind, Cursor
+from input import EventKind, Cursor, ScrollUnit
 from brush import Brush
 from brush_mask import BrushMask
 from theme import Look
@@ -54,9 +57,9 @@ pub class BrushList: Widget:
     pub var first_saved: int = 0
     var last_row: int = -1
     var last_time: int = 0
-    ## The part of the list in sight (y and height in its own points), so
-    ## only those rows draw; none: all of it.
-    pub var viewport: func() -> Rect!? = none
+    ## How far the list is scrolled, and the height it last drew at.
+    var scroll: float = 0.0
+    var shown_height: float = 0.0
     ## A brush's stroke thumbnail, RGBA stroke_width × stroke_height, asked
     ## for when its row first shows.
     pub var stroke: func(int) -> bytes!? = none
@@ -82,8 +85,15 @@ pub class BrushList: Widget:
     pub func layout(self) -> Layout:
         return self.box
 
+    ## Small: the list takes the room it is given and scrolls the rest.
     pub func measure(self, available: Constraints) -> Size!:
-        return Size(float(stroke_width) + 16.0, self.line_top(self.line_brushes.length))
+        return Size(float(stroke_width) + 16.0, 120.0)
+
+    ## Scroll so `y` points of the lines are at the top, kept within them.
+    pub func scroll_to(self, y: float):
+        let whole = self.line_top(self.line_brushes.length)
+        self.scroll = math.max(0.0, math.min(y, whole - self.shown_height))
+        self.box.invalidate()
 
     ## The brushes: their names and groups ("" for none) by brush index. A
     ## group's brushes are listed together, groups in order of first
@@ -154,11 +164,20 @@ pub class BrushList: Widget:
             index += 1
         return top
 
-    ## Where brush `row`'s row starts (its group's header when folded).
+    ## Where brush `row`'s row shows, scrolled (0 when folded away).
     pub func row_top(self, row: int) -> float:
         var index = 0
         while index < self.line_brushes.length:
             if self.line_brushes[index] == row:
+                return self.line_top(index) - self.scroll
+            index += 1
+        return 0.0
+
+    ## Where `group`'s header starts among the lines, or 0 when none has it.
+    pub func group_top(self, group: str) -> float:
+        var index = 0
+        while index < self.line_brushes.length:
+            if self.line_brushes[index] < 0 and self.line_groups[index] == group:
                 return self.line_top(index)
             index += 1
         return 0.0
@@ -167,37 +186,55 @@ pub class BrushList: Widget:
     pub func name_left(self) -> float:
         return 8.0
 
-    ## Brush `row`'s stroke, drawn the first time it is asked for.
-    func thumbnail(self, row: int) -> Image?!:
-        if row in self.thumbnails:
-            return self.thumbnails[row]
-        let draw = self.stroke else return none
-        let stroke = draw(row) catch _:
-            return none
-        if stroke.length == 0:
-            return none
-        let image = Image(stroke_width, stroke_height)
-        image.write(stroke)
+    ## How many strokes one frame draws.
+    let strokes_per_frame: int = 6
+
+    ## Brush `row`'s stroke, drawn now (an empty image when it has none).
+    func make_thumbnail(self, row: int) -> unit!:
+        var image = Image(1, 1)
+        if let draw = self.stroke:
+            let stroke = draw(row) catch _:
+                recover b""
+            if stroke.length > 0:
+                image = Image(stroke_width, stroke_height)
+                image.write(stroke)
         self.thumbnails[row] = image
-        return image
+
+    ## Up to `strokes_per_frame` missing strokes drawn, rows between `top` and
+    ## `bottom` first; whether any row still waits for one.
+    func draw_some_thumbnails(self, top: float, bottom: float) -> bool!:
+        var budget = self.strokes_per_frame
+        var waiting = false
+        for pass in [0, 1]:
+            var y = 0.0
+            for row in self.line_brushes:
+                let height = self.header_height if row < 0 else self.row_height
+                let seen = y + height >= top and y <= bottom
+                y += height
+                if row < 0 or row in self.thumbnails or (pass == 0 and not seen):
+                    continue
+                if budget == 0:
+                    waiting = true
+                    continue
+                self.make_thumbnail(row)
+                budget -= 1
+        return waiting
 
     pub func draw(self, target: RenderTarget) -> unit!:
         let painter = Painter(target)
         let size = target.size()
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
         let focused = self.box.contains_focus()
-        var shown_top = 0.0
-        var shown_bottom = size.height
-        if let sight = self.viewport:
-            let rect = sight()
-            shown_top = rect.y
-            shown_bottom = rect.y + rect.height
-        var top = 0.0
+        self.shown_height = size.height
+        let whole = self.line_top(self.line_brushes.length)
+        self.scroll = math.max(0.0, math.min(self.scroll, whole - size.height))
+        let waiting = self.draw_some_thumbnails(self.scroll, self.scroll + size.height)
+        var top = -self.scroll
         var line = 0
         while line < self.line_brushes.length:
             let row = self.line_brushes[line]
             let height = self.header_height if row < 0 else self.row_height
-            if top + height < shown_top or top > shown_bottom:
+            if top + height < 0.0 or top > size.height:
                 top += height
                 line += 1
                 continue
@@ -216,16 +253,25 @@ pub class BrushList: Widget:
                 painter.rectangle(Rect(0.0, top, size.width, self.row_height), look.accent if focused else look.selection_inactive)
             let ink = theme.on_accent() if picked and focused else theme.text()
             painter.text(self.names[row], self.name_left(), top + 5.0, ink, self.font)
-            if let image = self.thumbnail(row):
-                painter.image(image, Rect(8.0, top + 20.0, float(stroke_width), float(stroke_height)))
+            if let image = self.thumbnails[row]:
+                if image.width() > 1:
+                    painter.image(image, Rect(8.0, top + 20.0, float(stroke_width), float(stroke_height)))
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
             top += self.row_height
             line += 1
+        # The bar: a thumb as tall as the part showing, where it shows.
+        if whole > size.height:
+            let thumb = math.max(16.0, size.height * size.height / whole)
+            let at = (size.height - thumb) * self.scroll / (whole - size.height)
+            painter.rectangle(Rect(size.width - 6.0, at, 4.0, thumb), theme.border())
         painter.close()
+        # The rest next frame.
+        if waiting:
+            self.box.invalidate()
 
-    ## The line at `y`, or -1.
+    ## The line at `y` in the box, or -1.
     func line_at(self, y: float) -> int:
-        var top = 0.0
+        var top = -self.scroll
         var line = 0
         while line < self.line_brushes.length:
             let bottom = top + (self.header_height if self.line_brushes[line] < 0 else self.row_height)
@@ -236,6 +282,11 @@ pub class BrushList: Widget:
         return -1
 
     pub func event(self, event: Event) -> unit!:
+        if event.kind == EventKind.scroll:
+            # A notched wheel moves in lines of 24 points, a touchpad by its points.
+            let step = 24.0 if event.scroll_unit == ScrollUnit.lines else 1.0
+            self.scroll_to(self.scroll - event.scroll_y * step)
+            return
         if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
             return
         self.box.request_focus()

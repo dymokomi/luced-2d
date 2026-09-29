@@ -6,7 +6,7 @@
 ## duplicates, renames (also a double-click on the name) and deletes, and
 ## imports brush files (luced-2d's `.l2dbrush`, Photoshop's `.abr`,
 ## Procreate's `.brush`) and exports `.l2dbrush` files to share.
-from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ScrollView, ConfirmDialog
+from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ConfirmDialog
 from workspace import Workspace
 from brush import Brush, preset, preset_names, max_brush
 from brush_mask import BrushMask
@@ -15,14 +15,12 @@ from brush_import import import_brushes
 from brush_list import BrushList, stroke_thumbnail
 from brush_settings import BrushSettings
 from kit import Kit
-from gpu import Rect
 from theme import Look
 import math
 
 pub class BrushesPanel:
     pub let panel: Panel
     pub let rows: BrushList
-    let scroller: ScrollView
     let workspace: Workspace
     let settings: BrushSettings
     let rename_field: TextField
@@ -58,13 +56,9 @@ pub class BrushesPanel:
         field_box.set_modal(false)
         field_box.set_visible(false)
         kit.keep(self.rename_field.on_commit(self.finish_rename))
-        let scroller = ScrollView(self.rows)
-        scroller.layout().set_flex()
-        self.scroller = scroller
-        self.rows.viewport = self.in_sight
         self.confirm = ConfirmDialog(font = kit.font)
         kit.keep(self.confirm.on_choose(self.chosen_delete))
-        let content = VStack([scroller, self.rename_field, self.confirm], spacing = 0.0)
+        let content = VStack([self.rows, self.rename_field, self.confirm], spacing = 0.0)
         content.layout().set_flex()
         let shelf = Shelf([kit.shelf_button("plus", self.save_new), kit.shelf_button("save", self.save_over), kit.shelf_button("duplicate", self.duplicate),
                            kit.shelf_button("text-tool", self.rename_selected), kit.shelf_button("import", self.import_file), kit.shelf_button("export", self.export_file),
@@ -82,10 +76,11 @@ pub class BrushesPanel:
             index += 1
         self.rows.fold_all_but(open)
 
-    ## The part of the list the scroller shows, in the list's points.
-    func in_sight(self) -> Rect!:
-        let bounds = self.scroller.layout().bounds()
-        return Rect(0.0, self.scroller.offset(), bounds.width, bounds.height)
+    ## `group` unfolded and scrolled to the top of the list.
+    pub func show_group(self, group: str) -> unit!:
+        if self.rows.is_folded(group):
+            self.rows.toggle_group(group)
+        self.rows.scroll_to(self.rows.group_top(group))
 
     ## The window's accent and selection colors.
     func look(self) -> Look:
@@ -275,10 +270,9 @@ pub class BrushesPanel:
                 continue
             self.saved.append(saved)
         self.show()
-        # The file's group open to see what came in.
+        # The file's group open, scrolled to, to see what came in.
         for saved in imported:
-            if self.rows.is_folded(saved.group):
-                self.rows.toggle_group(saved.group)
+            self.show_group(saved.group)
             break
 
     ## Export: the picked brush (the one in hand when none is) to a file.
