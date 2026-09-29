@@ -1,23 +1,28 @@
 ## The Brushes panel, as Photoshop's: the built-in presets, then the brushes
-## saved in the library (brush_library.luc), each with a stroke thumbnail. A
+## saved in the library (brush_library.luc), each with a stroke thumbnail,
+## imported ones under a folding header per group (the file they came from). A
 ## click makes that the brush (and picks the Brush tool). The shelf saves the
 ## brush in hand as a new brush, saves it over the picked saved one,
 ## duplicates, renames (also a double-click on the name) and deletes, and
-## imports and exports `.l2dbrush` files to share.
+## imports brush files (luced-2d's `.l2dbrush`, Photoshop's `.abr`,
+## Procreate's `.brush`) and exports `.l2dbrush` files to share.
 from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ScrollView, ConfirmDialog
 from workspace import Workspace
 from brush import Brush, preset, preset_names, max_brush
 from brush_mask import BrushMask
-from brush_library import SavedBrush, library_path, load_library, save_brush, delete_brush, free_folder, export_brush, import_brush
+from brush_library import SavedBrush, library_path, load_library, save_brush, delete_brush, free_folder, export_brush
+from brush_import import import_brushes
 from brush_list import BrushList, stroke_thumbnail
 from brush_settings import BrushSettings
 from kit import Kit
+from gpu import Rect
 from theme import Look
 import math
 
 pub class BrushesPanel:
     pub let panel: Panel
     pub let rows: BrushList
+    let scroller: ScrollView
     let workspace: Workspace
     let settings: BrushSettings
     let rename_field: TextField
@@ -45,6 +50,7 @@ pub class BrushesPanel:
         self.blank = BrushMask.create(1, 1)
         self.rows = BrushList(kit.font, self.look)
         self.rows.on_pick = self.pick
+        self.rows.stroke = self.stroke_of
         self.rows.on_rename = self.begin_rename
         self.rename_field = TextField("", font = kit.font, cells = 16.0)
         let field_box = self.rename_field.layout()
@@ -54,6 +60,8 @@ pub class BrushesPanel:
         kit.keep(self.rename_field.on_commit(self.finish_rename))
         let scroller = ScrollView(self.rows)
         scroller.layout().set_flex()
+        self.scroller = scroller
+        self.rows.viewport = self.in_sight
         self.confirm = ConfirmDialog(font = kit.font)
         kit.keep(self.confirm.on_choose(self.chosen_delete))
         let content = VStack([scroller, self.rename_field, self.confirm], spacing = 0.0)
@@ -63,29 +71,47 @@ pub class BrushesPanel:
                            Spacer(), kit.shelf_button("trash", self.delete_selected)])
         self.panel = Panel("Brushes", content, minimum = Size(220.0, 160.0), footer = shelf, id = "brushes")
         self.show()
-        # The row of the library brush in hand, as the last run left it.
+        # The row of the library brush in hand, as the last run left it; its
+        # group open, the other groups folded.
+        var open: list[str] = []
         var index = 0
         for saved in self.saved:
             if saved.folder != "" and saved.folder == workspace.tools.brush.folder:
                 self.rows.selected = preset_names().length + index
+                open.append(saved.group)
             index += 1
+        self.rows.fold_all_but(open)
+
+    ## The part of the list the scroller shows, in the list's points.
+    func in_sight(self) -> Rect!:
+        let bounds = self.scroller.layout().bounds()
+        return Rect(0.0, self.scroller.offset(), bounds.width, bounds.height)
 
     ## The window's accent and selection colors.
     func look(self) -> Look:
         return self.workspace.look
 
-    ## The rows again: the built-ins, then the saved brushes by name.
+    ## The rows again: the built-ins, then the saved brushes, by group.
     pub func show(self) -> unit!:
         var names: list[str] = []
-        var strokes: list[bytes] = []
+        var groups: list[str] = []
         for name in preset_names():
             names.append(name)
-            strokes.append(stroke_thumbnail(preset(name, 24.0, 1.0), self.blank))
+            groups.append("")
         for saved in self.saved:
             names.append(saved.name)
-            strokes.append(stroke_thumbnail(saved.brush, self.blank))
+            groups.append(saved.group)
         self.rows.first_saved = preset_names().length
-        self.rows.set_rows(names, strokes)
+        self.rows.set_rows(names, groups)
+
+    ## Row `row`'s stroke thumbnail, drawn when the list first shows it.
+    func stroke_of(self, row: int) -> bytes!:
+        let names = preset_names()
+        if row < names.length:
+            return stroke_thumbnail(preset(names[row], 24.0, 1.0), self.blank)
+        let saved = self.saved_at(row) else return b""
+        saved.load_images()
+        return stroke_thumbnail(saved.brush, self.blank)
 
     ## The saved brush on row `row`, when it is one.
     func saved_at(self, row: int) -> SavedBrush?:
@@ -104,6 +130,7 @@ pub class BrushesPanel:
         if row < names.length:
             self.workspace.tools.apply_preset(names[row])
         elif let saved = self.saved_at(row):
+            saved.load_images()
             let brush = saved.brush.copy()
             brush.diameter = math.max(1.0, math.min(max_brush, brush.diameter))
             brush.preset = saved.name
@@ -125,9 +152,9 @@ pub class BrushesPanel:
             if let done = self.chosen:
                 done()
 
-    ## Keep `brush` in the library as `name`, and pick its row.
-    pub func add(self, brush: Brush, name: str) -> unit!:
-        let saved = SavedBrush(name, free_folder(self.library, name), brush)
+    ## Keep `brush` in the library as `name` in `group`, and pick its row.
+    pub func add(self, brush: Brush, name: str, group: str = "") -> unit!:
+        let saved = SavedBrush(name, free_folder(self.library, name), brush, group)
         save_brush(self.library, saved) catch failure:
             self.fail(f"Could not save the brush: {failure.message}")
             return
@@ -145,7 +172,7 @@ pub class BrushesPanel:
             self.save_new()
             return
         let saved = found else return
-        let kept = SavedBrush(saved.name, saved.folder, self.workspace.tools.brush.copy())
+        let kept = SavedBrush(saved.name, saved.folder, self.workspace.tools.brush.copy(), saved.group)
         save_brush(self.library, kept) catch failure:
             self.fail(f"Could not save the brush: {failure.message}")
             return
@@ -158,7 +185,8 @@ pub class BrushesPanel:
         if row < 0:
             return
         if let saved = self.saved_at(row):
-            self.add(saved.brush.copy(), saved.name + " copy")
+            saved.load_images()
+            self.add(saved.brush.copy(), saved.name + " copy", saved.group)
         elif row < preset_names().length:
             let name = preset_names()[row]
             self.add(preset(name, self.workspace.tools.brush.diameter, self.workspace.tools.brush.opacity), name + " copy")
@@ -225,21 +253,33 @@ pub class BrushesPanel:
         self.rows.selected = -1
         self.show()
 
-    ## Import: a `.l2dbrush` file chosen in the open panel joins the library.
+    ## Import: the brushes in a file chosen in the open panel join the library.
     pub func import_file(self) -> unit!:
         let app = self.settings.app else return
-        let path = app.open_file("Import a brush (.l2dbrush)") catch failure:
+        let path = app.open_file("Import brushes (.l2dbrush, .abr, .brush)") catch failure:
             self.fail(f"Could not import: {failure.message}")
             return
         if path != "":
             self.import_path(path)
 
-    ## The brush in the `.l2dbrush` file at `path`, added to the library.
+    ## The brushes in the file at `path`, added to the library in their group.
     pub func import_path(self, path: str) -> unit!:
-        let imported = import_brush(path) catch failure:
+        let imported = import_brushes(path) catch failure:
             self.fail(f"Could not import {path}: {failure.message}")
             return
-        self.add(imported.brush, imported.name)
+        # Saved one by one, the rows shown once: an .abr can hold hundreds.
+        for saved in imported:
+            saved.folder = free_folder(self.library, saved.name)
+            save_brush(self.library, saved) catch failure:
+                self.fail(f"Could not save {saved.name}: {failure.message}")
+                continue
+            self.saved.append(saved)
+        self.show()
+        # The file's group open to see what came in.
+        for saved in imported:
+            if self.rows.is_folded(saved.group):
+                self.rows.toggle_group(saved.group)
+            break
 
     ## Export: the picked brush (the one in hand when none is) to a file.
     pub func export_file(self) -> unit!:
@@ -249,12 +289,13 @@ pub class BrushesPanel:
             self.fail(f"Could not export: {failure.message}")
             return
         if path != "":
-            export_brush(chosen.brush, chosen.name, path) catch failure:
+            export_brush(chosen.brush, chosen.name, path, chosen.group) catch failure:
                 self.fail(f"Could not export: {failure.message}")
 
     ## What Export writes: the picked saved brush, else the brush in hand.
-    pub func export_choice(self) -> SavedBrush:
+    pub func export_choice(self) -> SavedBrush!:
         if let saved = self.saved_at(self.rows.selected):
+            saved.load_images()
             return saved
         return SavedBrush(self.workspace.tools.brush.preset, "", self.workspace.tools.brush)
 

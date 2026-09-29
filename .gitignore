@@ -2,3 +2,4 @@ build/
 .DS_Store
 *.ppm
 /luced-2d
+__pycache__/

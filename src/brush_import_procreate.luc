@@ -1,0 +1,84 @@
+## Procreate brushes (.brush, Procreate 4's layout) as luced-2d brushes:
+## luce-procreate's `ProcreateBrush` reads the archived settings and the
+## Shape and Grain pictures; this file maps them onto `Brush`. Procreate's
+## pictures paint where they are white (black when marked inverted); its
+## size runs between the brush's own limits. Taper, wet mixing, moving grain
+## and smudge settings have no counterpart and are left out; a brush built
+## on one of Procreate's bundled shapes paints round.
+from procreate import ProcreateBrush
+from brush import Brush, max_brush
+from brush_library import SavedBrush
+from brush_mask import BrushMask
+from brush_dynamics import no_mappings, mapped
+from brush_files import brush_mask_of
+from image import Image
+import math
+import paths
+
+## Procreate's size at 100%, in pixels, before the brush's own limits.
+let full_size: float = 100.0
+
+## The brush in the `.brush` file at `path`, named as Procreate names it.
+pub func procreate_brush(path: str) -> SavedBrush!:
+    let file = ProcreateBrush.open(path)
+    var name = file.name().trim()
+    if name == "":
+        name = paths.stem(path)
+    let brush = Brush()
+    brush.dynamics = no_mappings()
+    let low = file.number("minSize", 0.0)
+    let high = file.number("maxSize", 1.0)
+    let size = low + (high - low) * clamp(file.number("paintSize", 0.25), 0.0, 1.0)
+    brush.diameter = clamp(math.floor(full_size * size + 0.5), 1.0, max_brush)
+    brush.opacity = clamp(file.number("paintOpacity", 1.0), 0.01, 1.0)
+    brush.spacing = clamp(file.number("plotSpacing", 0.1), 0.01, 5.0)
+    brush.scatter = clamp(file.number("plotJitter", 0.0), 0.0, 10.0)
+    brush.smoothing = clamp(file.number("plotSmoothing", 0.0) * 1000.0, 0.0, 100.0)
+    brush.angle_jitter = clamp(file.number("shapeScatter", 0.0), 0.0, 1.0)
+    brush.size_jitter = clamp(file.number("dynamicsJitterSize", 0.0), 0.0, 1.0)
+    brush.flow_jitter = clamp(file.number("dynamicsJitterOpacity", 0.0), 0.0, 1.0)
+    brush.hardness = 0.8
+    # The tip follows the stroke, or the pen's lean.
+    if file.number("shapeAzimuth", 0.0) == 1.0:
+        brush.dynamics[3] = mapped(3)
+    elif math.abs(file.number("shapeRotation", 0.0)) >= 0.5:
+        brush.dynamics[3] = mapped(6)
+    # Pressure drives size and opacity by its amount; speed drives size without it.
+    let pressure_size = clamp(file.number("dynamicsPressureSize", 0.0), 0.0, 1.0)
+    if pressure_size > 0.0:
+        brush.dynamics[0] = mapped(1, minimum = 1.0 - pressure_size)
+    elif file.number("dynamicsSpeedSize", 0.0) > 0.0:
+        brush.dynamics[0] = mapped(7, minimum = 1.0 - clamp(file.number("dynamicsSpeedSize", 0.0), 0.0, 1.0))
+    let pressure_opacity = clamp(file.number("dynamicsPressureOpacity", 0.0), 0.0, 1.0)
+    if pressure_opacity > 0.0:
+        brush.dynamics[2] = mapped(1, minimum = 1.0 - pressure_opacity)
+    let shape = file.shape_png()
+    if shape.length > 0:
+        brush.tip = picture_mask(shape, file.number("shapeInverted", 0.0) == 1.0)
+        brush.hardness = 1.0
+    let grain = file.grain_png()
+    if grain.length > 0:
+        let image = Image.open_bytes(grain)
+        let width = float(image.width())
+        let mask = picture_of(image, file.number("textureInverted", 0.0) == 1.0)
+        brush.texture = 4
+        brush.texture_image = mask
+        brush.texture_depth = 1.0
+        brush.texture_scale = clamp(file.number("textureScale", 4.0) / 8.0 * width / float(mask.width()), 0.1, 10.0)
+    file.close()
+    return SavedBrush(name, "", brush)
+
+## A Procreate picture (PNG bytes) as a mask: white paints, or black when
+## `inverted`.
+func picture_mask(png: bytes, inverted: bool) -> BrushMask!:
+    return picture_of(Image.open_bytes(png), inverted)
+
+func picture_of(image: Image, inverted: bool) -> BrushMask!:
+    # brush_mask_of paints where the picture is dark.
+    let mask = brush_mask_of(image)
+    if not inverted:
+        mask.invert()
+    return mask
+
+func clamp(value: float, low: float, high: float) -> float:
+    return math.max(low, math.min(high, value))

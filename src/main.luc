@@ -1,13 +1,17 @@
-## luced-2d's entry point: run the application with the command line, or
-## with `--script` a script headless (headless.luc).
+## luced-2d's entry point: run the application with the command line, with
+## `--script` a script headless (headless.luc), or with `--import-brushes`
+## brush files into the library (brush_import.luc).
 from app import Luce2D
 from headless import wants_headless, run_headless
+from brush_import import wants_brush_import, run_brush_import
 from system_hooks import connect_engine_wake
 
 pub func main(arguments: list[str]) -> int!:
     connect_engine_wake()
     if wants_headless(arguments):
         return run_headless(arguments)
+    if wants_brush_import(arguments):
+        return run_brush_import(arguments)
     let editor = Luce2D()
     editor.run(arguments)
     editor.close()

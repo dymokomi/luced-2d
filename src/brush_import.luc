@@ -1,0 +1,82 @@
+## Brushes from files: luced-2d's own `.l2dbrush`, Photoshop's `.abr` (every
+## preset in it) and Procreate's `.brush`, each imported brush grouped under
+## the name of the file it came from. `luced-2d --import-brushes PATH...`
+## imports files and whole folders into the library without a window.
+from brush_library import SavedBrush, import_brush, library_path, save_brush, free_folder
+from brush_import_abr import abr_brushes
+from brush_import_procreate import procreate_brush
+from files import Entries, FileKind
+import files
+import paths
+import ui
+
+## The extensions `import_brushes` reads.
+pub func brush_extensions() -> list[str]:
+    return [".l2dbrush", ".abr", ".brush"]
+
+## The brushes in the file at `path`, grouped: an `.abr` or `.brush` under the
+## file's name, an `.l2dbrush` under the group it was saved with.
+pub func import_brushes(path: str) -> list[SavedBrush]!:
+    let extension = paths.extension(path).lower()
+    let group = paths.stem(path)
+    if extension == ".abr":
+        let found = abr_brushes(path)
+        for saved in found:
+            saved.group = group
+        return found
+    if extension == ".brush":
+        let saved = procreate_brush(path)
+        saved.group = paths.base(paths.directory(path))
+        return [saved]
+    if extension == ".l2dbrush":
+        return [import_brush(path)]
+    error(ui.invalid, f"{paths.base(path)} is not a brush file luced-2d reads (.l2dbrush, .abr, .brush)")
+
+## Whether `arguments` ask for a headless brush import.
+pub func wants_brush_import(arguments: list[str]) -> bool:
+    return "--import-brushes" in arguments
+
+## `--import-brushes PATH...`: every brush file in the paths (folders searched
+## through) saved into the library; a file that fails is reported and passed
+## over. The process's status: 0 when every file imported.
+pub func run_brush_import(arguments: list[str]) -> int!:
+    var sources: list[str] = []
+    for argument in arguments:
+        if argument != "--import-brushes":
+            gather(argument, sources)
+    if sources.length == 0:
+        print("usage: luced-2d --import-brushes FILE-OR-FOLDER...")
+        return 2
+    let library = library_path()
+    var imported = 0
+    var failures = 0
+    for source in sources:
+        let found = import_brushes(source) catch failure:
+            print(f"{source}: {failure.message}")
+            failures += 1
+            continue
+        for saved in found:
+            saved.folder = free_folder(library, saved.name)
+            save_brush(library, saved)
+            imported += 1
+        print(f"{source}: {found.length} brush{"" if found.length == 1 else "es"}")
+    print(f"{imported} brushes imported into {library}")
+    return 0 if failures == 0 else 1
+
+## `path` into `sources`: a brush file itself, a folder's brush files within.
+func gather(path: str, sources: list[str]) -> unit!:
+    if files.path_kind(path) != FileKind.directory:
+        sources.append(path)
+        return
+    let entries = Entries(path)
+    var names: list[str] = []
+    for index in 0..<entries.count():
+        names.append(entries.name(index))
+    entries.close()
+    names.sort()
+    for name in names:
+        let child = paths.join(path, name)
+        if files.path_kind(child) == FileKind.directory:
+            gather(child, sources)
+        elif paths.extension(name).lower() in brush_extensions():
+            sources.append(child)

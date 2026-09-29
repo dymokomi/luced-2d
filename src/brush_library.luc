@@ -1,6 +1,8 @@
 ## The brush library on disk: `~/.luced-2d/brushes/`, a folder per saved
 ## brush holding `brush.toml` (every setting and dynamics mapping) and, when
 ## the brush has them, `tip.png` and `texture.png` (black where they paint).
+## The library loads its settings only; a brush's pictures load the first
+## time it is used (`load_images`), so a library of a thousand opens at once.
 ## A brush travels alone as one `.l2dbrush` file: the same TOML, then each
 ## image as base64 PNG after a `#@ tip.png` or `#@ texture.png` line.
 from toml import Table
@@ -14,16 +16,34 @@ import paths
 import ui
 
 ## A saved brush: its name, the folder it lives in (a name under the library),
-## and the brush.
+## the brush, and the group it is listed under ("" for none): an imported
+## brush's is the file it came from.
 pub class SavedBrush:
     pub var name: str
     pub var folder: str
     pub let brush: Brush
+    pub var group: str
+    ## The folder its pictures still wait in, "" once they are loaded (or
+    ## for a brush not read from the library).
+    var pending: str = ""
 
-    pub func init(self, name: str, folder: str, brush: Brush):
+    pub func init(self, name: str, folder: str, brush: Brush, group: str = ""):
         self.name = name
         self.folder = folder
         self.brush = brush
+        self.group = group
+
+    ## The tip and texture pictures read into the brush, when not yet.
+    pub func load_images(self) -> unit!:
+        if self.pending == "":
+            return
+        let place = self.pending
+        let table = Table(files.read_text(paths.join(place, "brush.toml"), limit = 65536))
+        if table.boolean("tip.image", false):
+            self.brush.tip = open_brush_mask(paths.join(place, "tip.png"))
+        if table.boolean("texture.image", false):
+            self.brush.texture_image = open_brush_mask(paths.join(place, "texture.png"))
+        self.pending = ""
 
 ## The library's folder, made when missing: under `directory`, else under
 ## `~/.luced-2d`.
@@ -34,8 +54,8 @@ pub func library_path(directory: str = "") -> str!:
     files.ensure_directory(library)
     return library
 
-## Every brush in `library`, by folder name; a folder that does not read as
-## a brush is passed over.
+## Every brush in `library`, by folder name, its pictures not yet loaded; a
+## folder that does not read as a brush is passed over.
 pub func load_library(library: str) -> list[SavedBrush]!:
     var found: list[SavedBrush] = []
     let snapshot = Entries(library) catch failure:
@@ -43,29 +63,30 @@ pub func load_library(library: str) -> list[SavedBrush]!:
     for index in 0..<snapshot.count():
         let folder = snapshot.name(index) catch _:
             continue
-        let saved = load_brush(library, folder) catch _:
+        let saved = load_brush(library, folder, images = false) catch _:
             continue
         found.append(saved)
     snapshot.close()
     return found
 
-## The brush in `library`'s `folder`.
-pub func load_brush(library: str, folder: str) -> SavedBrush!:
+## The brush in `library`'s `folder`, its pictures loaded now or, without
+## `images`, by `load_images` later.
+pub func load_brush(library: str, folder: str, images: bool = true) -> SavedBrush!:
     let place = paths.join(library, folder)
-    let text = files.read_text(paths.join(place, "brush.toml"), limit = 65536)
-    let table = Table(text)
-    let brush = brush_of(table)
-    if table.boolean("tip.image", false):
-        brush.tip = open_brush_mask(paths.join(place, "tip.png"))
-    if table.boolean("texture.image", false):
-        brush.texture_image = open_brush_mask(paths.join(place, "texture.png"))
-    return SavedBrush(table.string("name", folder), folder, brush)
+    let table = Table(files.read_text(paths.join(place, "brush.toml"), limit = 65536))
+    let saved = SavedBrush(table.string("name", folder), folder, brush_of(table), table.string("group", ""))
+    saved.pending = place
+    if images:
+        saved.load_images()
+    return saved
 
-## Keep `saved` in its folder under `library`, replacing what was there.
+## Keep `saved` in its folder under `library`, replacing what was there
+## (its pictures read first, so none is lost unread).
 pub func save_brush(library: str, saved: SavedBrush) -> unit!:
+    saved.load_images()
     let place = paths.join(library, saved.folder)
     files.ensure_directory(place)
-    files.write_text(paths.join(place, "brush.toml"), brush_text(saved.brush, saved.name))
+    files.write_text(paths.join(place, "brush.toml"), brush_text(saved.brush, saved.name, saved.group))
     keep_image(saved.brush.tip, paths.join(place, "tip.png"))
     keep_image(saved.brush.texture_image, paths.join(place, "texture.png"))
 
@@ -94,8 +115,8 @@ pub func free_folder(library: str, name: str) -> str!:
     return folder
 
 ## Write `brush` named `name` to one `.l2dbrush` file at `path`, images and all.
-pub func export_brush(brush: Brush, name: str, path: str) -> unit!:
-    var text = brush_text(brush, name)
+pub func export_brush(brush: Brush, name: str, path: str, group: str = "") -> unit!:
+    var text = brush_text(brush, name, group)
     if let tip = brush.tip:
         text = text + "#@ tip.png\n" + brush_mask_png_text(tip) + "\n"
     if let image = brush.texture_image:
@@ -112,7 +133,7 @@ pub func import_brush(path: str) -> SavedBrush!:
         brush.tip = brush_mask_from_png_text(tip)
     if let texture = image_text(text, "texture.png"):
         brush.texture_image = brush_mask_from_png_text(texture)
-    return SavedBrush(table.string("name", "Imported Brush"), "", brush)
+    return SavedBrush(table.string("name", "Imported Brush"), "", brush, table.string("group", ""))
 
 ## The base64 text after a `#@ name` line, up to the next such line.
 func image_text(text: str, name: str) -> str?:
@@ -137,10 +158,13 @@ func keep_image(mask: BrushMask?, path: str) -> unit!:
 func texture_ids() -> list[str]:
     return ["none", "grain", "canvas", "dots", "image"]
 
-## `brush`'s settings as brush.toml text, named `name`.
-pub func brush_text(brush: Brush, name: str) -> str:
+## `brush`'s settings as brush.toml text, named `name`, in `group`.
+pub func brush_text(brush: Brush, name: str, group: str = "") -> str:
     var text = "# A luced-2d brush.\n"
-    text = text + f"name = {quoted(name)}\n\n"
+    text = text + f"name = {quoted(name)}\n"
+    if group != "":
+        text = text + f"group = {quoted(group)}\n"
+    text = text + "\n"
     text = text + f"[tip]\ndiameter = {brush.diameter}\nhardness = {brush.hardness}\nopacity = {brush.opacity}\nflow = {brush.flow}\n"
     text = text + f"spacing = {brush.spacing}\nangle = {brush.angle}\nroundness = {brush.roundness}\nsmoothing = {brush.smoothing}\n"
     text = text + f"image = {flag(has_image(brush.tip))}\n\n"

@@ -9,7 +9,8 @@ from actions import Actions
 from brush import Brush, preset
 from brush_mask import BrushMask
 from brush_dynamics import pen_of, no_mappings
-from brush_library import SavedBrush, library_path, load_library, save_brush, free_folder, export_brush, import_brush, brush_of, brush_text
+from brush_library import SavedBrush, library_path, load_library, load_brush, save_brush, free_folder, export_brush, import_brush, brush_of, brush_text
+from brush_import import import_brushes
 from brush_settings import define_tip
 from brushes_panel import BrushesPanel
 from kit import Kit
@@ -26,6 +27,7 @@ pub func brush_tests(arguments: list[str]) -> unit!:
     sampled_tips()
     library_round_trip(directory)
     shared_files(directory)
+    grouped_list(directory)
     panel_library(paths.join(directory, "panel"))
     dock_keeps_brushes(directory)
     stroke_after_closing()
@@ -167,20 +169,52 @@ func library_round_trip(directory: str) -> unit!:
     let library = library_path(directory)
     let folder = free_folder(library, "Test Ink / 2")
     assert(folder == "test-ink-2")
-    save_brush(library, SavedBrush("Test Ink / 2", folder, brush))
+    save_brush(library, SavedBrush("Test Ink / 2", folder, brush, "Inks"))
     assert(free_folder(library, "Test Ink / 2") == "test-ink-2-2")
     var found = false
     for saved in load_library(library):
         if saved.folder == folder:
             found = true
-            assert(saved.name == "Test Ink / 2")
+            assert(saved.name == "Test Ink / 2" and saved.group == "Inks")
+            # The library reads settings only; the pictures wait until used.
+            assert(saved.brush.tip == none and saved.brush.texture_image == none)
+            saved.load_images()
             same_brush(saved.brush, brush)
+            # Saving a brush whose pictures were never read keeps them.
+            let unread = load_library(library)
+            for other in unread:
+                if other.folder == folder:
+                    save_brush(library, other)
+            let again = load_brush(library, folder)
+            same_brush(again.brush, brush)
     assert(found)
     # A value the file gets wrong is an error, not a silent default.
     let wrong = brush_of(Table("[texture]\nkind = \"weave\"\n")) catch failure:
         discard(failure)
         return
     discard(wrong)
+    assert(false)
+
+## The list groups brushes under folding headers, rows kept by brush index;
+## an unknown file is refused by the importer.
+func grouped_list(directory: str) -> unit!:
+    let workspace = Workspace(60, 40)
+    let panels = Panels(workspace, Actions(), Font())
+    let panel = BrushesPanel(workspace, Kit(Font()), panels.brush, paths.join(directory, "grouped"))
+    let rows = panel.rows
+    rows.set_rows(["A", "B", "C", "D"], ["", "Oils", "", "Oils"])
+    # "", then Oils' header: A, C, [Oils], B, D.
+    assert(rows.row_top(2) == 58.0 and rows.row_top(1) == 2.0 * 58.0 + 24.0 and rows.row_top(3) == 3.0 * 58.0 + 24.0)
+    rows.toggle_group("Oils")
+    assert(rows.is_folded("Oils") and rows.row_top(3) == 0.0)
+    rows.fold_all_but(["Oils"])
+    assert(not rows.is_folded("Oils"))
+    rows.fold_all_but([])
+    assert(rows.is_folded("Oils"))
+    let refused = import_brushes(paths.join(directory, "notes.txt")) catch failure:
+        discard(failure)
+        return
+    discard(refused)
     assert(false)
 
 ## A `.l2dbrush` file carries the brush whole, images included.

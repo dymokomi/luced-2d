@@ -1,0 +1,127 @@
+## Photoshop brush files (.abr) as luced-2d brushes: every preset in the file
+## becomes one, its tip shape, shape dynamics, scattering, texture, transfer
+## and color dynamics mapped onto `Brush`. luce-psd's `Abr` reads the presets
+## by descriptor path; this file knows what the paths mean. What the engine
+## has no counterpart for (dual brush, wet edges, noise, flipped tips, count
+## jitter, purity) is left out.
+from abr import Abr
+from brush import Brush, max_brush
+from brush_library import SavedBrush
+from brush_mask import BrushMask
+from brush_dynamics import Mapping, no_mappings
+import math
+
+## Every preset in the `.abr` file at `path`, named as Photoshop names it,
+## not yet in any library folder.
+pub func abr_brushes(path: str) -> list[SavedBrush]!:
+    let file = Abr.open(path)
+    var found: list[SavedBrush] = []
+    for index in 0..<file.count():
+        var name = file.text(index, "Nm").trim()
+        if name == "":
+            name = f"Brush {index + 1}"
+        found.append(SavedBrush(name, "", abr_brush(file, index)))
+    file.close()
+    return found
+
+## Preset `index` of `file` as a brush.
+func abr_brush(file: Abr, index: int) -> Brush!:
+    let brush = Brush()
+    brush.dynamics = no_mappings()
+    brush.diameter = math.max(1.0, math.min(max_brush, file.number(index, "Brsh.Dmtr", 30.0)))
+    brush.hardness = percent(file, index, "Brsh.Hrdn", 100.0, 0.0, 1.0)
+    brush.angle = angle_of(file.number(index, "Brsh.Angl", 0.0))
+    brush.roundness = percent(file, index, "Brsh.Rndn", 100.0, 0.05, 1.0)
+    # Spacing off lets Photoshop space by speed; a quarter is its default.
+    brush.spacing = 0.25
+    if file.number(index, "Brsh.Intr", 1.0) == 1.0:
+        brush.spacing = percent(file, index, "Brsh.Spcn", 25.0, 0.01, 5.0)
+    let width = file.tip_width(index, "Brsh")
+    if width > 0:
+        brush.tip = BrushMask.from_coverage(file.tip(index, "Brsh"), width, file.tip_height(index, "Brsh"))
+        brush.hardness = 1.0
+    if flag(file, index, "useTipDynamics"):
+        shape_dynamics(file, index, brush)
+    if flag(file, index, "useScatter"):
+        brush.scatter = percent(file, index, "scatterDynamics.jitter", 0.0, 0.0, 10.0)
+        brush.scatter_count = int(math.max(1.0, math.min(16.0, file.number(index, "Cnt", 1.0))))
+        brush.dynamics[5] = mapping(file, index, "scatterDynamics", 0.0)
+    if flag(file, index, "useTexture"):
+        texture(file, index, brush)
+    if flag(file, index, "usePaintDynamics"):
+        brush.dynamics[1] = mapping(file, index, "prVr", file.number(index, "prVr.Mnm", 0.0) / 100.0)
+        brush.dynamics[2] = mapping(file, index, "opVr", file.number(index, "opVr.Mnm", 0.0) / 100.0)
+        brush.flow_jitter = percent(file, index, "prVr.jitter", 0.0, 0.0, 1.0)
+    if flag(file, index, "useColorDynamics"):
+        brush.hue_jitter = percent(file, index, "H", 0.0, 0.0, 1.0)
+        brush.saturation_jitter = percent(file, index, "Strt", 0.0, 0.0, 1.0)
+        brush.brightness_jitter = percent(file, index, "Brgh", 0.0, 0.0, 1.0)
+    return brush
+
+## Shape Dynamics: size, angle and roundness, each driven and jittered.
+func shape_dynamics(file: Abr, index: int, brush: Brush) -> unit!:
+    brush.dynamics[0] = mapping(file, index, "szVr", file.number(index, "minimumDiameter", 0.0) / 100.0)
+    brush.size_jitter = percent(file, index, "szVr.jitter", 0.0, 0.0, 1.0)
+    brush.dynamics[3] = mapping(file, index, "angleDynamics", 0.0)
+    brush.angle_jitter = percent(file, index, "angleDynamics.jitter", 0.0, 0.0, 1.0)
+    brush.dynamics[4] = mapping(file, index, "roundnessDynamics", file.number(index, "minimumRoundness", 25.0) / 100.0)
+    brush.roundness_jitter = percent(file, index, "roundnessDynamics.jitter", 0.0, 0.0, 1.0)
+
+## Texture: the preset's pattern as the texture image, its scale kept in
+## document pixels though the mask may be stored smaller.
+func texture(file: Abr, index: int, brush: Brush) -> unit!:
+    let width = file.pattern_width(index, "Txtr")
+    if width == 0:
+        return
+    let image = BrushMask.from_coverage(file.pattern(index, "Txtr"), width, file.pattern_height(index, "Txtr"))
+    let stored = float(image.width())
+    brush.texture = 4
+    brush.texture_image = image
+    let scale = file.number(index, "textureScale", 100.0) / 100.0 * float(width) / stored
+    brush.texture_scale = math.max(0.1, math.min(10.0, scale))
+    brush.texture_depth = percent(file, index, "textureDepth", 100.0, 0.0, 1.0)
+    brush.texture_invert = flag(file, index, "InvT")
+    brush.texture_mode = texture_mode(file.text(index, "textureBlendMode"))
+    brush.dynamics[6] = mapping(file, index, "textureDepthDynamics", file.number(index, "minimumDepth", 0.0) / 100.0)
+
+## Photoshop's texture modes on the engine's two: those that cut into the
+## paint hard (burns, subtract, height, hard mix) subtract, the rest multiply.
+func texture_mode(key: str) -> int:
+    if key in ["Sbtr", "CBrn", "linearBurn", "Hght", "linearHeight", "hardMix"]:
+        return 1
+    return 0
+
+## The mapping of a `brVr` object at `path`: its control, `minimum`, and
+## its fade steps.
+func mapping(file: Abr, index: int, path: str, minimum: float) -> Mapping!:
+    let made = Mapping()
+    made.control = control_of(int(file.number(index, f"{path}.bVTy", 0.0)))
+    made.minimum = math.max(0.0, math.min(1.0, minimum))
+    made.steps = int(math.max(1.0, math.min(10000.0, file.number(index, f"{path}.fStp", 25.0))))
+    return made
+
+## Photoshop's controls, numbered as its Control menus list them (Off, Fade,
+## Pen Pressure, Pen Tilt, Stylus Wheel, Rotation, Initial Direction,
+## Direction), as brush_dynamics' controls; Initial Direction follows the
+## stroke as Direction does, and what the engine lacks is Off.
+func control_of(photoshop: int) -> int:
+    let controls = [0, 8, 1, 2, 5, 4, 6, 6]
+    if photoshop < 0 or photoshop >= controls.length:
+        return 0
+    return controls[photoshop]
+
+## A percentage at `path` as a fraction within `low`..`high`.
+func percent(file: Abr, index: int, path: str, fallback: float, low: float, high: float) -> float!:
+    return math.max(low, math.min(high, file.number(index, path, fallback) / 100.0))
+
+func flag(file: Abr, index: int, path: str) -> bool!:
+    return file.number(index, path, 0.0) == 1.0
+
+## Degrees into -180..180.
+func angle_of(degrees: float) -> float:
+    var angle = degrees
+    while angle > 180.0:
+        angle -= 360.0
+    while angle < -180.0:
+        angle += 360.0
+    return angle

@@ -1,7 +1,10 @@
 ## The Brushes panel's list: a row per brush with its name and a stroke drawn
 ## with it (its tip, size taper under pressure, angle, roundness and
-## spacing), as Photoshop's stroke thumbnails. A click picks the brush; a
-## double-click on a saved brush's name renames it there.
+## spacing), as Photoshop's stroke thumbnails, under a header per group that
+## a click folds and unfolds, as Photoshop's brush folders. A click picks the
+## brush; a double-click on a saved brush's name renames it there. Rows are
+## addressed by brush index, whatever line they are drawn on, and a stroke is
+## drawn only once its row first shows.
 from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Image
 from gpu import RenderTarget, Rect
 from input import EventKind, Cursor
@@ -33,18 +36,33 @@ pub class BrushList: Widget:
     ## The window's accent, for the picked row.
     let look: func() -> Look
     let row_height: float = 58.0
-    ## The rows' names and thumbnails.
+    let header_height: float = 24.0
+    ## Each brush's name and group, by brush index.
     var names: list[str]
-    var thumbnails: list[Image]
-    ## The picked row, or -1.
+    var groups: list[str]
+    ## The lines drawn, top down: a group's header (brush -1, its group
+    ## named in `line_groups`) or a brush's row.
+    var line_brushes: list[int]
+    var line_groups: list[str]
+    ## The folded groups.
+    var folded: list[str]
+    ## Strokes drawn so far, by brush index (an empty image: not yet).
+    var thumbnails: map[int, Image]
+    ## The picked brush, or -1.
     pub var selected: int = -1
-    ## Rows before this one are built in: they cannot be renamed.
+    ## Brushes before this one are built in: they cannot be renamed.
     pub var first_saved: int = 0
     var last_row: int = -1
     var last_time: int = 0
-    ## A row picked.
+    ## The part of the list in sight (y and height in its own points), so
+    ## only those rows draw; none: all of it.
+    pub var viewport: func() -> Rect!? = none
+    ## A brush's stroke thumbnail, RGBA stroke_width × stroke_height, asked
+    ## for when its row first shows.
+    pub var stroke: func(int) -> bytes!? = none
+    ## A brush picked.
     pub var on_pick: func(int) -> unit!? = none
-    ## A double-click on saved row `row`'s name, at (x, y).
+    ## A double-click on saved brush `row`'s name, at (x, y).
     pub var on_rename: func(int, float, float) -> unit!? = none
 
     pub func init(self, font: Font, look: func() -> Look) -> unit!:
@@ -55,61 +73,178 @@ pub class BrushList: Widget:
         self.box.set_cursor(Cursor.pointer)
         self.box.set_flex()
         self.names = []
-        self.thumbnails = []
+        self.groups = []
+        self.line_brushes = []
+        self.line_groups = []
+        self.folded = []
+        self.thumbnails = {}
 
     pub func layout(self) -> Layout:
         return self.box
 
     pub func measure(self, available: Constraints) -> Size!:
-        return Size(float(stroke_width) + 16.0, self.row_height * float(self.names.length))
+        return Size(float(stroke_width) + 16.0, self.line_top(self.line_brushes.length))
 
-    ## The rows: names and thumbnail strokes (RGBA, stroke_width × stroke_height).
-    pub func set_rows(self, names: list[str], strokes: list[bytes]) -> unit!:
+    ## The brushes: their names and groups ("" for none) by brush index. A
+    ## group's brushes are listed together, groups in order of first
+    ## appearance; strokes are asked for again as rows show.
+    pub func set_rows(self, names: list[str], groups: list[str]) -> unit!:
         self.names = names
-        var images: list[Image] = []
-        for stroke in strokes:
-            let image = Image(stroke_width, stroke_height)
-            image.write(stroke)
-            images.append(image)
-        self.thumbnails = images
+        self.groups = groups
+        self.thumbnails = {}
         if self.selected >= names.length:
             self.selected = names.length - 1
+        self.arrange()
+
+    ## Fold `group` away, or unfold it.
+    pub func toggle_group(self, group: str) -> unit!:
+        if group in self.folded:
+            var kept: list[str] = []
+            for name in self.folded:
+                if name != group:
+                    kept.append(name)
+            self.folded = kept
+        else:
+            self.folded.append(group)
+        self.arrange()
+
+    ## Fold every group but those named in `open`.
+    pub func fold_all_but(self, open: list[str]) -> unit!:
+        var folded: list[str] = []
+        for group in self.groups:
+            if group != "" and not (group in open) and not (group in folded):
+                folded.append(group)
+        self.folded = folded
+        self.arrange()
+
+    ## Whether `group` is folded.
+    pub func is_folded(self, group: str) -> bool:
+        return group in self.folded
+
+    ## The lines again from the brushes, their groups and the folds.
+    func arrange(self) -> unit!:
+        var order: list[str] = []
+        for group in self.groups:
+            if not (group in order):
+                order.append(group)
+        var brushes: list[int] = []
+        var headers: list[str] = []
+        for group in order:
+            if group != "":
+                brushes.append(-1)
+                headers.append(group)
+            if group != "" and group in self.folded:
+                continue
+            var index = 0
+            while index < self.groups.length:
+                if self.groups[index] == group:
+                    brushes.append(index)
+                    headers.append(group)
+                index += 1
+        self.line_brushes = brushes
+        self.line_groups = headers
         self.box.invalidate()
 
-    ## Where row `row` starts.
+    ## Where line `line` starts.
+    func line_top(self, line: int) -> float:
+        var top = 0.0
+        var index = 0
+        while index < line and index < self.line_brushes.length:
+            top += self.header_height if self.line_brushes[index] < 0 else self.row_height
+            index += 1
+        return top
+
+    ## Where brush `row`'s row starts (its group's header when folded).
     pub func row_top(self, row: int) -> float:
-        return self.row_height * float(row)
+        var index = 0
+        while index < self.line_brushes.length:
+            if self.line_brushes[index] == row:
+                return self.line_top(index)
+            index += 1
+        return 0.0
 
     ## Where names start.
     pub func name_left(self) -> float:
         return 8.0
+
+    ## Brush `row`'s stroke, drawn the first time it is asked for.
+    func thumbnail(self, row: int) -> Image?!:
+        if row in self.thumbnails:
+            return self.thumbnails[row]
+        let draw = self.stroke else return none
+        let stroke = draw(row) catch _:
+            return none
+        if stroke.length == 0:
+            return none
+        let image = Image(stroke_width, stroke_height)
+        image.write(stroke)
+        self.thumbnails[row] = image
+        return image
 
     pub func draw(self, target: RenderTarget) -> unit!:
         let painter = Painter(target)
         let size = target.size()
         painter.rectangle(Rect(0.0, 0.0, size.width, size.height), theme.surface())
         let focused = self.box.contains_focus()
-        var row = 0
-        while row < self.names.length:
-            let top = self.row_top(row)
+        var shown_top = 0.0
+        var shown_bottom = size.height
+        if let sight = self.viewport:
+            let rect = sight()
+            shown_top = rect.y
+            shown_bottom = rect.y + rect.height
+        var top = 0.0
+        var line = 0
+        while line < self.line_brushes.length:
+            let row = self.line_brushes[line]
+            let height = self.header_height if row < 0 else self.row_height
+            if top + height < shown_top or top > shown_bottom:
+                top += height
+                line += 1
+                continue
+            if row < 0:
+                let group = self.line_groups[line]
+                painter.rectangle(Rect(0.0, top, size.width, self.header_height), theme.surface_raised())
+                let mark = "▸" if group in self.folded else "▾"
+                painter.text(f"{mark} {group}", self.name_left(), top + 4.0, theme.text(), self.font)
+                painter.rectangle(Rect(0.0, top + self.header_height - 1.0, size.width, 1.0), theme.border())
+                top += self.header_height
+                line += 1
+                continue
             let picked = row == self.selected
             if picked:
                 let look = self.look()
                 painter.rectangle(Rect(0.0, top, size.width, self.row_height), look.accent if focused else look.selection_inactive)
             let ink = theme.on_accent() if picked and focused else theme.text()
             painter.text(self.names[row], self.name_left(), top + 5.0, ink, self.font)
-            if row < self.thumbnails.length:
-                painter.image(self.thumbnails[row], Rect(8.0, top + 20.0, float(stroke_width), float(stroke_height)))
+            if let image = self.thumbnail(row):
+                painter.image(image, Rect(8.0, top + 20.0, float(stroke_width), float(stroke_height)))
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
-            row += 1
+            top += self.row_height
+            line += 1
         painter.close()
+
+    ## The line at `y`, or -1.
+    func line_at(self, y: float) -> int:
+        var top = 0.0
+        var line = 0
+        while line < self.line_brushes.length:
+            let bottom = top + (self.header_height if self.line_brushes[line] < 0 else self.row_height)
+            if y >= top and y < bottom:
+                return line
+            top = bottom
+            line += 1
+        return -1
 
     pub func event(self, event: Event) -> unit!:
         if event.kind != EventKind.pointer_down or event.button != 0 or not event.inside:
             return
         self.box.request_focus()
-        let row = int(math.floor(event.y / self.row_height))
-        if event.y < 0.0 or row >= self.names.length:
+        let line = self.line_at(event.y)
+        if line < 0:
+            return
+        let row = self.line_brushes[line]
+        if row < 0:
+            self.toggle_group(self.line_groups[line])
             return
         let now = time.now() // 1000000
         let again = row == self.last_row and now - self.last_time <= 400

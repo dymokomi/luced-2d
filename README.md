@@ -56,6 +56,12 @@ the order of work are in [docs/DESIGN.md](docs/DESIGN.md).
   in Brush Settings' editors or made from the selection (Edit › Define Brush
   Preset…), kept in a library (`~/.luced-2d/brushes/`, a folder per brush:
   `brush.toml`, `tip.png`, `texture.png`) and shared as `.l2dbrush` files.
+  Photoshop `.abr` brush files (every preset, with its sampled tip, shape
+  dynamics, scattering, texture, transfer and color dynamics) and Procreate
+  `.brush` files (shape, grain and dynamics) import from the Brushes panel,
+  or in bulk with `luced-2d --import-brushes FILE-OR-FOLDER...`; imported
+  brushes are listed under a folding header named for the file they came
+  from, and their pictures load the first time each is used.
 - Pan with two-finger scroll, hand tool (`H`) or space-drag; zoom about the
   pointer with a touchpad pinch, the mouse wheel, cmd/ctrl-scroll, the zoom
   tool (`Z`), `+`/`-`, Fit and 100%; pixels stay crisp when magnified.
