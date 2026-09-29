@@ -93,6 +93,17 @@ def scenes(sample):
                 print(f"ADJUST {index} {editor.workspace.canvas.layer_name(index)} kind {editor.workspace.canvas.layer_adjustment(index)}")
                 index -= 1
             editor.panels.refresh()''',
+    # The Properties pane in front: a pixel layer's rows (name, blend, opacity, flags).
+    'properties': '''            editor.workspace.layers.select(1)
+            editor.panels.dock.select(editor.panels.properties.panel)
+            editor.panels.refresh()''',
+    # The Properties pane on a Hue/Saturation adjustment layer: its settings below.
+    'propadjust': '''            editor.workspace.layers.select(1)
+            editor.panels.actions.adjustment_layers[1].trigger()
+            editor.panels.refresh()
+            editor.panels.properties.adjustment.set_control(1, 0, 40.0)
+            editor.panels.dock.select(editor.panels.properties.panel)
+            editor.panels.refresh()''',
     # Hue/Saturation on the pixels, the Reds page showing its own sliders.
     'huesat': '''            editor.workspace.layers.select(0)
             editor.panels.adjust.open(1)

@@ -1,0 +1,60 @@
+## The Properties pane and the adjustment rows on luce-ui's ParameterPanel:
+## the layer's rows show the model, an adjustment's sliders and pages keep
+## their values, and a kit number row reports typed arithmetic.
+from ui import Font, Application, VStack, Event
+from gpu import Frame
+from workspace import Workspace
+from panels import Panels
+from actions import Actions
+from kit import Kit
+from input import EventKind, Key
+import window
+
+pub func properties_rows() -> unit!:
+    let workspace = Workspace(64, 48)
+    workspace.canvas.bind_headless()
+    let actions = Actions()
+    let panels = Panels(workspace, actions, Font())
+    actions.add_layer.trigger()
+    workspace.edits.set_opacity(0.25)
+    panels.properties.show()
+    let layer = panels.properties.layer
+    let opacity = layer.find("opacity")
+    assert(layer.count() == 8 and layer.value(opacity) == 25.0 and not layer.is_default(opacity))
+    assert(layer.value(layer.find("visible")) == 1.0 and layer.text(layer.find("styles")) == "None")
+    assert(layer.is_default(layer.find("name")))
+    # Hue/Saturation: a slider set on page Reds stays with Reds.
+    let adjust = panels.adjust.controls
+    adjust.show(1, [])
+    adjust.show_page(1, 1)
+    adjust.set_control(1, 0, 40.0)
+    assert(adjust.values(1)[3] == 40.0 and adjust.controls[1].value(0) == 40.0)
+    adjust.show_page(1, 0)
+    assert(adjust.controls[1].value(0) == 0.0)
+    adjust.show_page(1, 1)
+    assert(adjust.controls[1].value(0) == 40.0)
+    panels.close()
+    kit_number_row()
+
+## A kit number row types arithmetic and reports it once.
+func kit_number_row() -> unit!:
+    let kit = Kit(Font())
+    var heard: list[float] = []
+    let row = kit.slider_field(0.0, 100.0, 10.0, 0, "%", func (value: float) -> unit!:
+        heard.append(value))
+    let app = Application(VStack([row.row], spacing = 0.0))
+    let frame = Frame(window.Size(400.0, 200.0, 400.0, 200.0, 1.0))
+    app.layout(400.0, 200.0)
+    app.render(frame.target())
+    let origin = row.row.layout().bounds()
+    let field = row.row.field_bounds(0, 0)
+    app.dispatch(Event(kind = EventKind.pointer_down, x = origin.x + field.x + 10.0, y = origin.y + field.y + 8.0))
+    app.dispatch(Event(kind = EventKind.pointer_up, x = origin.x + field.x + 10.0, y = origin.y + field.y + 8.0))
+    app.render(frame.target())
+    for code in [52, 42, 53]:
+        app.dispatch(Event(kind = EventKind.text_input, codepoint = code))
+    app.dispatch(Event(kind = EventKind.key_down, key = Key.enter))
+    assert(row.value() == 20.0 and heard.length == 1 and heard[0] == 20.0)
+    frame.close()
+    app.close()
+    kit.close()

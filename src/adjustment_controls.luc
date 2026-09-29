@@ -1,13 +1,14 @@
 ## The controls for every adjustment, built from their table (adjustments.luc)
-## once and shown one kind at a time: a menu for the pages when an adjustment
-## shows one set of sliders at a time, the sliders, the checkboxes; Levels its
+## once and shown one kind at a time: a menu row for the pages when an
+## adjustment shows one set of sliders at a time, then its sliders and
+## checkboxes as one ParameterPanel (one compact row each); Levels its
 ## histogram with handles and Auto, Curves its editor. Two places use them:
 ## the adjust dialog, on a layer's pixels (destructive), and the Properties
 ## panel, on the selected adjustment layer (live). Whoever owns them hears of
 ## every change through `changed` and asks `numbers` for the engine's values.
-from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor
+from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor, ParameterPanel, ParameterSpec, ParameterKind
 from workspace import Workspace
-from kit import Kit, SliderField
+from kit import Kit
 from adjustments import Adjustment, adjustments, filter_table, gradient_map, curves_adjustment, blur_kind
 from levels_graph import LevelsGraph
 from map_colors import MapColors
@@ -25,9 +26,10 @@ pub class AdjustmentControls:
     let table: list[Adjustment]
     let filters: list[Adjustment]
     let rows: list[VStack]
-    pub let controls: list[list[SliderField]]
-    let checkboxes: list[list[Checkbox]]
-    let page_labels: list[Text]
+    ## Each kind's sliders then checkboxes, one row each.
+    pub let controls: list[ParameterPanel]
+    ## Each kind's page menu (a one-row panel), when it has pages.
+    let pagers: list[ParameterPanel?]
     ## Every kind's shown values — all pages', then the checkboxes' — and its page showing.
     var shown: list[list[float]]
     var pages: list[int]
@@ -58,8 +60,7 @@ pub class AdjustmentControls:
         self.filters = filter_table()
         self.rows = []
         self.controls = []
-        self.checkboxes = []
-        self.page_labels = []
+        self.pagers = []
         self.shown = []
         self.pages = []
         self.levels = LevelsGraph()
@@ -82,39 +83,48 @@ pub class AdjustmentControls:
     func build(self, adjustment: Adjustment) -> unit!:
         let kind = adjustment.kind
         var items: list[Widget] = []
-        let page_label = Text(adjustment.pages[0] if adjustment.pages.length > 0 else "", font = self.kit.font)
+        var pager: ParameterPanel? = none
         if adjustment.pages.length > 0:
-            var choices: list[Command] = []
-            var page = 0
-            for name in adjustment.pages:
-                let chosen = page
-                let command = Command(name, id = f"adjust_{kind}_page_{page}")
-                self.kit.bind(command, func () -> unit!:
-                    self.show_page(kind, chosen))
-                choices.append(command)
-                page += 1
-            let caption = "Channel ▾" if kind == levels_kind else ("Range ▾" if kind == 1 else "Tones ▾")
-            items.append(HStack([Menu(caption, choices, font = self.kit.font), page_label], spacing = 8.0))
+            let caption = "Channel" if kind == levels_kind else ("Range" if kind == 1 else "Tones")
+            let pages = ParameterPanel([ParameterSpec(name = "page", label = caption, kind = ParameterKind.menu, items = adjustment.pages.join("|"), resettable = false,
+                                                      doc = "The settings below are this one's.")], font = self.kit.font)
+            pages.set_margin(0.0)
+            self.kit.keep(pages.on_change(func (index: int) -> unit!:
+                self.show_page(kind, int(pages.value(index)))))
+            items.append(pages)
+            pager = pages
         if kind == levels_kind:
             items.append(self.levels)
-        var sliders: list[SliderField] = []
+        var specs: list[ParameterSpec] = []
         var slot = 0
         for knob in adjustment.knobs:
-            let at = slot
-            let pair = self.kit.slider_field(knob.minimum, knob.maximum, knob.value, knob.decimals, knob.suffix, func (moved: float) -> unit!:
-                self.moved(kind, at, moved))
-            sliders.append(pair)
-            items.append(self.kit.dialog_row(knob.label, pair.row, 96.0))
+            specs.append(self.kit.number_spec(f"k{slot}", knob.label, knob.minimum, knob.maximum, knob.value, knob.decimals, knob.suffix))
             slot += 1
-        var boxes: list[Checkbox] = []
         slot = 0
         for toggle in adjustment.toggles:
-            let at = slot
-            let box = self.kit.checkbox(toggle.label, func () -> unit!:
-                self.toggled(kind, at))
-            boxes.append(box)
-            items.append(box)
+            specs.append(ParameterSpec(name = f"t{slot}", label = toggle.label, kind = ParameterKind.toggle, value = 1.0 if toggle.on else 0.0))
             slot += 1
+        let knobs = adjustment.knobs.length
+        let controls = ParameterPanel(specs, font = self.kit.font)
+        controls.set_margin(0.0)
+        self.kit.keep(controls.on_change(func (index: int) -> unit!:
+            if index < knobs:
+                self.moved(kind, index, controls.value(index))
+            else:
+                self.toggled(kind, index - knobs)))
+        if specs.length > 0:
+            items.append(controls)
+        # The page menu's label lines up with the sliders' below it.
+        var widest = 0
+        for knob in adjustment.knobs:
+            widest = widest if widest > knob.label.length else knob.label.length
+        if let pages = pager:
+            # "Channel", "Range" and "Tones" take at most seven.
+            widest = widest if widest > 7 else 7
+            let column = float(widest) * self.kit.font.advance()
+            pages.set_label_width(column)
+            if adjustment.knobs.length > 0:
+                controls.set_label_width(column)
         if kind == hue_kind:
             # The eyedropper: a click on the image shows the range its color is in.
             let on_image = self.kit.checkbox("On Image", self.toggle_on_image)
@@ -145,12 +155,11 @@ pub class AdjustmentControls:
             items.append(self.curve_editor)
         if kind == gradient_map:
             items.append(self.map_colors.row)
-        let row = VStack(items, spacing = 10.0)
+        let row = VStack(items, spacing = 6.0)
         row.layout().set_visible(false)
         self.rows.append(row)
-        self.controls.append(sliders)
-        self.checkboxes.append(boxes)
-        self.page_labels.append(page_label)
+        self.controls.append(controls)
+        self.pagers.append(pager)
         self.shown.append(adjustment.defaults())
         self.pages.append(0)
 
@@ -185,7 +194,7 @@ pub class AdjustmentControls:
             index += 1
         let spec = self.spec(kind)
         self.shown[kind] = values if values.length == spec.value_count() else spec.defaults()
-        slot_boxes(self.checkboxes[kind], self.shown[kind], spec.page_count() * spec.knobs.length)
+        slot_boxes(self.controls[kind], spec.knobs.length, self.shown[kind], spec.page_count() * spec.knobs.length)
         self.show_page(kind, 0)
         if kind == gradient_map:
             self.map_colors.take(map_colors else [])
@@ -202,11 +211,11 @@ pub class AdjustmentControls:
     pub func show_page(self, kind: int, page: int) -> unit!:
         let spec = self.spec(kind)
         self.pages[kind] = page
-        if spec.pages.length > 0:
-            self.page_labels[kind].set_text(spec.pages[page])
+        if let pager = self.pagers[kind]:
+            pager.set_value(0, float(page))
         var slot = 0
-        for pair in self.controls[kind]:
-            pair.set_value(self.shown[kind][page * spec.knobs.length + slot])
+        while slot < spec.knobs.length:
+            self.controls[kind].set_value(slot, self.shown[kind][page * spec.knobs.length + slot])
             slot += 1
         if kind == levels_kind:
             self.show_levels(page)
@@ -214,8 +223,8 @@ pub class AdjustmentControls:
 
     ## One slider of `kind`'s showing page set from code, as if moved.
     pub func set_control(self, kind: int, slot: int, value: float) -> unit!:
-        self.controls[kind][slot].set_value(value)
-        self.moved(kind, slot, value)
+        self.controls[kind].set_value(slot, value)
+        self.moved(kind, slot, self.controls[kind].value(slot))
 
     ## The engine's numbers for `kind` as shown; the Gradient Map's colors,
     ## the foreground and background, after its checkbox.
@@ -240,7 +249,7 @@ pub class AdjustmentControls:
 
     func toggled(self, kind: int, slot: int) -> unit!:
         let spec = self.spec(kind)
-        self.shown[kind][spec.page_count() * spec.knobs.length + slot] = 1.0 if self.checkboxes[kind][slot].is_checked() else 0.0
+        self.shown[kind][spec.page_count() * spec.knobs.length + slot] = self.controls[kind].value(spec.knobs.length + slot)
         self.tell()
 
     ## A Levels handle dragged: the graph's values into the page and the sliders.
@@ -251,7 +260,7 @@ pub class AdjustmentControls:
         var slot = 0
         for value in values:
             self.shown[levels_kind][base + slot] = value
-            self.controls[levels_kind][slot].set_value(value)
+            self.controls[levels_kind].set_value(slot, value)
             slot += 1
         self.tell()
 
@@ -327,7 +336,7 @@ pub class AdjustmentControls:
             let slot = 0 if hue else 1
             if first:
                 self.show_page(hue_kind, range_of(color))
-                self.drag_base = self.controls[hue_kind][slot].value()
+                self.drag_base = self.controls[hue_kind].value(slot)
                 return
             let knob = self.spec(hue_kind).knobs[slot]
             self.set_control(hue_kind, slot, math.clamp(self.drag_base + moved * 0.5, knob.minimum, knob.maximum))
@@ -425,11 +434,12 @@ pub class AdjustmentControls:
         if let failed = self.failed:
             failed(message)
 
-## Check each box by its value, the values starting at `first`.
-func slot_boxes(boxes: list[Checkbox], values: list[float], first: int) -> unit!:
-    var slot = 0
-    for box in boxes:
-        box.set_checked(values[first + slot] != 0.0)
+## Check each of `panel`'s toggles (its rows after `knobs`) by its value, the
+## values starting at `first`.
+func slot_boxes(panel: ParameterPanel, knobs: int, values: list[float], first: int) -> unit!:
+    var slot = knobs
+    while slot < panel.count():
+        panel.set_value(slot, 1.0 if values[first + slot - knobs] != 0.0 else 0.0)
         slot += 1
 
 ## The curve channels, in their index order.

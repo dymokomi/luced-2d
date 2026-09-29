@@ -1,27 +1,30 @@
-## The Properties pane, after eleusis: what the selected layer is, one row
-## each — its name (edited in place), blend mode, opacity, flags and styles.
-## The flags and the style editor are the window's commands; opacity and the
-## name write to the workspace directly. An adjustment layer shows its
-## settings below, as Photoshop's Properties panel does — Levels with its
-## histogram — and every change adjusts the picture live.
-from ui import Text, HStack, VStack, Size, Spacer, Menu, Command, Slider, NumberField, TextField, Checkbox, Panel, Widget, ScrollView
+## The Properties pane: what the selected layer is, one compact row each after
+## Houdini's parameter pane — its name (edited in place), blend mode, opacity,
+## flags and styles, one ParameterPanel. The flags, the blend modes and the
+## style editor are the window's commands; opacity and the name write to the
+## workspace directly. An adjustment layer shows its settings below, as
+## Photoshop's Properties panel does — Levels with its histogram — and every
+## change adjusts the picture live.
+from ui import Text, VStack, Size, Spacer, Command, Panel, ScrollView, ParameterPanel, ParameterSpec, ParameterKind
 from workspace import Workspace
-from canvas import Canvas
 from kit import Kit
 from adjustment_controls import AdjustmentControls
 from adjustments import curves_adjustment, gradient_map
 
+## The rows of the layer's panel, by index.
+let name_row: int = 0
+let blend_row: int = 1
+let opacity_row: int = 2
+let visible_row: int = 3
+let clipped_row: int = 4
+let mask_row: int = 5
+let styles_row: int = 6
+let edit_row: int = 7
+
 pub class Properties:
     pub let panel: Panel
-    pub let layer_name: TextField
-    pub let blend_menu: Menu
-    pub let opacity: Slider
-    pub let opacity_field: NumberField
-    pub let visible_box: Checkbox
-    pub let clipped_box: Checkbox
-    pub let mask_box: Checkbox
-    pub let styles_text: Text
-    let styles_row: Widget
+    ## The layer's rows: name, blend, opacity, the three flags, styles.
+    pub let layer: ParameterPanel
     ## The selected adjustment layer's settings, and which layer they show (by id, or -1).
     pub let adjustment: AdjustmentControls
     let adjustment_title: Text
@@ -31,59 +34,73 @@ pub class Properties:
     pub var changed: func() -> unit!? = none
     pub var refreshed: func() -> unit!? = none
     let workspace: Workspace
+    let blends: list[Command]
+    let toggles: list[func() -> unit!]
+    let layer_style: func() -> unit!
 
     ## `blends` are the blend-mode commands; the other callbacks toggle a flag
     ## of the selected layer or open its Layer Style.
     pub func init(self, workspace: Workspace, kit: Kit, blends: list[Command], toggle_visibility: func() -> unit!,
                   toggle_clipped: func() -> unit!, toggle_mask: func() -> unit!, layer_style: func() -> unit!) -> unit!:
         self.workspace = workspace
+        self.blends = blends
+        self.toggles = [toggle_visibility, toggle_clipped, toggle_mask]
+        self.layer_style = layer_style
         let font = kit.font
-        # The name is edited in place; committing it renames the layer.
-        self.layer_name = TextField("", font = font, placeholder = "Layer name", cells = 18.0)
-        kit.keep(self.layer_name.on_commit(func (value: str) -> unit!:
-            if value.trim() != "":
-                self.workspace.edits.rename(value.trim())
-            self.refresh()))
-        self.opacity = Slider("", 0.0, 100.0, 100.0, 1.0, font = font, show_value = false)
-        self.opacity.layout().set_flex()
-        self.opacity_field = NumberField(100.0, 0.0, 100.0, 1.0, suffix = "%", font = font, cells = 6.0)
-        kit.keep(self.opacity.on_change(func (value: float) -> unit!:
-            self.workspace.edits.set_opacity(value / 100.0)
-            self.opacity_field.set_value(value)
-            self.notify()))
-        kit.keep(self.opacity_field.on_change(func (value: float) -> unit!:
-            self.workspace.edits.set_opacity(value / 100.0)
-            self.opacity.set_value(value)
-            self.notify()))
-        self.visible_box = kit.checkbox("Visible", toggle_visibility)
-        self.clipped_box = kit.checkbox("Clip", toggle_clipped)
-        self.mask_box = kit.checkbox("Mask", toggle_mask)
-        self.styles_text = Text("None", font = font)
-        self.blend_menu = Menu("Normal ▾", blends, font = font)
-        self.styles_row = kit.property_row("Styles", HStack([self.styles_text, kit.button("Edit…", layer_style)], spacing = 8.0))
+        var modes: list[str] = []
+        for command in blends:
+            modes.append(command.text())
+        self.layer = ParameterPanel([ParameterSpec(name = "name", label = "Layer", kind = ParameterKind.text, resettable = false, doc = "The layer's name; Enter renames it."),
+                                     ParameterSpec(name = "blend", label = "Blend", kind = ParameterKind.menu, items = modes.join("|"), doc = "How the layer mixes with what is below it."),
+                                     ParameterSpec(name = "opacity", label = "Opacity", value = 100.0, minimum = 0.0, maximum = 100.0, step = 1.0, decimals = 0, suffix = "%", slider = true,
+                                                   doc = "How much of the layer shows."),
+                                     ParameterSpec(name = "visible", label = "Visible", kind = ParameterKind.toggle, value = 1.0, join = true, doc = "Show the layer."),
+                                     ParameterSpec(name = "clip", label = "Clip", kind = ParameterKind.toggle, join = true, doc = "Clip the layer to the one below it."),
+                                     ParameterSpec(name = "mask", label = "Mask", kind = ParameterKind.toggle, doc = "Use the layer's mask."),
+                                     ParameterSpec(name = "styles", label = "Styles", kind = ParameterKind.info, text = "None", join = true),
+                                     ParameterSpec(name = "edit_styles", label = "Edit…", kind = ParameterKind.button, doc = "Open the Layer Style dialog.")], font = font)
+        kit.keep(self.layer.on_change(self.layer_changed))
+        kit.keep(self.layer.on_action(func (index: int) -> unit!:
+            let open = self.layer_style
+            open()))
         self.adjustment = AdjustmentControls(workspace, kit)
         self.adjustment.changed = self.adjustment_changed
         self.adjustment_title = Text("", font = font)
-        self.adjustment_section = VStack([self.adjustment_title, self.adjustment.view], spacing = 10.0, padding = 10.0)
+        self.adjustment_section = VStack([self.adjustment_title, self.adjustment.view], spacing = 6.0, padding = 8.0)
         self.adjustment_section.layout().set_visible(false)
-        let rows = VStack([kit.property_row("Layer", self.layer_name), kit.property_row("Blend", self.blend_menu),
-                           kit.property_row("Opacity", HStack([self.opacity, self.opacity_field], spacing = 6.0)),
-                           kit.property_row("Flags", HStack([self.visible_box, self.clipped_box, self.mask_box], spacing = 10.0)),
-                           self.styles_row, self.adjustment_section, Spacer()], spacing = 0.0, padding = 0.0)
+        let rows = VStack([self.layer, self.adjustment_section, Spacer()], spacing = 0.0, padding = 0.0)
         # An adjustment layer's settings can be taller than the pane: it scrolls.
         self.panel = Panel("Properties", ScrollView(rows), minimum = Size(220.0, 100.0), id = "properties")
+
+    ## A row of the layer's panel changed: the name renames the layer, a blend
+    ## mode or flag runs its command, the opacity writes to the layer.
+    func layer_changed(self, index: int) -> unit!:
+        if index == name_row:
+            let value = self.layer.text(name_row).trim()
+            if value != "":
+                self.workspace.edits.rename(value)
+            self.refresh()
+        elif index == blend_row:
+            let mode = int(self.layer.value(blend_row))
+            if mode >= 0 and mode < self.blends.length:
+                self.blends[mode].trigger()
+        elif index == opacity_row:
+            self.workspace.edits.set_opacity(self.layer.value(opacity_row) / 100.0)
+            self.notify()
+        elif index >= visible_row and index <= mask_row:
+            let toggle = self.toggles[index - visible_row]
+            toggle()
 
     ## Show the selected layer.
     pub func show(self) -> unit!:
         let workspace = self.workspace
         let canvas = workspace.canvas
         let selected = workspace.layers.selected
-        if not self.layer_name.layout().is_focused():
-            self.layer_name.set_text(canvas.layer_name(selected))
-        self.blend_menu.set_text(Canvas.blend_mode_name(canvas.layer_blend(selected)) + " ▾")
-        self.visible_box.set_checked(canvas.layer_visible(selected))
-        self.clipped_box.set_checked(canvas.layer_clipped(selected))
-        self.mask_box.set_checked(canvas.layer_masked(selected))
+        self.layer.set_text(name_row, canvas.layer_name(selected))
+        self.layer.set_value(blend_row, float(canvas.layer_blend(selected)))
+        self.layer.set_value(visible_row, 1.0 if canvas.layer_visible(selected) else 0.0)
+        self.layer.set_value(clipped_row, 1.0 if canvas.layer_clipped(selected) else 0.0)
+        self.layer.set_value(mask_row, 1.0 if canvas.layer_masked(selected) else 0.0)
         var styled: list[str] = []
         if canvas.layer_styled(selected):
             if workspace.previews.style_value(0) != 0.0:
@@ -96,9 +113,8 @@ pub class Properties:
                 styled.append("Overlay")
             if workspace.previews.style_value(26) != 0.0:
                 styled.append("Inner")
-        self.styles_text.set_text(styled.join(" ") if styled.length > 0 else "None")
-        self.opacity.set_value(canvas.layer_opacity(selected) * 100.0)
-        self.opacity_field.set_value(canvas.layer_opacity(selected) * 100.0)
+        self.layer.set_text(styles_row, styled.join(" ") if styled.length > 0 else "None")
+        self.layer.set_value(opacity_row, canvas.layer_opacity(selected) * 100.0)
         self.show_adjustment(selected)
 
     ## The selected adjustment layer's settings, loaded when the selection
@@ -107,7 +123,8 @@ pub class Properties:
         let canvas = self.workspace.canvas
         let kind = canvas.layer_adjustment(selected)
         self.adjustment_section.layout().set_visible(kind >= 0)
-        self.styles_row.layout().set_visible(kind < 0)
+        self.layer.set_hidden(styles_row, kind >= 0)
+        self.layer.set_hidden(edit_row, kind >= 0)
         if kind < 0:
             self.adjustment_layer = -1
             return

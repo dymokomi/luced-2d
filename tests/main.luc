@@ -3,6 +3,7 @@ from background_tests import background_tests
 from workspace_tests import layers, viewing, contents, settings_round_trip, checker_regions, picking, adjustment_table, unsaved_changes, whole_layers, tool_options_kept, update_versions, opens_photos, settings_save_pending
 from canvas_tool_tests import tool_gestures, boxes, retouch_tools, selection_tools, guides_and_snapping, live_text, live_gradient, crop_box_options, stroke_undo, eyedropper_sample, brush_sizing, tool_modes, dodge_and_burn, pen_paths, lasso_cycle, corner_modes, warping
 from panel_tests import layer_panel_ops, size_dialogs, mask_actions, effect_rows, filter_dialogs, color_range, replace_color, on_image_adjustment, hue_ranges, panel_catalog, aligning, dock_layouts, navigator_boxes, refining_selections, color_panel_modes
+from properties_tests import properties_rows
 from layer_kind_tests import scripts, script_editor, groups_and_shapes, alpha_channel_panel, vector_panel, node_editor
 
 ## Headless checks of the workspace and the window contents, without a device:
@@ -21,6 +22,7 @@ pub func main(arguments: list[str]) -> int!:
     retouch_tools()
     unsaved_changes(arguments)
     layer_panel_ops()
+    properties_rows()
     size_dialogs()
     selection_tools()
     guides_and_snapping()
