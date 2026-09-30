@@ -10,7 +10,7 @@ from kit import Kit
 from menus import divider
 from node_view import NodeView
 from node_inspector import NodeInspector
-from node_graph import add_node, delete_nodes, set_node_value, kind_order
+from node_graph import add_node, delete_nodes, set_node_value, kind_order, shown_number
 from vectors import vector_layer
 
 pub class NodePanel:
@@ -125,7 +125,7 @@ pub class NodePanel:
         self.typing_node = node
         self.typing_slot = slot
         let value = self.workspace.canvas.graph_node_value(self.workspace.layers.selected, place, 4 + slot)
-        self.value_field.set_text(f"{value}")
+        self.value_field.set_text(shown_number(value, false))
         let field_box = self.value_field.layout()
         let inspector = self.inspector.layout().bounds()
         let content = self.panel.layout().bounds()
