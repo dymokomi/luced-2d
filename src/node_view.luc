@@ -14,9 +14,8 @@ from node_gestures import NodeGestures
 import theme
 import math
 
-## The node text's size at 100%, and the smallest it is drawn at: below that
-## the rows go and the titles stay, at this size.
-let text_size: float = 14.0
+## Below this size the rows go and the titles stay. At 100%, node text uses
+## the application's shared UI font.
 let smallest_text: float = 9.0
 
 ## A port's square, in view points.
@@ -155,7 +154,7 @@ pub class NodeView: Widget:
         # The text follows the zoom, to a smallest legible size; there the
         # title stays, shortened to the box, its bar as tall as it needs,
         # and the rows go.
-        let wanted = text_size * state.zoom
+        let wanted = self.font.size() * state.zoom
         let font = self.font_at(math.max(smallest_text, wanted))
         let bar = math.min(h, math.max(title_height * state.zoom, font.height() + 4.0))
         painter.rectangle(Rect(origin.x, origin.y, w, bar), theme.grey(74.0))
@@ -191,7 +190,7 @@ pub class NodeView: Widget:
     ## The node font at `size` points, to the nearest whole size.
     func font_at(self, size: float) -> Font!:
         let rounded = int(math.round(size))
-        if rounded == int(text_size):
+        if float(rounded) == self.font.size():
             return self.font
         var at = 0
         while at < self.sizes.length:

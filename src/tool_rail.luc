@@ -59,7 +59,7 @@ pub class ToolRail:
         for id in tool_groups()[group]:
             commands.append(self.command(id))
         let button = Button(icon = tool_by_id(first).icon, font = kit.font)
-        button.layout().set_size(32.0, 32.0)
+        button.layout().set_size(kit.tool_side(), kit.tool_side())
         button.set_grouped(true)
         let flyout = ContextMenu(button, commands, font = kit.font)
         let slot = RailSlot(button, flyout, group, first)
@@ -68,7 +68,7 @@ pub class ToolRail:
         kit.keep(button.on_hold(func () -> unit!:
             # Beside the button, while it is still held, as Photoshop's flyout:
             # slide onto a tool and let go to take it.
-            flyout.open_at(34.0, 0.0, held = true)))
+            flyout.open_at(button.layout().bounds().width + 2.0, 0.0, held = true)))
         self.add(slot)
 
     ## Each frame: a group button held a moment opens its flyout, still held.

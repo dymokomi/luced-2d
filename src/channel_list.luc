@@ -95,7 +95,7 @@ pub class ChannelList: Widget:
             let slot = self.thumb_rect(row)
             painter.rectangle(slot, theme.checker_light())
             canvas.draw_channel(target, row, slot)
-            painter.text(row_name(workspace, row), self.name_left(), top + (self.row_height - 14.0) * 0.5, ink, self.font)
+            painter.text(row_name(workspace, row), self.name_left(), top + (self.row_height - self.font.height()) * 0.5, ink, self.font)
             painter.rectangle(Rect(0.0, top + self.row_height - 1.0, size.width, 1.0), theme.border())
             row += 1
         painter.close()

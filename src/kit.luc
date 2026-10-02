@@ -70,20 +70,24 @@ pub class Kit:
         self.connections.append(button.on_click(callback))
         return button
 
-    ## A square icon button that triggers a tool command: 32 points, the rail's content width.
+    ## A tool square includes ten points around the shared font line.
+    pub func tool_side(self) -> float:
+        return self.font.line_height() + 10.0
+
+    ## A square icon button that triggers a tool command.
     pub func tool_button(self, icon: str, command: Command) -> Button!:
         let button = Button(icon = icon, font = self.font)
         self.connections.append(button.on_click(func () -> unit!:
             command.trigger()))
-        button.layout().set_size(32.0, 32.0)
+        button.layout().set_size(self.tool_side(), self.tool_side())
         return button
 
-    ## A shelf button: 25 points square, plain, so only the icon shows at rest.
+    ## A shelf button: a font line plus three points, plain until hovered.
     pub func shelf_button(self, icon: str, callback: func() -> unit!) -> Button!:
         let button = Button(icon = icon, font = self.font)
         button.set_style(ButtonStyle.plain)
         self.connections.append(button.on_click(callback))
-        button.layout().set_size(25.0, 25.0)
+        button.layout().set_size(self.font.line_height() + 3.0, self.font.line_height() + 3.0)
         return button
 
     ## A flag checkbox; the state itself comes from the model on refresh, so the

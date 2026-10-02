@@ -6,7 +6,7 @@
 ## Cancel and Apply while a free transform or the Crop tool's box is up — and
 ## the tool's hint, shown at the right of the status line.
 import ui
-from ui import Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Checkbox
+from ui import default_spacing, Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Checkbox
 from workspace import Workspace
 from shape_tool import restyle_selected, selected_shape_options
 from kit import Kit
@@ -108,12 +108,12 @@ pub class ToolHeader:
         self.preset_menu = Menu(workspace.tools.brush.preset + " ▾", presets, font = font)
         self.brush_controls = HStack([self.preset_menu, kit.labelled("Size", self.size_field), kit.labelled("Hardness", self.hardness_field),
                                       kit.labelled("Opacity", self.opacity_field), kit.labelled("Flow", self.flow_field),
-                                      kit.labelled("Spacing", self.spacing_field), kit.button("Brush…", self.open_brush_settings)], spacing = 12.0)
+                                      kit.labelled("Spacing", self.spacing_field), kit.button("Brush…", self.open_brush_settings)], spacing = default_spacing)
         self.tolerance_slider = Slider("Tolerance", 0.0, 255.0, workspace.tools.tolerance, 1.0, font = font)
         kit.keep(self.tolerance_slider.on_change(func (value: float) -> unit!:
             self.workspace.tools.tolerance = value))
         self.contiguous_button = kit.checkbox("Contiguous", self.toggle_contiguous)
-        self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = 12.0)
+        self.wand_controls = HStack([self.tolerance_slider, self.contiguous_button], spacing = default_spacing)
         self.selection_controls = SelectionControls(workspace, kit, self.wand_controls)
         self.crop_controls = CropControls(workspace, kit)
         self.warp_controls = WarpControls(workspace, kit)
@@ -124,7 +124,7 @@ pub class ToolHeader:
         self.controls_box = kit.checkbox("Show Transform Controls", func () -> unit!:
             self.workspace.transforms.show_transform_controls = not self.workspace.transforms.show_transform_controls
             self.workspace.touch())
-        self.move_controls = HStack([self.auto_select_box, self.controls_box], spacing = 12.0)
+        self.move_controls = HStack([self.auto_select_box, self.controls_box], spacing = default_spacing)
         self.transform_controls = TransformControls(workspace, kit)
         self.transform_controls.changed = func () -> unit!:
             if let refresh = self.refreshed:
@@ -143,7 +143,7 @@ pub class ToolHeader:
         let all_layers = self.choice("All Layers", "clone_sample_all", func () -> unit!:
             self.workspace.tools.clone_all = true)
         self.sample_menu = Menu("This Layer ▾", [this_layer, all_layers], font = font)
-        self.clone_controls = HStack([self.aligned_box, kit.labelled("Sample", self.sample_menu)], spacing = 12.0)
+        self.clone_controls = HStack([self.aligned_box, kit.labelled("Sample", self.sample_menu)], spacing = default_spacing)
         let smudge = self.choice("Smudge", "smear_smudge", func () -> unit!:
             self.workspace.tools.smear_mode = 0)
         let blur = self.choice("Blur", "smear_blur", func () -> unit!:
@@ -160,7 +160,7 @@ pub class ToolHeader:
             self.workspace.tools.gradient_reverse = not self.workspace.tools.gradient_reverse)
         self.transparent_box = kit.checkbox("To Transparent", func () -> unit!:
             self.workspace.tools.gradient_transparent = not self.workspace.tools.gradient_transparent)
-        self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = 12.0)
+        self.gradient_controls = HStack([self.gradient_menu, self.reverse_box, self.transparent_box], spacing = default_spacing)
         let shadows = self.choice("Shadows", "tone_shadows", func () -> unit!:
             self.workspace.tools.tone_range = 0)
         let midtones = self.choice("Midtones", "tone_midtones", func () -> unit!:
@@ -170,7 +170,7 @@ pub class ToolHeader:
         self.range_menu = Menu("Midtones ▾", [shadows, midtones, highlights], font = font)
         let exposure = self.scrubber(workspace.tools.tone_exposure * 100.0, 1.0, 100.0, "%", func (value: float) -> unit!:
             self.workspace.tools.tone_exposure = value / 100.0)
-        self.tone_row = HStack([kit.labelled("Range", self.range_menu), kit.labelled("Exposure", exposure)], spacing = 12.0)
+        self.tone_row = HStack([kit.labelled("Range", self.range_menu), kit.labelled("Exposure", exposure)], spacing = default_spacing)
         self.weight_field = self.scrubber(workspace.tools.shape_weight, 1.0, 1000.0, " px", func (value: float) -> unit!:
             self.workspace.tools.shape_weight = value
             restyle_selected(self.workspace))
@@ -198,7 +198,7 @@ pub class ToolHeader:
             field.set_decimals(1)
         self.bar = Toolbar([self.title, self.smear_menu, self.tone_row, self.paint_row, self.radius_row, self.weight_row, self.sides_row, self.gradient_controls, self.brush_controls, self.clone_controls, self.selection_controls.row, self.crop_controls.row, self.text_controls, self.move_controls,
                             self.transform_controls.row, self.warp_controls.row, Spacer(), self.box_controls],
-                           font = font, inset = 10.0, gap = 6.0)
+                           font = font, inset = default_spacing, gap = 4.0)
 
     ## A brush setting's scrubber; `apply` takes each edit.
     ## A shape tool over a selected shape layer shows and edits that layer's

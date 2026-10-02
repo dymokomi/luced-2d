@@ -212,7 +212,7 @@ pub class Panels:
         wiring.menus(self.files, self.view, self.status, self.transform_flow, self.settings_dialog, self.choose_tool, self.define_brush)
         wiring.dialogs(self.adjust, self.style, self.scripts, self.document_settings, self.settings_dialog)
         wiring.layers(self.view, self.toggle_mask, self.toggle_visibility)
-        # The tool rail, as eleusis's viewport rail: 32-point buttons, the active
+        # The tool rail: font-sized square buttons, the active
         # tool selected, and the palette below them.
         self.rail = ToolRail(actions, kit)
         var rail_items: list[Widget] = self.rail.items
@@ -220,8 +220,8 @@ pub class Panels:
         rail_items.append(self.palette)
         # Quick Mask's button under the swatches, as Photoshop's.
         rail_items.append(self.rail.quick)
-        let rail = VStack(rail_items, spacing = 3.0, padding = 6.0)
-        rail.layout().set_limits(Size(44.0, 100.0), Size(44.0, 16384.0))
+        let rail = VStack(rail_items, spacing = 3.0, padding = 4.0)
+        rail.layout().set_limits(Size(kit.tool_side() + 12.0, 100.0), Size(kit.tool_side() + 12.0, 16384.0))
         rail.layout().set_flex(horizontal = 0.0)
         # The viewport: the tool rail beside the canvas, a one-point backdrop rule
         # between them as eleusis's viewport has, and rulers around the canvas;
