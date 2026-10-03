@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     (work / 'package.prisma').write_text('#prisma 4.0\ndef package "luced-2d-preview" {\n    str owner = "dymokomi"\n    str version = "0.0.0"\n    str kind = "tool"\n    str language = "luce"\n    str entry = "src/main.luc"\n' + dependencies + '}\n')
     native = (ROOT.parent / 'luce-gpu/tests/programs/gpu/native.lucb').read_text()
     native += '''
-import files
+import luce_std.files
 import memory
 import ownership
 import strings
