@@ -29,7 +29,7 @@ if arguments.zoom:
     SCENE += '\n            editor.workspace.viewport.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('from brush_mask import BrushMask\n' if 'BrushMask' in SCENE else '') + ('from brush import preset\n' if 'preset(' in SCENE else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('import clipboard\n' if 'clipboard.' in SCENE else '') + ('from ui import Event\n' if 'Event(' in SCENE else '') + ('from ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('from brush_mask import BrushMask\n' if 'BrushMask' in SCENE else '') + ('from brush import preset\n' if 'preset(' in SCENE else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('from luce_clipboard import clipboard\n' if 'clipboard.' in SCENE else '') + ('from luce_ui.ui import Event\n' if 'Event(' in SCENE else '') + ('from luce_ui.ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from luce_window.input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
