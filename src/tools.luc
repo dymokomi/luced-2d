@@ -2,8 +2,8 @@
 ## keeps, the menu name and the shorter title the header shows, its
 ## luciaos-assets icon, its key (with Shift for the second tool on a key, as
 ## Photoshop's Shift-M), and the hint the status line shows while it is active.
-from input import Key
-import ui
+from luce_window.input import Key
+import luce_ui.ui
 
 pub class Tool:
     pub let id: str

@@ -1,10 +1,10 @@
 ## luced-2d's application: it loads the settings, builds the workspace and the
 ## window's panels, opens any files named on the command line, and runs the
 ## window until it closes.
-from ui import Application, Font
+from luce_ui.ui import Application, Font
 from interop import Connection
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from panels import Panels
 from actions import Actions
 from settings import Store
@@ -12,10 +12,10 @@ from tool_memory import tools_path, restore_tools, remember_tools
 from dock_layout import layout_path
 from update_check import UpdateCheck
 import theme
-import crash
+import luce_std.crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.1.129"
+pub let version: str = "0.2.0"
 
 pub class Luce2D:
     pub let app: Application

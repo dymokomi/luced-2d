@@ -3,11 +3,11 @@
 ## press picks the mode (add, subtract; both: intersect); pressed during the
 ## drag, or let go and pressed again, Shift makes the marquee square or
 ## circular and Alt draws it out from its center.
-from ui import Painter, Point
-from gpu import Rect, Color
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Rect, Color
 from workspace import Workspace
 from kit import outline
-import math
+import luce_std.math
 
 pub class SelectionDrag:
     pub var active: bool = false

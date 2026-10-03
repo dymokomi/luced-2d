@@ -4,7 +4,7 @@
 ## exported, which leaves the document's file alone (Compositor's split). A
 ## tab with unsaved changes asks Save / Don't Save / Cancel before it closes,
 ## and quitting asks about each one in turn.
-from ui import Application, ConfirmDialog
+from luce_ui.ui import Application, ConfirmDialog
 from workspace import Workspace
 from prompts import Prompts
 from export_dialog import ExportDialog

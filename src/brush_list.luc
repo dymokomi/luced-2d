@@ -8,14 +8,14 @@
 ## thousand brushes never needs a texture its whole height; strokes are drawn
 ## a few a frame, those in sight first, so unfolding a group of hundreds
 ## never stalls the window.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Image
-from gpu import RenderTarget, Rect
-from input import EventKind, Cursor, ScrollUnit
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Image
+from luce_gpu.gpu import RenderTarget, Rect
+from luce_window.input import EventKind, Cursor, ScrollUnit
 from brush import Brush
-from brush_mask import BrushMask
+from luce_painting.brush_mask import BrushMask
 from theme import Look
 import theme
-import math
+import luce_std.math
 import time
 
 ## The thumbnail stroke's size in points.

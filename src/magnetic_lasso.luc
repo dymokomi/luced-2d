@@ -4,10 +4,10 @@
 ## one, Backspace or Delete takes the last back, double-click, Enter or a
 ## click on the first anchor closes the shape along the edge, Esc lets it go.
 ## The canvas traces the wire over the view's pyramid level (canvas/magnetic.lucb).
-from ui import Painter, Point
-from gpu import Rect, Color
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Rect, Color
 from workspace import Workspace
-import math
+import luce_std.math
 
 pub class MagneticLasso:
     pub var active: bool = false

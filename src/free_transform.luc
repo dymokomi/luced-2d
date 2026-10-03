@@ -7,7 +7,7 @@
 ## With a vector layer's element active (vectors.luc) only that element moves:
 ## its outline is shown through the box (the view draws it) and it is drawn
 ## again, crisp, on Apply; it follows scale, turn and move, not distortion.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from transform_box import TransformBox, mode_skew, mode_distort, mode_perspective
 from vector_outline import outline_box
 

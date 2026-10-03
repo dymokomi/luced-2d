@@ -1,12 +1,12 @@
 ## The rulers along the top and left of the canvas, and the corner where they
 ## meet.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
-from input import EventKind
-from gpu import RenderTarget, Rect
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from luce_window.input import EventKind
+from luce_gpu.gpu import RenderTarget, Rect
 from workspace import Workspace
 from view import CanvasView
 import theme
-import math
+import luce_std.math
 
 ## A ruler along the top or the left of the canvas, as Photoshop's: ticks in the
 ## chosen unit from the document's origin, following zoom and pan, labelled at

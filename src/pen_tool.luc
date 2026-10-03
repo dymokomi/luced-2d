@@ -11,12 +11,12 @@
 ## alongside the pen: drag an anchor or a handle (Alt drags one handle alone,
 ## breaking the pair), click the curve to add an anchor there, click an anchor
 ## to take it away. Each edit is one step.
-from ui import Painter, Point
-from gpu import Rect, Color
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Rect, Color
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from vectors import active_element, vector_layer
-import math
+import luce_std.math
 
 ## One anchor, in document pixels: the point and the handles coming in and
 ## going out. A corner's handles sit on its point.

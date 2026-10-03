@@ -4,7 +4,7 @@
 ## Tab's search (type part of a name, Enter) or the footer's +; they land where
 ## the pointer last pressed. The graph's output is the layer's art: every
 ## change draws the canvas again, only where its shapes changed.
-from ui import Panel, VStack, HStack, Shelf, Spacer, Size, ContextMenu, TextField, Command, CommandPalette
+from luce_ui.ui import Panel, VStack, HStack, Shelf, Spacer, Size, ContextMenu, TextField, Command, CommandPalette
 from workspace import Workspace
 from kit import Kit
 from menus import divider

@@ -2,7 +2,7 @@
 ## by their edges or centers, two spacing three or more evenly, and a line
 ## saying what they line up against. Each button runs the Layer menu's
 ## command of the same name (align.luc does the work).
-from ui import Panel, Text, VStack, HStack, Spacer, Size, Command, Widget
+from luce_ui.ui import Panel, Text, VStack, HStack, Spacer, Size, Command, Widget
 from workspace import Workspace
 from align import align_modes, align_icon
 from kit import Kit

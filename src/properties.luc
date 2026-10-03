@@ -5,7 +5,7 @@
 ## workspace directly. An adjustment layer shows its settings below, as
 ## Photoshop's Properties panel does — Levels with its histogram — and every
 ## change adjusts the picture live.
-from ui import Text, VStack, Size, Spacer, Command, Panel, ScrollView, ParameterPanel, ParameterSpec, ParameterKind
+from luce_ui.ui import Text, VStack, Size, Spacer, Command, Panel, ScrollView, ParameterPanel, ParameterSpec, ParameterKind
 from workspace import Workspace
 from kit import Kit
 from adjustment_controls import AdjustmentControls

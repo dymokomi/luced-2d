@@ -1,14 +1,14 @@
 ## The Properties pane and the adjustment rows on luce-ui's ParameterPanel:
 ## the layer's rows show the model, an adjustment's sliders and pages keep
 ## their values, and a kit number row reports typed arithmetic.
-from ui import Font, Application, VStack, Event
-from gpu import Frame
+from luce_ui.ui import Font, Application, VStack, Event
+from luce_gpu.gpu import Frame
 from workspace import Workspace
 from panels import Panels
 from actions import Actions
 from kit import Kit
-from input import EventKind, Key
-import window
+from luce_window.input import EventKind, Key
+import luce_window.window
 
 pub func properties_rows() -> unit!:
     let workspace = Workspace(64, 48)

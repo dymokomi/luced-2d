@@ -4,10 +4,10 @@
 ## open hand that closes while it pans, the picking and drawing tools thin
 ## cross hairs, the Text tool its I-beam. The magnifier is drawn by the view,
 ## so the system cursor hides under it.
-from ui import Painter, Point
-from gpu import Color
-from input import Cursor
-import math
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Color
+from luce_window.input import Cursor
+import luce_std.math
 
 ## The system cursor for `tool`; `hidden` where the view draws its own.
 pub func cursor_for(tool: str, panning: bool, space: bool, small_tip: bool) -> Cursor:

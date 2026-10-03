@@ -1,8 +1,8 @@
 ## The Eyedropper, and any tool while the color picker samples: held down,
 ## its ring shows the color under it over the foreground as it was, which it
 ## keeps sampling as it moves.
-from ui import Event
-from gpu import Color
+from luce_ui.ui import Event
+from luce_gpu.gpu import Color
 from tool_handler import ToolHandler, ToolContext
 
 pub class EyedropperTool: ToolHandler:

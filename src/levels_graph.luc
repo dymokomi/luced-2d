@@ -5,11 +5,11 @@
 ## of the way from black to white. Dragging a handle changes that value and
 ## says so through `on_change`; the values are in Levels' shown units (0..255,
 ## gamma 0.1..9.99).
-from ui import Widget, Layout, Size, Constraints, Event, Painter
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor
 import theme
-import math
+import luce_std.math
 
 ## Which handle a press took.
 let no_handle: int = -1

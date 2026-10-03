@@ -3,8 +3,8 @@
 ## slider (a one-row ParameterPanel: scrub, the value ladder, typed arithmetic). A Kit keeps each signal connection it makes; `close`
 ## drops them all. Also two helpers widgets share: a one-point outline, and
 ## the dragged files a drop area takes.
-from ui import Font, Text, Button, Dialog, HStack, Size, Checkbox, ButtonStyle, Widget, Command, Layout, Painter, ParameterPanel, ParameterSpec
-from gpu import Rect, Color
+from luce_ui.ui import Font, Text, Button, Dialog, HStack, Size, Checkbox, ButtonStyle, Widget, Command, Layout, Painter, ParameterPanel, ParameterSpec
+from luce_gpu.gpu import Rect, Color
 from interop import Connection
 
 ## A number field with its slider, as one parameter row without a label:

@@ -1,6 +1,6 @@
 ## Edit › Settings…: the dialog for what a machine keeps for luced-2d — the new
 ## canvas size, the shortcuts, the theme — edited as a draft and saved together.
-from ui import Widget, Font, Text, Button, VStack, HStack, Spacer, Size, Dialog, ListView, ListItem, TableView, TableColumn, TableCell, NumberField, TextField, Command, Shortcut, ShortcutField, Application, Rule
+from luce_ui.ui import Widget, Font, Text, Button, VStack, HStack, Spacer, Size, Dialog, ListView, ListItem, TableView, TableColumn, TableCell, NumberField, TextField, Command, Shortcut, ShortcutField, Application, Rule
 from interop import Connection
 from workspace import Workspace
 from actions import Actions

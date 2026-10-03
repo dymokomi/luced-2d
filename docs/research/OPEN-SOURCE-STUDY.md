@@ -27,7 +27,7 @@ The target is unchanged: 15000 × 24000 px (360 MP), `rgba16_float`, 256 px immu
 
 1. **The slow Vulkan readback is our transfer plumbing, not GPU-canonical storage.** Nothing
    studied moves pixels between host and device the way we do:
-   - **The pattern:** `luce-gpu/src/luce_gpu/gpu/vulkan/texture.lucb` `vulkan_texture_read`
+   - **The pattern:** `luce-gpu/src/gpu/vulkan/texture.lucb` `vulkan_texture_read`
      creates a `VkBuffer` and calls `vkAllocateMemory`, records one copy, submits, waits on the
      fence, maps, copies, unmaps and frees. It does all of that for every call.
    - **How often:** the Magic Wand and Load Selection call it once per 256 px cell
@@ -230,7 +230,7 @@ reads are 10–20× slower on their own.
      mapped slot.
    - `Texture.read` stays as a thin synchronous wrapper.
    - This is the `Batch` of CANVAS-ENGINE.md §8.1 with readbacks in it.
-4. **luce-canvas: a bulk read API** (`luce-canvas/src/luce_canvas/tiles.lucb`, then the `store`
+4. **luce-canvas: a bulk read API** (`luce-canvas/src/tiles.lucb`, then the `store`
    module).
    - `store.read_cells(cells[], format, visit(cell, bytes))` records every cell of a batch, waits
      once, and calls `visit` on workers while the next batch is on the GPU.

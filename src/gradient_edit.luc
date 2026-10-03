@@ -3,9 +3,9 @@
 ## the gradient is drawn again from the pixels as they were; the header's
 ## options and the colors apply at once. Enter or Apply keeps it as one undo
 ## step, Esc or Cancel drops it, and a new drag keeps it and starts another.
-from ui import Painter, Point
-from gpu import Rect, Color
-import math
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Rect, Color
+import luce_std.math
 
 pub class GradientEdit:
     ## The ends, in document pixels: from the first color to the second.

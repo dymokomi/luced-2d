@@ -5,15 +5,15 @@
 ## time it is used (`load_images`), so a library of a thousand opens at once.
 ## A brush travels alone as one `.l2dbrush` file: the same TOML, then each
 ## image as base64 PNG after a `#@ tip.png` or `#@ texture.png` line.
-from toml import Table
+from luce_config.toml import Table
 from brush import Brush, max_brush
-from brush_mask import BrushMask
-from brush_files import open_brush_mask, save_brush_mask, brush_mask_png_text, brush_mask_from_png_text
+from luce_painting.brush_mask import BrushMask
+from luce_image.brush_files import open_brush_mask, save_brush_mask, brush_mask_png_text, brush_mask_from_png_text
 from brush_dynamics import no_mappings, control_ids, parameter_ids
-from files import Entries
-import files
-import paths
-import ui
+from luce_std.files import Entries
+import luce_std.files
+import luce_std.paths
+import luce_ui.ui
 
 ## A saved brush: its name, the folder it lives in (a name under the library),
 ## the brush, and the group it is listed under ("" for none): an imported

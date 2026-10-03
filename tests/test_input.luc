@@ -4,10 +4,10 @@
 from workspace import Workspace
 from actions import Actions
 from view import CanvasView
-from ui import Event
-from input import EventKind
-from ui import Command
-import math
+from luce_ui.ui import Event
+from luce_window.input import EventKind
+from luce_ui.ui import Command
+import luce_std.math
 
 pub func press(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
     view.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = 0, inside = true, shift = shift, alt = alt))

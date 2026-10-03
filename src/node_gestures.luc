@@ -6,11 +6,11 @@
 ## its box touches; Delete deletes them. Space, Alt or the middle button drag
 ## the view; scrolling pans it, and a wheel, a pinch or scrolling with Cmd
 ## zooms about the pointer, as on the canvas.
-from ui import Event, Point
-from input import EventKind, Key, ScrollUnit
+from luce_ui.ui import Event, Point
+from luce_window.input import EventKind, Key, ScrollUnit
 from node_layout import NodeLayout, node_width
 from node_graph import GraphLink, connect, disconnect, rewire, move_nodes, delete_nodes, ports_fit
-import math
+import luce_std.math
 
 ## What a drag is doing.
 let idle: int = 0

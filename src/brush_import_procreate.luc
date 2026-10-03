@@ -5,15 +5,15 @@
 ## size runs between the brush's own limits. Taper, wet mixing, moving grain
 ## and smudge settings have no counterpart and are left out; a brush built
 ## on one of Procreate's bundled shapes paints round.
-from procreate import ProcreateBrush
+from luce_procreate.brush import ProcreateBrush
 from brush import Brush, max_brush
 from brush_library import SavedBrush
-from brush_mask import BrushMask
+from luce_painting.brush_mask import BrushMask
 from brush_dynamics import no_mappings, mapped
-from brush_files import brush_mask_of
-from image import Image
-import math
-import paths
+from luce_image.brush_files import brush_mask_of
+from luce_image.image import Image
+import luce_std.math
+import luce_std.paths
 
 ## Procreate's size at 100%, in pixels, before the brush's own limits.
 let full_size: float = 100.0

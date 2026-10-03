@@ -3,9 +3,9 @@
 ## resolution), optionally relative to the size now (Canvas Size's "Relative"),
 ## with the aspect ratio kept when locked. The dialogs read the result in
 ## whole pixels.
-from ui import Widget, Text, HStack, VStack, Spacer, Size, NumberField, Checkbox, Menu, Command, Font
+from luce_ui.ui import Widget, Text, HStack, VStack, Spacer, Size, NumberField, Checkbox, Menu, Command, Font
 from interop import Connection
-import math
+import luce_std.math
 from units import unit_label, pixels_per
 
 pub class SizeFields:

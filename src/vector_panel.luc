@@ -5,7 +5,7 @@
 ## renames, makes a selection from it and deletes it; the footer makes a new
 ## empty path for the Pen, makes a selection from the active element,
 ## duplicates it and deletes it. A name is edited in its own row.
-from ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Command
+from luce_ui.ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Command
 from workspace import Workspace
 from kit import Kit
 from vector_list import VectorList

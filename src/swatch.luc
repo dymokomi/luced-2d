@@ -1,9 +1,9 @@
 ## A color swatch, a small bordered patch of its color, that says when it
 ## is clicked (the color picker opens on it): a layer style's colors, a
 ## Gradient Map's ends.
-from ui import Widget, Layout, Size, Constraints, Event, Painter
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor
 import theme
 
 pub class Swatch: Widget:

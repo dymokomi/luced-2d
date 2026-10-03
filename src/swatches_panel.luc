@@ -2,14 +2,14 @@
 ## foreground color, Alt-click the background; right-click deletes a swatch;
 ## the "+" below adds the foreground color. The colors are kept in
 ## settings.toml as sRGB hex, so they outlast the run.
-from ui import Panel, Widget, Layout, Size, Constraints, Event, Painter, Shelf, Spacer, ScrollView
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from luce_ui.ui import Panel, Widget, Layout, Size, Constraints, Event, Painter, Shelf, Spacer, ScrollView
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 from kit import Kit
 from hex_color import parse_hex, hex_of_linear, linear_of_hex
 import theme
-import math
+import luce_std.math
 
 pub class SwatchesPanel:
     pub let panel: Panel

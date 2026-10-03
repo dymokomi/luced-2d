@@ -3,8 +3,8 @@
 ## keys), the dialogs, and the layers. panels.luc builds the window and hands
 ## the parts here; most commands refresh the window after, and those that can
 ## fail say why in a prompt (`Prompts.attempt`).
-from ui import Text
-from canvas import Canvas
+from luce_ui.ui import Text
+from luce_image.canvas import Canvas
 from workspace import Workspace
 from actions import Actions
 from kit import Kit

@@ -6,11 +6,11 @@
 ## and Apply keeps it as one undo step. The work is luce-image's adjust pass
 ## (adjustment 17), a pixel at a time on the GPU, so it costs no read of the
 ## document on any size.
-from ui import Text, HStack, Spacer, Dialog, Checkbox
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Checkbox
 from workspace import Workspace
 from kit import Kit, SliderField
 from preview_session import PreviewDialogSession
-import transfer
+import luce_color.transfer
 
 ## luce-image's Replace Color adjustment, and how many samples it takes.
 let replace_kind: int = 17

@@ -2,8 +2,8 @@
 ## filters, Color Range and Replace Color, Hue/Saturation on the image, the
 ## panel catalog, the navigator, aligning, dock layouts, Select and Mask,
 ## Quick Mask and the Color panel.
-from ui import Font
-from gpu import Frame
+from luce_ui.ui import Font
+from luce_gpu.gpu import Frame
 from workspace import Workspace
 from panels import Panels
 from actions import Actions
@@ -14,24 +14,24 @@ from size_fields import SizeFields
 from magnetic_lasso import MagneticLasso, view_level
 from adjustments import adjustments
 from settings import Settings
-from ui import Event, Application
+from luce_ui.ui import Event, Application
 from layer_effects import EffectRows
 from adjustment_controls import range_of
 from tools import group_of
 from script_commands import parse_line, ScriptCommands
-import paths
-import files
-from input import EventKind, Key
+import luce_std.paths
+import luce_std.files
+from luce_window.input import EventKind, Key
 from swatches_panel import swatches_of
 from align import align_layers
 from dock_layout import parse_layout
-from gpu import Rect
+from luce_gpu.gpu import Rect
 from kit import Kit
 from color_panel import ColorPanel
-from ui import ColorWheel
-import transfer
-import math
-import window
+from luce_ui.ui import ColorWheel
+import luce_color.transfer
+import luce_std.math
+import luce_window.window
 from test_input import press, drag_to, release, near, window_command, foreground
 
 ## The Layers panel's operations: titles fitted to the selection, groups

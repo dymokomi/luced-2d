@@ -7,8 +7,8 @@
 from workspace import Workspace
 from vectors import vector_layer, new_vector_layer
 from node_graph import KindInfo, node_catalog, kind_named, add_node, connect, disconnect, set_node_value, param_color
-import transfer
-import ui
+import luce_color.transfer
+import luce_ui.ui
 
 ## The names a run gave its nodes, and the ids they stand for.
 pub class NodeNames:

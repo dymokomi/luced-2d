@@ -2,13 +2,13 @@
 ## shadows' end and one for the highlights', each opening the color picker.
 ## They start as the foreground and background colors and are the map's own
 ## from then on, kept with an adjustment layer.
-from ui import HStack, Text
-from gpu import Color
+from luce_ui.ui import HStack, Text
+from luce_gpu.gpu import Color
 from swatch import Swatch
 from workspace import Workspace
 from kit import Kit
 from hex_color import hex_of_srgb, parse_hex
-import transfer
+import luce_color.transfer
 
 pub class MapColors:
     pub let row: HStack

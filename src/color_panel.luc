@@ -5,8 +5,8 @@
 ## wheel over a brightness strip, or channel sliders. Clicking a swatch picks
 ## which color is edited (a second click on it opens the full picker); every
 ## edit sets that color at once, a drag every step.
-from ui import Panel, VStack, HStack, Text, TextField, Spacer, Size, Menu, Command, ColorWheel, ShadedField
-from gpu import Color
+from luce_ui.ui import Panel, VStack, HStack, Text, TextField, Spacer, Size, Menu, Command, ColorWheel, ShadedField
+from luce_gpu.gpu import Color
 from workspace import Workspace
 from kit import Kit
 from palette import Palette
@@ -14,10 +14,10 @@ from hex_color import parse_hex, hex_of_srgb
 from color_model import StableHsb, model_ids, model_index
 from color_sliders import ColorSliders
 from color_picker import linear_of
-import color as science
-import hsl
-import transfer
-import math
+import luce_color.color as science
+import luce_color.hsl
+import luce_color.transfer
+import luce_std.math
 
 ## The modes, in the menu's order: their names in the settings and on screen.
 pub func mode_ids() -> list[str]:

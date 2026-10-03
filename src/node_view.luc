@@ -4,15 +4,15 @@
 ## sight, and every wire of one color as one batch of triangles, so hundreds of
 ## nodes and wires stay quick. Where things are is node_layout.luc's; what the
 ## pointer does, node_gestures.luc's.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point
-from gpu import RenderTarget, Rect, Color
-from input import Cursor, EventKind, Key
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import Cursor, EventKind, Key
 from workspace import Workspace
 from node_graph import GraphNode, KindInfo, node_value, shown_number, port_shapes, port_points, port_number, port_color, param_whole
 from node_layout import NodeLayout, node_width, title_height
 from node_gestures import NodeGestures
 import theme
-import math
+import luce_std.math
 
 ## Below this size the rows go and the titles stay. At 100%, node text uses
 ## the application's shared UI font.

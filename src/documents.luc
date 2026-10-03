@@ -1,8 +1,8 @@
 ## One open document: its canvas, where it lives, and the view state that
 ## belongs to it. The workspace holds one of these per tab and keeps the
 ## current one's fields live on itself, so the tools never look past it.
-from canvas import Canvas
-import paths
+from luce_image.canvas import Canvas
+import luce_std.paths
 
 pub class Document:
     pub var canvas: Canvas

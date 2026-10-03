@@ -3,7 +3,7 @@
 ## `collapsed` the groups folded shut in the Layers panel. It also finds layers
 ## by id and under a point, and the layers a move takes.
 from live import Live
-import math
+import luce_std.math
 
 pub class LayerPicking:
     let live: Live

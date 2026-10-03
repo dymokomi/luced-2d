@@ -1,11 +1,11 @@
 ## Work that goes on while the window does: Select and Mask's OK refining in
 ## the background, dropped pictures opening one after another, History
 ## following the steps as they are recorded, and Load Selection's Invert.
-from ui import Font
+from luce_ui.ui import Font
 from workspace import Workspace
 from panels import Panels
 from actions import Actions
-import paths
+import luce_std.paths
 
 pub func background_tests(arguments: list[str]) -> unit!:
     refine_in_background()

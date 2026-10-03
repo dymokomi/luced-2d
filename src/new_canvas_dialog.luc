@@ -1,7 +1,7 @@
 ## File › New…, as Compositor's New Canvas: a size in pixels and a
 ## resolution, starting from the image on the clipboard when there is one
 ## (the "Clipboard" button puts its size back).
-from ui import Text, HStack, Spacer, Dialog, NumberField, Button
+from luce_ui.ui import Text, HStack, Spacer, Dialog, NumberField, Button
 from system_hooks import clipboard_picture_width, clipboard_picture_height
 from workspace import Workspace
 from kit import Kit

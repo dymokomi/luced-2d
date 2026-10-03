@@ -3,7 +3,7 @@
 ## Redo would bring back below it. Clicking a step undoes or redoes to it.
 ## A step shows the frame it is recorded in (`poll`), not when the window next
 ## refreshes: a smudge's step is kept frames after the stroke ends.
-from ui import Panel, ListView, ListItem, Size
+from luce_ui.ui import Panel, ListView, ListItem, Size
 from workspace import Workspace
 from kit import Kit
 

@@ -2,20 +2,20 @@
 ## built from: a swatch well, the new-over-current preview and the row of
 ## recent colors. The picker edits the foreground or background color in
 ## HSB, RGB, Lab, OkLCh or hex, sampling from the canvas while open.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Dialog, ShadedField, NumberField, TextField, Text, Button, ButtonStyle, HStack, VStack, Spacer, Rule
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Dialog, ShadedField, NumberField, TextField, Text, Button, ButtonStyle, HStack, VStack, Spacer, Rule
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor
 from interop import Connection
 from workspace import Workspace
 from hex_color import parse_hex, hex_of_srgb
-import color as science
-import hsl
-import lab
-import oklab
-import space
-import transfer
+import luce_color.color as science
+import luce_color.hsl
+import luce_color.lab
+import luce_color.oklab
+import luce_color.space
+import luce_color.transfer
 import theme
-import math
+import luce_std.math
 
 ## A color shown in a rounded well.
 pub class Swatch: Widget:

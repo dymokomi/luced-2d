@@ -6,17 +6,17 @@
 ## duplicates, renames (also a double-click on the name) and deletes, and
 ## imports brush files (luced-2d's `.l2dbrush`, Photoshop's `.abr`,
 ## Procreate's `.brush`) and exports `.l2dbrush` files to share.
-from ui import Panel, Shelf, Spacer, Size, TextField, VStack, ConfirmDialog
+from luce_ui.ui import Panel, Shelf, Spacer, Size, TextField, VStack, ConfirmDialog
 from workspace import Workspace
 from brush import Brush, preset, preset_names, max_brush
-from brush_mask import BrushMask
+from luce_painting.brush_mask import BrushMask
 from brush_library import SavedBrush, library_path, load_library, save_brush, delete_brush, free_folder, export_brush
 from brush_import import import_brushes
 from brush_list import BrushList, stroke_thumbnail
 from brush_settings import BrushSettings
 from kit import Kit
 from theme import Look
-import math
+import luce_std.math
 
 pub class BrushesPanel:
     pub let panel: Panel

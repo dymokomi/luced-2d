@@ -2,7 +2,7 @@
 ## how a new shape combines with the selection when no modifier is held
 ## (new, add, subtract, intersect), its feather and anti-aliasing, and the
 ## wand's sample size and whether it samples every layer.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 
 pub class SelectionOptions:
     ## 0 new, 1 add, 2 subtract, 3 intersect.

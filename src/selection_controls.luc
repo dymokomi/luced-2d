@@ -2,7 +2,7 @@
 ## Compositor's: the four modes (new, add, subtract, intersect) as buttons,
 ## Feather, Anti-alias, for the wand its Sample Size and All Layers, and for
 ## the Magnetic Lasso its Width, Contrast and Frequency.
-from ui import Widget, HStack, Button, ButtonStyle, NumberField, Checkbox, Menu, Command
+from luce_ui.ui import Widget, HStack, Button, ButtonStyle, NumberField, Checkbox, Menu, Command
 from workspace import Workspace
 from kit import Kit
 

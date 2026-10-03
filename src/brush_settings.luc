@@ -6,13 +6,13 @@
 ## them. Edits go straight to the workspace's brush; the next stroke paints
 ## with them. A dockable panel: it opens floating over the workspace and docks
 ## wherever the user puts it.
-from ui import VStack, Size, Spacer, Menu, Command, Widget, DStack, Panel, Checkbox, Accordion, ScrollView, Application
+from luce_ui.ui import VStack, Size, Spacer, Menu, Command, Widget, DStack, Panel, Checkbox, Accordion, ScrollView, Application
 from workspace import Workspace
 from kit import Kit, SliderField
 from dynamics_rows import DynamicsRow
 from mask_editor import MaskEditor
-from brush_mask import BrushMask
-from brush_files import brush_mask_of
+from luce_painting.brush_mask import BrushMask
+from luce_image.brush_files import brush_mask_of
 from brush import Brush
 
 pub class BrushSettings:

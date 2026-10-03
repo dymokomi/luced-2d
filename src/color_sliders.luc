@@ -1,6 +1,6 @@
 ## The Color panel's Sliders mode: one slider per channel of the model chosen
 ## in its menu (RGB, HSB, Lab or grayscale), each paired with a number field.
-from ui import VStack, Menu, Command, Widget
+from luce_ui.ui import VStack, Menu, Command, Widget
 from kit import Kit, SliderField
 from color_model import StableHsb, model_ids, model_names, channel_labels, channel_low, channel_high, channel_suffix, channels_of, take_channels
 

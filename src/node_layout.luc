@@ -2,10 +2,10 @@
 ## the pan and zoom that show graph space in the view, what is selected, and a
 ## drag of nodes under way (drawn moved before the move is a step). The view
 ## draws from it and the gestures hit-test through it.
-from ui import Point
+from luce_ui.ui import Point
 from workspace import Workspace
 from node_graph import GraphSnapshot, GraphNode, KindInfo, node_catalog
-import math
+import luce_std.math
 
 ## A node's size in graph space: its width, its title bar and a row an input.
 pub let node_width: float = 176.0

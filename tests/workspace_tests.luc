@@ -1,9 +1,9 @@
 ## The workspace headless: layers and picking, the view's fit and zoom, the
 ## checkerboard, documents and unsaved work, settings kept across runs.
-from ui import Font
-from gpu import Frame
+from luce_ui.ui import Font
+from luce_gpu.gpu import Frame
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from panels import Panels
 from actions import Actions
 from view import CanvasView
@@ -13,13 +13,13 @@ from settings import Settings, Store
 from settings_panel import SettingsDialog
 from update_check import newer
 from tool_memory import tools_path, restore_tools, remember_tools
-import paths
-import files
+import luce_std.paths
+import luce_std.files
 from layer_transfer import copy_layers, paste_layers, send_layers
 from brush_dynamics import mapped
-from brush_mask import BrushMask
+from luce_painting.brush_mask import BrushMask
 from brush_library import brush_text
-import window
+import luce_window.window
 from test_input import near
 
 pub func layers() -> unit!:

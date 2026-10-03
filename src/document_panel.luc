@@ -1,9 +1,9 @@
 ## Image › Document Settings…: the dialog for the document's size, resolution,
 ## display unit, color profile and how its colors blend.
-from ui import Widget, Font, Text, Button, HStack, Spacer, Size, Dialog, NumberField, Checkbox, Menu, Command
+from luce_ui.ui import Widget, Font, Text, Button, HStack, Spacer, Size, Dialog, NumberField, Checkbox, Menu, Command
 from interop import Connection
 from workspace import Workspace
-import math
+import luce_std.math
 from units import unit_ids, unit_label, unit_suffix, pixels_per
 
 ## Image › Document Settings…: the document's size in the chosen unit, its

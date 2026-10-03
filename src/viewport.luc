@@ -4,7 +4,7 @@
 ## unit rulers and sizes are shown in.
 from live import Live
 from units import pixels_per
-import math
+import luce_std.math
 
 pub class Viewport:
     let live: Live

@@ -2,7 +2,7 @@
 ## dialogs luced-2d does not have yet: it asks for a line of text — a size, a
 ## name, a path, an amount — and `apply` carries out what was asked for, or
 ## asks again with what was wrong. A mode of "" only shows a message.
-from ui import TextPrompt, Font
+from luce_ui.ui import TextPrompt, Font
 from workspace import Workspace
 
 pub class Prompts:

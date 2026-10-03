@@ -5,9 +5,9 @@
 ## per tool family) after the gestures that come before any tool — panning,
 ## sizing the brush, a guide, a warp, a box, a dialog's eyedropper; drags
 ## and the release go to whichever gesture is under way.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
-from gpu import RenderTarget, Rect
-from input import EventKind, Cursor, ScrollUnit
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from luce_gpu.gpu import RenderTarget, Rect
+from luce_window.input import EventKind, Cursor, ScrollUnit
 from workspace import Workspace
 from kit import outline, dropped_paths
 from polygon_lasso import PolygonLasso
@@ -30,7 +30,7 @@ from move_tool import MoveTool, whole
 from view_aids import ViewAids
 from view_keys import ViewKeys
 import theme
-import math
+import luce_std.math
 
 ## The document on screen: backdrop, checkerboard under transparent pixels,
 ## the flattened document at the workspace's zoom and offset, and a hairline

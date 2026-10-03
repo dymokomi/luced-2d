@@ -1,7 +1,7 @@
 ## File › Export JPEG…: the quality and the matte before the file is chosen, as
 ## Compositor's JPEG export sheet. JPEG keeps no transparency, so what is
 ## see-through is laid over the matte: white, 50% gray or black.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Menu, Command
 from kit import Kit, SliderField
 
 pub class ExportDialog:

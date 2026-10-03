@@ -5,7 +5,7 @@
 ## and let go to take it — and a right-click opens it for a click; the tool
 ## chosen then shows on the button. A key or a menu choosing a grouped tool
 ## brings it to the front too.
-from ui import Widget, Button, ButtonStyle, ContextMenu, Command
+from luce_ui.ui import Widget, Button, ButtonStyle, ContextMenu, Command
 from actions import Actions
 from kit import Kit
 from tools import tools, tool_groups, group_of, tool_by_id

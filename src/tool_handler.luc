@@ -3,7 +3,7 @@
 ## starts a gesture reports it `active`, and the drags and the release go to
 ## the active one. The handlers share a `ToolContext`: the workspace, what
 ## pulls while a gesture snaps, and the callbacks to the window.
-from ui import Event
+from luce_ui.ui import Event
 from workspace import Workspace
 from snapping import Snapper
 import time

@@ -5,8 +5,8 @@
 ## float above. Each part lives in its own module; this one composes them,
 ## wires every shared command to what the window does for it, and refreshes
 ## them all when the document changes.
-from ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, Rule, ContextMenu, NumberField
-from input import Key
+from luce_ui.ui import Font, Text, VStack, HStack, Toolbar, Size, Spacer, Widget, DStack, Panel, Rule, ContextMenu, NumberField
+from luce_window.input import Key
 from workspace import Workspace
 from actions import Actions
 from view import CanvasView
@@ -44,7 +44,7 @@ from panel_catalog import PanelCatalog
 from panel_list import panel_entries
 from dock_layout import DockLayout
 from align import align_modes, align_layers
-import math
+import luce_std.math
 from units import unit_ids
 from transform_flow import TransformFlow
 from panel_prompts import PanelPrompts

@@ -2,13 +2,13 @@
 ## finished on a worker thread wants a frame, and the system clipboard's
 ## pictures and text. luce-image and luce-canvas touch neither; they hand
 ## pictures out and take them in.
-import clipboard
+import luce_clipboard.clipboard
 import interop
 import memory
-import wake
-import window
-from canvas import Canvas
-from image import Image
+import luce_canvas.wake
+import luce_window.window
+from luce_image.canvas import Canvas
+from luce_image.image import Image
 
 ## Have the engine's workers wake the window's loop (which may sleep until
 ## input) whenever they finish something a frame should take in.

@@ -1,16 +1,16 @@
 ## The Vector panel's list: a row per vector element of the selected layer —
 ## its eye, a thumbnail of its outline and its name — the topmost first, as
 ## Photoshop lists its paths.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, draw_icon
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor, Key
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font, Point, draw_icon
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor, Key
 from workspace import Workspace
 from vector_outline import Outline, element_outline
 from vectors import element_count, active_element, activate, show_element, move_element, select_element, kind_label, delete_element
 import theme
-import math
+import luce_std.math
 import time
-import transfer
+import luce_color.transfer
 
 ## Outline points a thumbnail draws at most: an SVG outline's thousands are thinned.
 let thumb_points: int = 240

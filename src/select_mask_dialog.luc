@@ -7,7 +7,7 @@
 ## the newest setting cancelling an older one still working, so a slider drag
 ## keeps up on any document. OK refines all of it at full size as one step,
 ## Cancel leaves the selection as it was.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Menu, Command
 from workspace import Workspace
 from kit import Kit, SliderField
 from preview_session import PreviewDialogSession

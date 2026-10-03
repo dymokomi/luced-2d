@@ -2,12 +2,12 @@
 ## (dragged out, their corners pulling to what snaps), the Magic Wand, the
 ## Polygonal and Magnetic Lassos (clicked corner by corner), and, for all but
 ## the last two, a drag inside the selection moving its outline.
-from ui import Event
+from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext, now_ms
 from selection_drag import SelectionDrag
 from polygon_lasso import PolygonLasso
 from magnetic_lasso import MagneticLasso
-import math
+import luce_std.math
 
 ## A selection tool pressed inside the selection drags its outline by whole
 ## pixels; a click without a drag selects again with the wand, or deselects.

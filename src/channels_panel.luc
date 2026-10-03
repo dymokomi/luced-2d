@@ -4,7 +4,7 @@
 ## and deletes an alpha channel; the footer loads the picked one as the
 ## selection, saves the selection as a new one, makes an empty one and
 ## deletes one. A name is edited in its own row.
-from ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Command
+from luce_ui.ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Command
 from workspace import Workspace
 from kit import Kit
 from channel_list import ChannelList

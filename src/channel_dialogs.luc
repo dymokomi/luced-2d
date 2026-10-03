@@ -2,7 +2,7 @@
 ## selection kept as a named alpha channel, and a channel brought back as
 ## the selection — new, added, subtracted or intersected, or inverted first.
 ## Each one step.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command, TextField, Checkbox
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Menu, Command, TextField, Checkbox
 from interop import Connection
 from workspace import Workspace
 from kit import Kit

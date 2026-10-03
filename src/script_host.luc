@@ -6,14 +6,14 @@
 ## `@l2d` line the script prints is done as it arrives; anything else it
 ## prints, and whatever goes wrong, goes to the console. The whole run is one
 ## undo step.
-from process import Command
-from canvas import Canvas
+from luce_std.process import Command
+from luce_image.canvas import Canvas
 from workspace import Workspace
 from actions import Actions
 from script_commands import ScriptCommands, parse_line
 from script_api_text import api_source
-import files
-import paths
+import luce_std.files
+import luce_std.paths
 import platform
 import thread
 

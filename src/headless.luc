@@ -8,10 +8,10 @@ from workspace import Workspace
 from script_host import ScriptHost
 from actions import Actions
 from panels import Panels
-from ui import Font
-from canvas import Canvas
+from luce_ui.ui import Font
+from luce_image.canvas import Canvas
 from settings import Store
-import files
+import luce_std.files
 
 ## Whether `arguments` ask for headless mode.
 pub func wants_headless(arguments: list[str]) -> bool:

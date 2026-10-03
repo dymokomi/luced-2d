@@ -3,10 +3,10 @@
 ## double-clicking or Enter closes the shape and selects it, Delete takes the
 ## last corner back and Esc lets it go. Shift or Alt at the first click picks
 ## how it combines with the selection, as the other selection tools.
-from ui import Painter, Point
-from gpu import Rect, Color
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Rect, Color
 from workspace import Workspace
-import math
+import luce_std.math
 
 pub class PolygonLasso:
     pub var active: bool = false

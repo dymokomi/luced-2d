@@ -5,7 +5,7 @@
 ## box around them all. Distribute spaces the centers of three or more pieces
 ## evenly between the outermost two. Each run is one undo step.
 from workspace import Workspace
-import math
+import luce_std.math
 
 ## The modes, in the menus' and the panel's order.
 pub func align_modes() -> list[str]:

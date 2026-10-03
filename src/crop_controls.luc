@@ -1,7 +1,7 @@
 ## The Crop tool's header, after Compositor's: the ratio the box keeps
 ## (Free, the picture's own, or a common one) and the box's size in pixels as
 ## it is dragged. Alt pulling about the middle is said in the tool's hint.
-from ui import HStack, Text, Menu, Command
+from luce_ui.ui import HStack, Text, Menu, Command
 from workspace import Workspace
 from kit import Kit
 

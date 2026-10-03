@@ -3,10 +3,10 @@
 ## picker's recent colors, and the shortcuts that differ from the defaults, by
 ## command id (a chord like "cmd+shift+s", "f5" or "none"). Missing keys keep
 ## their defaults; an unreadable file is reported and ignored, never rewritten.
-from toml import Table
-import files
-import paths
-import ui
+from luce_config.toml import Table
+import luce_std.files
+import luce_std.paths
+import luce_ui.ui
 from units import is_unit
 
 ## The Swatches panel's colors before any are added or deleted: grays, then

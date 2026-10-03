@@ -3,14 +3,14 @@
 ## zooms about the view's middle. The thumbnail is the canvas drawn at a small
 ## zoom, which composites from the layers' coarse pyramid levels, so even a
 ## 360-megapixel document costs a thumbnail's worth of work.
-from ui import Panel, Widget, Layout, Size, Constraints, Event, Painter, Slider, Text, VStack, HStack
-from gpu import RenderTarget, Rect
-from input import EventKind, Cursor
+from luce_ui.ui import Panel, Widget, Layout, Size, Constraints, Event, Painter, Slider, Text, VStack, HStack
+from luce_gpu.gpu import RenderTarget, Rect
+from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 from view import CanvasView
 from kit import Kit, outline
 import theme
-import math
+import luce_std.math
 
 pub class NavigatorPanel:
     pub let panel: Panel

@@ -1,9 +1,9 @@
 ## The palette below the tool rail, after Compositor's: the foreground and
 ## background colors as two overlapping swatches, with swap (X) and reset (D)
 ## glyphs. Clicking a swatch asks the window to open the picker for it.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Point
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Point
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 import theme
 

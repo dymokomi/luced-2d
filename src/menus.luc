@@ -1,7 +1,7 @@
 ## The menu bar: the shared commands, shortcuts and all, grouped as Photoshop
 ## groups them. Every item is a Command from `Actions`; what it does is wired
 ## in `Panels`.
-from ui import Font, Toolbar, Menu, Command, Spacer
+from luce_ui.ui import Font, Toolbar, Menu, Command, Spacer
 from actions import Actions
 from adjustments import adjustments, in_adjust, in_filter
 

@@ -3,8 +3,8 @@
 ## airbrush wheel. The parameters and controls are numbered as luce-image's
 ## `Canvas.set_brush_dynamic` takes them; `pen_of` turns a pointer event into
 ## the pen sample a stroke point carries.
-from ui import Event
-from input import PointerKind
+from luce_ui.ui import Event
+from luce_window.input import PointerKind
 
 ## One parameter's mapping: its control (a `control_names` index), the
 ## fraction left at the control's 0, the response curve (-1 firm .. 1 soft)

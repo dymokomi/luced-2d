@@ -4,9 +4,9 @@
 ## edits, each one undo step on the canvas that re-evaluates the graph and
 ## draws again only the cells its output changed.
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from vectors import vector_layer
-import math
+import luce_std.math
 
 ## What a wire carries, as luce-image numbers it.
 pub let port_shapes: int = 0

@@ -62,8 +62,8 @@ The document has three parts:
 
 ## 1. Where luced-2d / luce-image stand today
 
-Read from `luce-image/src/luce_image/{tiles,composite,brush,filter,transform,document}.lucb`,
-`canvas/{drawing,files,history}.lucb` and `luce-gpu/src/luce_gpu/gpu/{texture,vulkan/device}.lucb`.
+Read from `luce-image/src/{tiles,composite,brush,filter,transform,document}.lucb`,
+`canvas/{drawing,files,history}.lucb` and `luce-gpu/src/gpu/{texture,vulkan/device}.lucb`.
 
 | Aspect | Today | At 15000 × 24000 |
 |---|---|---|

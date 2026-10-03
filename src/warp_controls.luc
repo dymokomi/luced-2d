@@ -2,7 +2,7 @@
 ## Arc, Arch, Bulge, Flag, Wave, Rise) and its Bend. A style puts the patch's
 ## points where it says at once; dragging a point makes it Custom again.
 ## Puppet Warp's header is only its hint and Cancel/Apply.
-from ui import HStack, Menu, Command, NumberField
+from luce_ui.ui import HStack, Menu, Command, NumberField
 from workspace import Workspace
 from mesh_warp import warp_styles
 from kit import Kit

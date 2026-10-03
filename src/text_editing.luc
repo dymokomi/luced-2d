@@ -3,7 +3,7 @@
 ## it, and the words are typed in a floating editor while the layer is set
 ## again at every keystroke. Commit (Cmd-Return) keeps it — a new layer named
 ## by its first words, or gone if left empty; Cancel puts it back as it was.
-from ui import Text, HStack, Spacer, Size, Dialog, TextEditor, Command
+from luce_ui.ui import Text, HStack, Spacer, Size, Dialog, TextEditor, Command
 from interop import Connection
 from workspace import Workspace
 from kit import Kit

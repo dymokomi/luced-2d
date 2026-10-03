@@ -3,7 +3,7 @@
 ## Azimuth, Rotation, Stylus Wheel, Direction, Velocity, Fade) captioned by
 ## the parameter ("Size by"), then — once something drives it — its minimum and curve
 ## as sliders, and Fade's length when Fade drives it.
-from ui import Widget, Menu, Command, NumberField
+from luce_ui.ui import Widget, Menu, Command, NumberField
 from kit import Kit, SliderField
 from brush_dynamics import Mapping, control_names
 

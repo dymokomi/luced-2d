@@ -3,10 +3,10 @@
 ## stroke. A press starts a stroke on the selected layer; with Shift a line
 ## first runs from where the last stroke ended, and the stroke keeps to one
 ## axis.
-from ui import Event, Point
+from luce_ui.ui import Event, Point
 from tool_handler import ToolHandler, ToolContext, event_time
 from brush_dynamics import PenSample, pen_of
-import math
+import luce_std.math
 
 pub class PaintTool: ToolHandler:
     ## A stroke is under way.

@@ -4,7 +4,7 @@
 ## one; the window refreshes the open ones. A new panel with no place given
 ## goes beside the Layers and Properties column, or right of the viewport
 ## when that column is gone.
-from ui import DStack, Panel, DockPosition, DockRequest, Command
+from luce_ui.ui import DStack, Panel, DockPosition, DockRequest, Command
 from workspace import Workspace
 from kit import Kit
 from view import CanvasView

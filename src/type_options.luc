@@ -3,7 +3,7 @@
 ## justified), the tracking in thousandths of an em, and the leading (0: the
 ## face's). A text layer being edited takes them over; its color is the
 ## foreground color.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 import platform
 
 pub class TypeOptions:

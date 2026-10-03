@@ -1,7 +1,7 @@
 ## The document's size dialogs together: File › New…, Image › Canvas Size…,
 ## Image Size… and Trim…, their commands wired, and what the window needs to
 ## show them and hear back.
-from ui import Widget
+from luce_ui.ui import Widget
 from workspace import Workspace
 from actions import Actions
 from kit import Kit

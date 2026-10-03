@@ -5,7 +5,7 @@
 ## Adjustments and the Filter menu: Apply keeps the preview as one undo step.
 ## Adjustment layers are the live path; their controls are in the Properties
 ## panel.
-from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox
+from luce_ui.ui import Text, HStack, Spacer, Widget, Dialog, Checkbox
 from workspace import Workspace
 from kit import Kit
 from adjustment_controls import AdjustmentControls

@@ -5,7 +5,7 @@
 ## and the status bar shows where it is ("Opening 2 of 3… 40%").
 from workspace import Workspace
 from documents import Document
-from canvas import Canvas
+from luce_image.canvas import Canvas
 
 ## A picture waiting: opened in a tab of its own, or placed on `target`.
 class Waiting:

@@ -2,9 +2,9 @@
 ## what the view draws round the active element (and through a free
 ## transform's box), what the Vector panel's thumbnails show, and the box a
 ## free transform of the element starts from.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from transform_box import TransformBox
-import math
+import luce_std.math
 
 ## x, y pairs, and where each run starts (its first point's index).
 pub class Outline:

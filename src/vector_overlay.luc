@@ -1,8 +1,8 @@
 ## The active vector element's outline over the canvas, as Photoshop shows a
 ## selected path: where it is, where a Move drag takes it, or where a free
 ## transform's box has it (only the outline moves until Apply).
-from ui import Painter, Point
-from gpu import Color
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Color
 from workspace import Workspace
 from vector_outline import Outline, element_outline
 from transform_box import TransformBox

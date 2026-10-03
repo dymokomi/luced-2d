@@ -3,7 +3,7 @@
 ## the picture keeps to on a 3×3 grid, and what fills new canvas — nothing, or
 ## a color on a layer of its own at the bottom, leaving the old canvas clear.
 ## Pixels the canvas no longer reaches stay past it. One undo step.
-from ui import Text, HStack, VStack, Spacer, Dialog, Menu, Command, Button, Widget
+from luce_ui.ui import Text, HStack, VStack, Spacer, Dialog, Menu, Command, Button, Widget
 from workspace import Workspace
 from kit import Kit
 from size_fields import SizeFields

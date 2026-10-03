@@ -2,9 +2,9 @@
 ## movable, until kept (Enter, Apply, another tool) or dropped (Esc). A press
 ## on a live gradient's handle moves that end; elsewhere a new one starts,
 ## keeping the one before.
-from ui import Event
+from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
-import math
+import luce_std.math
 
 pub class GradientTool: ToolHandler:
     ## A live gradient's end being dragged (the new one's end, or a handle).

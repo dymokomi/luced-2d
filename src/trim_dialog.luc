@@ -1,7 +1,7 @@
 ## Image › Trim…, as Compositor's: the canvas cut to what the picture holds,
 ## judged by transparency or by the top-left or bottom-right pixel's color,
 ## on the sides chosen. One undo step.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command, Checkbox
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Menu, Command, Checkbox
 from workspace import Workspace
 from kit import Kit
 

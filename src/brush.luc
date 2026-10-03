@@ -2,10 +2,10 @@
 ## or a sampled image), jitters 0..1, dynamics (brush_dynamics.luc: what the
 ## pen and the stroke drive), scattering and texture (built-in or an image);
 ## the built-in presets; and pushing it all to the canvas before a stroke.
-from canvas import Canvas
-from brush_mask import BrushMask
+from luce_image.canvas import Canvas
+from luce_painting.brush_mask import BrushMask
 from brush_dynamics import Mapping, default_mappings, no_mappings, copy_mappings
-import math
+import luce_std.math
 
 pub class Brush:
     pub var diameter: float = 32.0

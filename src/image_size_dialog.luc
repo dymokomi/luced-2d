@@ -2,7 +2,7 @@
 ## any unit, the ratio kept if asked, the resolution, and whether the pixels
 ## are resampled (nearest or smooth) — without it only the resolution, and so
 ## the printed size, changes. One undo step.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command, NumberField, Checkbox
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Menu, Command, NumberField, Checkbox
 from interop import Connection
 from workspace import Workspace
 from kit import Kit

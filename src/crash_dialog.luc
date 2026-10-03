@@ -1,8 +1,8 @@
 ## The report of a crash the last run left, shown once on the next launch:
 ## the text, where it is kept, and a button that copies it for a bug report.
-from ui import Text, HStack, Size, Spacer, Button, Dialog, TextEditor
+from luce_ui.ui import Text, HStack, Size, Spacer, Button, Dialog, TextEditor
 from kit import Kit
-import clipboard
+import luce_clipboard.clipboard
 
 pub class CrashDialog:
     pub let dialog: Dialog

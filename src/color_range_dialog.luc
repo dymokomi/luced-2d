@@ -5,7 +5,7 @@
 ## midtones or shadows. It looks at the picture as it shows. OK keeps the
 ## selection as one step; Cancel puts the old one back. Changes are worked out
 ## on a small copy of the picture, so they show at once on any document.
-from ui import Text, HStack, Spacer, Dialog, Menu, Command, Checkbox
+from luce_ui.ui import Text, HStack, Spacer, Dialog, Menu, Command, Checkbox
 from workspace import Workspace
 from kit import Kit, SliderField
 from preview_session import PreviewDialogSession

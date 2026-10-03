@@ -6,13 +6,13 @@
 ## the adjust dialog, on a layer's pixels (destructive), and the Properties
 ## panel, on the selected adjustment layer (live). Whoever owns them hears of
 ## every change through `changed` and asks `numbers` for the engine's values.
-from ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor, ParameterPanel, ParameterSpec, ParameterKind
+from luce_ui.ui import Text, VStack, HStack, Spacer, Menu, Command, Widget, Checkbox, CurveEditor, ParameterPanel, ParameterSpec, ParameterKind
 from workspace import Workspace
 from kit import Kit
 from adjustments import Adjustment, adjustments, filter_table, gradient_map, curves_adjustment, blur_kind
 from levels_graph import LevelsGraph
 from map_colors import MapColors
-import math
+import luce_std.math
 
 ## Levels: its kind, and five values per page.
 let levels_kind: int = 3

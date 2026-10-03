@@ -2,7 +2,7 @@
 ## palette swatch or on any color a dialog shows, the black-or-white choice a
 ## swatch offers on a mask, as Compositor's does, and the text editor for the
 ## Text tool. Each opens only when no other dialog is up.
-from ui import Text, HStack, Spacer, Dialog
+from luce_ui.ui import Text, HStack, Spacer, Dialog
 from workspace import Workspace
 from kit import Kit
 from color_picker import ColorPicker

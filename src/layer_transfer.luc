@@ -5,7 +5,7 @@
 ## were. A layer dragged from Layers onto another document's tab goes there
 ## the same way, leaving the clipboard alone. luce-image keeps the copied
 ## layers; the system clipboard gets their pixels too, for other programs.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from system_hooks import announce_copied_layers, copy_picture, layers_on_clipboard
 from workspace import Workspace
 

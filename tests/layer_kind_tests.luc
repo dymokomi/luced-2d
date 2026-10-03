@@ -1,29 +1,29 @@
 ## Scripts and the kinds of layers beyond pixels: the script host and
 ## editor, groups and shapes, alpha channels, vector layers and the node editor.
-from ui import Font
-from gpu import Frame
+from luce_ui.ui import Font
+from luce_gpu.gpu import Frame
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from panels import Panels
 from actions import Actions
 from view import CanvasView
 from transform_box import mode_perspective, mode_skew
-from ui import Event
+from luce_ui.ui import Event
 from script_host import ScriptHost
 from tool_cursor import cursor_for
 from shape_tool import restyle_selected, draw_shape
 from tools import group_of
-from input import Cursor
+from luce_window.input import Cursor
 from script_commands import parse_line, ScriptCommands
-import paths
-import files
-from input import EventKind, Key
+import luce_std.paths
+import luce_std.files
+from luce_window.input import EventKind, Key
 from alpha_channels import row_shown, row_picked, next_alpha_name
 from vectors import active_element, next_path_name
 from node_view import NodeView
 from free_transform import begin_free_transform
-import math
-import window
+import luce_std.math
+import luce_window.window
 from test_input import press, drag_to, release, window_command, foreground, blue_box
 
 ## A script's lines are read back exactly; a script run by Luce's interpreter

@@ -2,10 +2,10 @@
 ## size, the alignment, the tracking and the leading. A change applies to the
 ## text being edited at once; otherwise it is what the next text takes. The
 ## families come from the system when the header first shows.
-from ui import HStack, Button, ButtonStyle, NumberField, Menu, Command
+from luce_ui.ui import HStack, Button, ButtonStyle, NumberField, Menu, Command
 from workspace import Workspace
 from kit import Kit
-from canvas import Canvas
+from luce_image.canvas import Canvas
 
 pub class TypeControls:
     pub let row: HStack

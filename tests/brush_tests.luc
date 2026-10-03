@@ -1,22 +1,22 @@
 ## Brushes: the pen reaching the stroke through the view, the dynamics and
 ## images in Brush Settings, the library on disk and the Brushes panel.
-from ui import Font, Event, Application, DockPosition
-from input import EventKind, PointerKind
+from luce_ui.ui import Font, Event, Application, DockPosition
+from luce_window.input import EventKind, PointerKind
 from workspace import Workspace
 from panels import Panels
 from view import CanvasView
 from actions import Actions
 from brush import Brush, preset
-from brush_mask import BrushMask
+from luce_painting.brush_mask import BrushMask
 from brush_dynamics import pen_of, no_mappings
 from brush_library import SavedBrush, library_path, load_library, load_brush, save_brush, free_folder, export_brush, import_brush, brush_of, brush_text
 from brush_import import import_brushes
 from brush_settings import define_tip
 from brushes_panel import BrushesPanel
 from kit import Kit
-from toml import Table
-import paths
-import files
+from luce_config.toml import Table
+import luce_std.paths
+import luce_std.files
 
 pub func brush_tests(arguments: list[str]) -> unit!:
     let directory = paths.join(arguments[0], "brush-library")

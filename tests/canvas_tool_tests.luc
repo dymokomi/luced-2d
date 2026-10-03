@@ -2,10 +2,10 @@
 ## retouching, painting and selection tools, guides, text, gradients, crops,
 ## strokes, the eyedropper, brush sizing, Tab's modes, Dodge and Burn,
 ## the Pen, the lassos and warps.
-from ui import Font
-from gpu import Frame
+from luce_ui.ui import Font
+from luce_gpu.gpu import Frame
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from panels import Panels
 from panels_wiring import next_in_cycle
 from actions import Actions
@@ -14,11 +14,11 @@ from crop_box import CropBox, crop_new
 from polygon_lasso import PolygonLasso
 from guides import GuideDrag
 from snapping import Snapper
-from ui import Event
+from luce_ui.ui import Event
 from script_commands import parse_line, ScriptCommands
-from input import EventKind, Key
-import math
-import window
+from luce_window.input import EventKind, Key
+import luce_std.math
+import luce_window.window
 from test_input import press, drag_to, release, near, blue_box, painted_box
 
 ## Photoshop's gestures: Z held while using the zoom tool springs back to the

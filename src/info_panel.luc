@@ -3,14 +3,14 @@
 ## opacity); and the selection's size. It reads the pointer once a frame, and
 ## the color only when the pointer moved and nothing is being painted, so it
 ## costs one pixel's read a frame at most.
-from ui import Panel, Text, VStack, Spacer, Size
+from luce_ui.ui import Panel, Text, VStack, Spacer, Size
 from workspace import Workspace
 from view import CanvasView
 from kit import Kit
 from units import pixels_per, unit_suffix
 from hex_color import hex_of_linear
-import transfer
-import math
+import luce_color.transfer
+import luce_std.math
 
 pub class InfoPanel:
     pub let panel: Panel

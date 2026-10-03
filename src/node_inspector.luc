@@ -3,15 +3,15 @@
 ## steps), each drag one undo step, the canvas drawn again as it goes; a click
 ## on it types a value instead. A toggle flips on a click; a color's swatch
 ## opens the picker. A value a wire drives says so and waits for the wire.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Font
-from gpu import RenderTarget, Rect, Color
-from input import EventKind, Cursor
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Font
+from luce_gpu.gpu import RenderTarget, Rect, Color
+from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 from node_layout import NodeLayout
 from node_graph import KindInfo, ParamInfo, node_value, set_node_value, shown_number, param_whole, param_toggle, param_color
 from hex_color import hex_of_linear, linear_of_hex
 import theme
-import math
+import luce_std.math
 
 let row_height: float = 26.0
 ## Where a row's value starts, from the left.

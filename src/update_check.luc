@@ -2,7 +2,7 @@
 ## release in the background (`luc latest`, over the registry) and, when it is
 ## newer than this build, says so in the status bar with how to get it.
 ## Offline, without luc, or with a luc too old to answer, nothing is said.
-from process import Command
+from luce_std.process import Command
 from script_host import luce_program
 
 pub class UpdateCheck:

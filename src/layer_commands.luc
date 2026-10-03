@@ -1,12 +1,12 @@
 ## Edits to the layer stack, each on the selected layer (or every selected
 ## one): new, delete, reorder, duplicate and merge; copy and paste; the
 ## appearance (visibility, opacity, blend, clipping); masks; and moves.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from system_hooks import copy_picture, clipboard_picture
 from live import Live
 from layer_picking import LayerPicking
-import math
-import ui
+import luce_std.math
+import luce_ui.ui
 
 pub class LayerCommands:
     let live: Live

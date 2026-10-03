@@ -5,7 +5,7 @@
 ## shown once, the latest; and it closes keeping (OK, Apply) or dropping
 ## (Cancel) what the session shows. The dialog supplies the session's steps
 ## on the canvas; failures are told under the dialog's name.
-from ui import Dialog
+from luce_ui.ui import Dialog
 from kit import Kit
 
 pub class PreviewDialogSession:

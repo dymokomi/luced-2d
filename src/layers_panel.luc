@@ -2,7 +2,7 @@
 ## the footer's buttons — new layer, new group, effects, adjustment layers,
 ## mask, clip, duplicate, delete — and a layer's name edited in its own row.
 ## The layer commands the menu bar shares are wired here too.
-from ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Button, Command
+from luce_ui.ui import Panel, VStack, Shelf, Spacer, Size, ContextMenu, TextField, Button, Command
 from workspace import Workspace
 from actions import Actions
 from kit import Kit

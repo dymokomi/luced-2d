@@ -5,7 +5,7 @@
 ## image. The parts share `live` — the shown document's canvas and the
 ## revision every change bumps so views know to redraw — and never import
 ## this module; the workspace wires them together and does what spans several.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from theme import Look
 from documents import blank_canvas
 from live import Live

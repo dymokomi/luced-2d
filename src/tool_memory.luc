@@ -5,11 +5,11 @@
 ## options and the crop ratio, in `~/.luced-2d/tools.toml`, written when the
 ## window closes and read when it opens. What the file lacks or gets out of
 ## range keeps its default; an unreadable file is passed over.
-from toml import Table
+from luce_config.toml import Table
 from workspace import Workspace
 from tools import tools
-import files
-import paths
+import luce_std.files
+import luce_std.paths
 from brush_library import SavedBrush, load_brush, save_brush, quoted
 
 ## Where the options live, beside the settings.

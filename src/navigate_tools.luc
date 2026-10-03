@@ -1,9 +1,9 @@
 ## Getting around the document: panning (the Hand tool, space held, or the
 ## middle button), the Zoom tool, and the idle tool, which rests on the
 ## canvas and does nothing there.
-from ui import Event
+from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
-import math
+import luce_std.math
 
 ## A pan by dragging: the view follows the pointer.
 pub class PanGesture: ToolHandler:

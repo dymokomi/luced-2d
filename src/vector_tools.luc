@@ -1,6 +1,6 @@
 ## The vector tools on the canvas: the shape tools (dragged out corner to
 ## corner) and the Pen (anchors clicked, their handles dragged).
-from ui import Event
+from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
 from shape_tool import ShapeDrag
 from pen_tool import PenTool

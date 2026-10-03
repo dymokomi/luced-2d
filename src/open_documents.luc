@@ -3,13 +3,13 @@
 ## `Viewport`, the selected layer in `LayerPicking`); switching stashes those
 ## into its `Document` record and restores the next one's. Opening, saving and
 ## exporting act on the document shown.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from documents import Document, title_of, blank_canvas
 from live import Live
 from viewport import Viewport
 from layer_picking import LayerPicking
 from layer_commands import LayerCommands
-import paths
+import luce_std.paths
 
 pub class OpenDocuments:
     let live: Live

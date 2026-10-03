@@ -3,7 +3,7 @@
 ## it and shows it again, a cross that deletes it, and Alt-drag onto another
 ## layer to copy it there. An effect hidden by its eye stays listed, eye shut,
 ## until it is shown again or deleted; one turned off in Layer Style goes.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from workspace import Workspace
 
 ## One kind of effect: its name and the style fields it owns, `first` to

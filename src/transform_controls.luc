@@ -3,7 +3,7 @@
 ## keeping their ratio), Scale, the angle, the sampling, and Flip. Each edit
 ## moves the box and shows the layers through it at once. Distorted, the
 ## corners are the transform, so the numbers step aside.
-from ui import HStack, NumberField, Menu, Command, Checkbox
+from luce_ui.ui import HStack, NumberField, Menu, Command, Checkbox
 from workspace import Workspace
 from kit import Kit
 from transform_box import TransformBox

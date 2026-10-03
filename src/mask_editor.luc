@@ -4,15 +4,15 @@
 ## image, made grayscale and fitted), Load… (a picture file) and, for the tip,
 ## From Selection (Define Brush Preset). Every edit goes to the brush in hand
 ## at once: the next stroke paints with it.
-from ui import Widget, Layout, Size, Constraints, Event, Painter, Image, VStack, HStack, Button, Spacer, ButtonStyle
-from gpu import RenderTarget, Rect
-from input import EventKind, Cursor
-from brush_mask import BrushMask
-from brush_files import brush_mask_of, open_brush_mask
+from luce_ui.ui import Widget, Layout, Size, Constraints, Event, Painter, Image, VStack, HStack, Button, Spacer, ButtonStyle
+from luce_gpu.gpu import RenderTarget, Rect
+from luce_window.input import EventKind, Cursor
+from luce_painting.brush_mask import BrushMask
+from luce_image.brush_files import brush_mask_of, open_brush_mask
 from system_hooks import clipboard_picture
 from kit import Kit, SliderField, outline
 import theme
-import math
+import luce_std.math
 
 ## The pad's side in points.
 pub let pad_side: float = 256.0

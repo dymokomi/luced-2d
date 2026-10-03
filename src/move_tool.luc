@@ -4,12 +4,12 @@
 ## pressed. It previews while dragging and commits once, on release — the
 ## layers drawn offset by the view, selected pixels through a canvas preview.
 ## What moves snaps by its edges and middle.
-from ui import Event
+from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
 from view_gestures import BoxGesture
 from free_transform import box_around
 from vectors import pick_element
-import math
+import luce_std.math
 
 pub class MoveTool: ToolHandler:
     let boxes: BoxGesture

@@ -5,11 +5,11 @@
 ## the pixels: every change writes the layer's style (luce-image's numbered
 ## style fields) and the compositor draws it live; Cancel puts back what the
 ## layer had when the dialog opened.
-from ui import Text, HStack, Spacer, Widget, Dialog, Checkbox, Menu, Command
-from gpu import Color
+from luce_ui.ui import Text, HStack, Spacer, Widget, Dialog, Checkbox, Menu, Command
+from luce_gpu.gpu import Color
 from workspace import Workspace
 from kit import Kit, SliderField
-import math
+import luce_std.math
 from hex_color import hex_of_linear, linear_of_hex
 from swatch import Swatch
 from preview_session import PreviewDialogSession

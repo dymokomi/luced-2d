@@ -4,9 +4,9 @@
 ## new one. A ratio (the header's) holds its proportions, as Shift does a
 ## corner's; Alt pulls both sides about the middle. Enter crops to it; what is
 ## outside is shaded. Everything is in whole document pixels.
-from ui import Painter, Point
-from gpu import Rect, Color
-import math
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Rect, Color
+import luce_std.math
 
 pub let crop_none: int = -1
 ## 0..7 are the handles, clockwise from the top-left corner; then these.

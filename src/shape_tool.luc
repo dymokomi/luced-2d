@@ -6,12 +6,12 @@
 ## header's, as are the fill, the stroke and a rectangle's corner radius.
 ## Shape layers are vector layers (luce-image's shape layers): they stay
 ## crisp through moves and free transforms until painted on.
-from ui import Painter, Point
-from gpu import Color
+from luce_ui.ui import Painter, Point
+from luce_gpu.gpu import Color
 from workspace import Workspace
-from canvas import Canvas
+from luce_image.canvas import Canvas
 from vectors import vector_layer
-import math
+import luce_std.math
 
 ## The shape tools' ids, in the group's order.
 pub func shape_tools() -> list[str]:

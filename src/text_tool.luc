@@ -1,9 +1,9 @@
 ## The Text tool: let go where it was pressed, a click on a text layer edits
 ## it and a click elsewhere starts point text; dragged, text in a box that
 ## wide.
-from ui import Event
+from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
-import math
+import luce_std.math
 
 pub class TextTool: ToolHandler:
     var pressed: bool = false

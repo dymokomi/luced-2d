@@ -5,13 +5,13 @@
 ## left out; a file that does not read, or leaves no viewport, gives the
 ## default arrangement and is not rewritten until the arrangement changes.
 ## Window › Reset Layout puts the default back.
-from ui import DStack, Panel, DockPosition
-from gpu import Rect
-import ui
+from luce_ui.ui import DStack, Panel, DockPosition
+from luce_gpu.gpu import Rect
+import luce_ui.ui
 from panel_catalog import PanelCatalog
 from panel_list import panel_entries
-import files
-import paths
+import luce_std.files
+import luce_std.paths
 
 ## One node of a kept arrangement: a split of two children, or a tab group.
 pub class DockNode:

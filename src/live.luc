@@ -2,7 +2,7 @@
 ## file, which a document switch replaces, and the revision every change bumps
 ## so views know to redraw. The parts hold this rather than the workspace, so
 ## none of them imports it.
-from canvas import Canvas
+from luce_image.canvas import Canvas
 
 pub class Live:
     pub var canvas: Canvas

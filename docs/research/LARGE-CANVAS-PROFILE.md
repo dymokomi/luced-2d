@@ -6,7 +6,7 @@ profilers (not in the repo). Companion to [LARGE-CANVAS-RESEARCH.md](LARGE-CANVA
 ## What already scales
 
 - Layers are 256² `rgba16_float` GPU tiles, shared copy-on-write between layers,
-  undo and previews (`luce-image/src/luce_image/tiles.lucb`).
+  undo and previews (`luce-image/src/tiles.lucb`).
 - The view draws only visible cells from a level-of-detail pyramid
   (`canvas/drawing.lucb`, `composite.lucb`), and cache keys follow content stamps.
 - Brush strokes touch only dirty tiles, and pixel undo steps are pointer clones.
