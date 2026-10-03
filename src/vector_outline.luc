@@ -4,7 +4,7 @@
 ## free transform of the element starts from.
 from luce_image.canvas import Canvas
 from transform_box import TransformBox
-import luce_std.math
+from luce_std import math
 
 ## x, y pairs, and where each run starts (its first point's index).
 pub class Outline:

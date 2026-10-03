@@ -9,7 +9,7 @@ from tool_handler import ToolHandler, ToolContext
 from view_gestures import BoxGesture
 from free_transform import box_around
 from vectors import pick_element
-import luce_std.math
+from luce_std import math
 
 pub class MoveTool: ToolHandler:
     let boxes: BoxGesture

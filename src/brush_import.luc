@@ -6,9 +6,8 @@ from brush_library import SavedBrush, import_brush, library_path, save_brush, fr
 from brush_import_abr import abr_brushes
 from brush_import_procreate import procreate_brush
 from luce_std.files import Entries, FileKind
-import luce_std.files
-import luce_std.paths
-import luce_ui.ui
+from luce_std import files, paths
+from luce_ui import ui
 
 ## The extensions `import_brushes` reads.
 pub func brush_extensions() -> list[str]:

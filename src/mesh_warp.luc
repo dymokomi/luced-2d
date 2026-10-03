@@ -12,8 +12,8 @@
 from luce_image.canvas import Canvas
 from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Rect, Color
-import luce_std.math
-import luce_ui.ui
+from luce_std import math
+from luce_ui import ui
 
 ## Warp's header styles, in luce-image's order (`set_warp_preset`'s kinds).
 pub func warp_styles() -> list[str]:

@@ -10,7 +10,7 @@ from luce_ui.ui import Text, HStack, Spacer, Dialog, Checkbox
 from workspace import Workspace
 from kit import Kit, SliderField
 from preview_session import PreviewDialogSession
-import luce_color.transfer
+from luce_color import transfer
 
 ## luce-image's Replace Color adjustment, and how many samples it takes.
 let replace_kind: int = 17

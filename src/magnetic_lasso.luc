@@ -7,7 +7,7 @@
 from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Rect, Color
 from workspace import Workspace
-import luce_std.math
+from luce_std import math
 
 pub class MagneticLasso:
     pub var active: bool = false

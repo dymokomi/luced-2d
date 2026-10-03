@@ -5,7 +5,7 @@
 ## the Clone Stamp's Aligned and Sample, the Smudge tool's mode,
 ## Cancel and Apply while a free transform or the Crop tool's box is up — and
 ## the tool's hint, shown at the right of the status line.
-import luce_ui.ui
+from luce_ui import ui
 from luce_ui.ui import default_spacing, Text, HStack, Toolbar, Size, Spacer, Menu, Command, Slider, NumberField, Checkbox
 from workspace import Workspace
 from shape_tool import restyle_selected, selected_shape_options

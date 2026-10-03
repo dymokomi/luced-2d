@@ -7,11 +7,10 @@
 ## Window › Reset Layout puts the default back.
 from luce_ui.ui import DStack, Panel, DockPosition
 from luce_gpu.gpu import Rect
-import luce_ui.ui
+from luce_ui import ui
 from panel_catalog import PanelCatalog
 from panel_list import panel_entries
-import luce_std.files
-import luce_std.paths
+from luce_std import files, paths
 
 ## One node of a kept arrangement: a split of two children, or a tab group.
 pub class DockNode:

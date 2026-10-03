@@ -11,7 +11,7 @@ from node_layout import NodeLayout
 from node_graph import KindInfo, ParamInfo, node_value, set_node_value, shown_number, param_whole, param_toggle, param_color
 from hex_color import hex_of_linear, linear_of_hex
 import theme
-import luce_std.math
+from luce_std import math
 
 let row_height: float = 26.0
 ## Where a row's value starts, from the left.

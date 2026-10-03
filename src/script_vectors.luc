@@ -3,7 +3,7 @@
 ## in the layer (0 the bottom), each one undo step within the run's.
 from workspace import Workspace
 from vectors import ensure_vector_layer, element_count, activate, rename_element, show_element, move_element, duplicate_element, delete_element, select_element
-import luce_ui.ui
+from luce_ui import ui
 
 ## The kinds `add_vector` draws, by the canvas's numbers.
 func kind_named(name: str) -> int!:

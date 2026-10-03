@@ -12,8 +12,7 @@ from actions import Actions
 from kit import Kit
 from script_host import ScriptHost
 from script_api_text import grammar_source
-import luce_std.files
-import luce_std.paths
+from luce_std import files, paths
 
 ## What a new script starts as: a small example of the API.
 let starter: str = "import luced\n\n## A row of dots in the foreground color on a layer of their own.\npub func main(arguments: list[str]) -> int!:\n    luced.add_layer(\"Dots\")\n    luced.set_brush(12.0, 1.0, 1.0)\n    var x = 20.0\n    while x < float(luced.document_width()):\n        luced.line(x, 40.0, x + 0.5, 40.0)\n        x += 24.0\n    print(f\"{luced.document_width()} by {luced.document_height()}, {luced.layer_names().length} layers before\")\n    return 0\n"

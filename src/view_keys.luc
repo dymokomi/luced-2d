@@ -14,7 +14,7 @@ from magnetic_lasso import MagneticLasso
 from view_gestures import WarpGesture, BoxGesture
 from gradient_tool import GradientTool
 from layer_ops import OpacityKeys, set_opacity_all
-import luce_std.math
+from luce_std import math
 import time
 
 pub class ViewKeys:

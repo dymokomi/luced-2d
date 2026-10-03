@@ -11,7 +11,7 @@ from panels import Panels
 from luce_ui.ui import Font
 from luce_image.canvas import Canvas
 from settings import Store
-import luce_std.files
+from luce_std import files
 
 ## Whether `arguments` ask for headless mode.
 pub func wants_headless(arguments: list[str]) -> bool:

@@ -7,7 +7,7 @@ from view import CanvasView
 from luce_ui.ui import Event
 from luce_window.input import EventKind
 from luce_ui.ui import Command
-import luce_std.math
+from luce_std import math
 
 pub func press(view: CanvasView, x: float, y: float, shift: bool = false, alt: bool = false) -> unit!:
     view.event(Event(kind = EventKind.pointer_down, x = x, y = y, button = 0, inside = true, shift = shift, alt = alt))

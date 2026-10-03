@@ -44,7 +44,7 @@ from panel_catalog import PanelCatalog
 from panel_list import panel_entries
 from dock_layout import DockLayout
 from align import align_modes, align_layers
-import luce_std.math
+from luce_std import math
 from units import unit_ids
 from transform_flow import TransformFlow
 from panel_prompts import PanelPrompts

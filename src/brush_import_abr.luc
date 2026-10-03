@@ -9,7 +9,7 @@ from brush import Brush, max_brush
 from brush_library import SavedBrush
 from luce_painting.brush_mask import BrushMask
 from brush_dynamics import Mapping, no_mappings
-import luce_std.math
+from luce_std import math
 
 ## Every preset in the `.abr` file at `path`, named as Photoshop names it,
 ## not yet in any library folder.

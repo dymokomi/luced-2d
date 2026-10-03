@@ -8,9 +8,9 @@ from workspace import Workspace
 from vector_outline import Outline, element_outline
 from vectors import element_count, active_element, activate, show_element, move_element, select_element, kind_label, delete_element
 import theme
-import luce_std.math
+from luce_std import math
 import time
-import luce_color.transfer
+from luce_color import transfer
 
 ## Outline points a thumbnail draws at most: an SVG outline's thousands are thinned.
 let thumb_points: int = 240

@@ -4,8 +4,8 @@
 ## image as it was, not the edit being previewed.
 from live import Live
 from colors import Colors
-import luce_std.math
-import luce_color.transfer
+from luce_std import math
+from luce_color import transfer
 
 pub class Eyedroppers:
     let live: Live

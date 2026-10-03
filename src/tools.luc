@@ -3,7 +3,7 @@
 ## luciaos-assets icon, its key (with Shift for the second tool on a key, as
 ## Photoshop's Shift-M), and the hint the status line shows while it is active.
 from luce_window.input import Key
-import luce_ui.ui
+from luce_ui import ui
 
 pub class Tool:
     pub let id: str

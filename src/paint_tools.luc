@@ -6,7 +6,7 @@
 from luce_ui.ui import Event, Point
 from tool_handler import ToolHandler, ToolContext, event_time
 from brush_dynamics import PenSample, pen_of
-import luce_std.math
+from luce_std import math
 
 pub class PaintTool: ToolHandler:
     ## A stroke is under way.

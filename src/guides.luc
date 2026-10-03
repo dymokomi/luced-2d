@@ -7,7 +7,7 @@ from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Color
 from workspace import Workspace
 from snapping import Snapper
-import luce_std.math
+from luce_std import math
 
 ## Guides' color: Photoshop's cyan. A function until the released compiler
 ## takes a constant built from a Base struct (fixed in luce c1b49e9).

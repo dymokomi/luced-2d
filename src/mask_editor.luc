@@ -12,7 +12,7 @@ from luce_image.brush_files import brush_mask_of, open_brush_mask
 from system_hooks import clipboard_picture
 from kit import Kit, SliderField, outline
 import theme
-import luce_std.math
+from luce_std import math
 
 ## The pad's side in points.
 pub let pad_side: float = 256.0

@@ -12,10 +12,10 @@ from tool_memory import tools_path, restore_tools, remember_tools
 from dock_layout import layout_path
 from update_check import UpdateCheck
 import theme
-import luce_std.crash
+from luce_std import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.2.0"
+pub let version: str = "0.2.1"
 
 pub class Luce2D:
     pub let app: Application

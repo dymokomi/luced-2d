@@ -2,7 +2,7 @@
 ## the keyboard all present the same command, so a shortcut shows beside its
 ## menu item and disabling an action disables it everywhere at once.
 from adjustments import adjustments, applies_at_once
-import luce_ui.ui
+from luce_ui import ui
 from luce_ui.ui import Command, Shortcut
 from luce_window.input import Key
 from workspace import Workspace

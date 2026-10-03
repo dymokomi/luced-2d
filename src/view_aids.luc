@@ -7,7 +7,7 @@ from luce_ui.ui import Painter, Image, Point, Font
 from luce_gpu.gpu import Rect, Region, Filter, Color
 from workspace import Workspace
 import theme
-import luce_std.math
+from luce_std import math
 
 pub class ViewAids:
     let workspace: Workspace

@@ -16,7 +16,7 @@ from luce_gpu.gpu import Rect, Color
 from workspace import Workspace
 from luce_image.canvas import Canvas
 from vectors import active_element, vector_layer
-import luce_std.math
+from luce_std import math
 
 ## One anchor, in document pixels: the point and the handles coming in and
 ## going out. A corner's handles sit on its point.

@@ -12,7 +12,7 @@ from kit import Kit
 from adjustments import Adjustment, adjustments, filter_table, gradient_map, curves_adjustment, blur_kind
 from levels_graph import LevelsGraph
 from map_colors import MapColors
-import luce_std.math
+from luce_std import math
 
 ## Levels: its kind, and five values per page.
 let levels_kind: int = 3

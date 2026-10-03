@@ -15,7 +15,7 @@ from brush import Brush
 from luce_painting.brush_mask import BrushMask
 from theme import Look
 import theme
-import luce_std.math
+from luce_std import math
 import time
 
 ## The thumbnail stroke's size in points.

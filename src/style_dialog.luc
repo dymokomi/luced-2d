@@ -9,7 +9,7 @@ from luce_ui.ui import Text, HStack, Spacer, Widget, Dialog, Checkbox, Menu, Com
 from luce_gpu.gpu import Color
 from workspace import Workspace
 from kit import Kit, SliderField
-import luce_std.math
+from luce_std import math
 from hex_color import hex_of_linear, linear_of_hex
 from swatch import Swatch
 from preview_session import PreviewDialogSession

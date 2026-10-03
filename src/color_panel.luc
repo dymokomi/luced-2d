@@ -14,10 +14,8 @@ from hex_color import parse_hex, hex_of_srgb
 from color_model import StableHsb, model_ids, model_index
 from color_sliders import ColorSliders
 from color_picker import linear_of
-import luce_color.color as science
-import luce_color.hsl
-import luce_color.transfer
-import luce_std.math
+from luce_color import color as science, hsl, transfer
+from luce_std import math
 
 ## The modes, in the menu's order: their names in the settings and on screen.
 pub func mode_ids() -> list[str]:

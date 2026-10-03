@@ -4,7 +4,7 @@ from luce_gpu.gpu import RenderTarget, Rect
 from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 import theme
-import luce_std.math
+from luce_std import math
 
 ## The open documents as tabs across the top of the viewport, after Photoshop's:
 ## the current one on the surface with its top corners rounded, the others on

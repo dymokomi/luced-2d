@@ -17,8 +17,8 @@ from snapping import Snapper
 from luce_ui.ui import Event
 from script_commands import parse_line, ScriptCommands
 from luce_window.input import EventKind, Key
-import luce_std.math
-import luce_window.window
+from luce_std import math
+from luce_window import window
 from test_input import press, drag_to, release, near, blue_box, painted_box
 
 ## Photoshop's gestures: Z held while using the zoom tool springs back to the

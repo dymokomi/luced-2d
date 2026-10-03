@@ -6,7 +6,7 @@ from luce_gpu.gpu import RenderTarget, Rect, Color
 from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 import theme
-import luce_std.math
+from luce_std import math
 import time
 from kit import dropped_paths
 from layer_groups import shown_rows, toggle_folded, is_folded, drop_layer, drop_inside, drop_above, drop_below

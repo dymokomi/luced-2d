@@ -6,7 +6,7 @@
 from tool_state import ToolState
 from live import Live
 from hex_color import hex_of_linear, linear_of_hex
-import luce_color.transfer
+from luce_color import transfer
 
 pub class Colors:
     let live: Live

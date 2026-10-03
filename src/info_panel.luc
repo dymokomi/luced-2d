@@ -9,8 +9,8 @@ from view import CanvasView
 from kit import Kit
 from units import pixels_per, unit_suffix
 from hex_color import hex_of_linear
-import luce_color.transfer
-import luce_std.math
+from luce_color import transfer
+from luce_std import math
 
 pub class InfoPanel:
     pub let panel: Panel

@@ -1,11 +1,8 @@
 ## The Color panel's model of a color: HSB of encoded sRGB (Photoshop's HSB)
 ## that keeps its hue through greys and its hue and saturation through black,
 ## and the sliders' channel models (RGB, HSB, Lab, grayscale) through luce-color.
-import luce_color.color as science
-import luce_color.hsl
-import luce_color.lab
-import luce_color.space
-import luce_std.math
+from luce_color import color as science, hsl, lab, space
+from luce_std import math
 
 ## The sliders' models, in the menu's order: their names in the settings and on screen.
 pub func model_ids() -> list[str]:

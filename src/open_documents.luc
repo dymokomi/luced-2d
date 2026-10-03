@@ -9,7 +9,7 @@ from live import Live
 from viewport import Viewport
 from layer_picking import LayerPicking
 from layer_commands import LayerCommands
-import luce_std.paths
+from luce_std import paths
 
 pub class OpenDocuments:
     let live: Live

@@ -10,7 +10,7 @@ from workspace import Workspace
 from view import CanvasView
 from kit import Kit, outline
 import theme
-import luce_std.math
+from luce_std import math
 
 pub class NavigatorPanel:
     pub let panel: Panel

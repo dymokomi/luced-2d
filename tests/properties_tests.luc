@@ -8,7 +8,7 @@ from panels import Panels
 from actions import Actions
 from kit import Kit
 from luce_window.input import EventKind, Key
-import luce_window.window
+from luce_window import window
 
 pub func properties_rows() -> unit!:
     let workspace = Workspace(64, 48)

@@ -19,8 +19,7 @@ from layer_effects import EffectRows
 from adjustment_controls import range_of
 from tools import group_of
 from script_commands import parse_line, ScriptCommands
-import luce_std.paths
-import luce_std.files
+from luce_std import paths, files
 from luce_window.input import EventKind, Key
 from swatches_panel import swatches_of
 from align import align_layers
@@ -29,9 +28,9 @@ from luce_gpu.gpu import Rect
 from kit import Kit
 from color_panel import ColorPanel
 from luce_ui.ui import ColorWheel
-import luce_color.transfer
-import luce_std.math
-import luce_window.window
+from luce_color import transfer
+from luce_std import math
+from luce_window import window
 from test_input import press, drag_to, release, near, window_command, foreground
 
 ## The Layers panel's operations: titles fitted to the selection, groups

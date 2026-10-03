@@ -30,7 +30,7 @@ from move_tool import MoveTool, whole
 from view_aids import ViewAids
 from view_keys import ViewKeys
 import theme
-import luce_std.math
+from luce_std import math
 
 ## The document on screen: backdrop, checkerboard under transparent pixels,
 ## the flattened document at the workspace's zoom and offset, and a hairline

@@ -6,7 +6,7 @@ from luce_gpu.gpu import RenderTarget, Rect
 from luce_window.input import EventKind, Cursor
 from workspace import Workspace
 import theme
-import luce_std.math
+from luce_std import math
 import time
 from alpha_channels import composite_rows, row_count, row_name, row_shown, row_picked, show_only, toggle_row, load_selection
 

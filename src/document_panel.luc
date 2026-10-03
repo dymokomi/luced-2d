@@ -3,7 +3,7 @@
 from luce_ui.ui import Widget, Font, Text, Button, HStack, Spacer, Size, Dialog, NumberField, Checkbox, Menu, Command
 from interop import Connection
 from workspace import Workspace
-import luce_std.math
+from luce_std import math
 from units import unit_ids, unit_label, unit_suffix, pixels_per
 
 ## Image › Document Settings…: the document's size in the chosen unit, its

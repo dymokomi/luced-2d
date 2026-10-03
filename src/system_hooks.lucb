@@ -2,11 +2,11 @@
 ## finished on a worker thread wants a frame, and the system clipboard's
 ## pictures and text. luce-image and luce-canvas touch neither; they hand
 ## pictures out and take them in.
-import luce_clipboard.clipboard
+from luce_clipboard import clipboard
 import interop
 import memory
-import luce_canvas.wake
-import luce_window.window
+from luce_canvas import wake
+from luce_window import window
 from luce_image.canvas import Canvas
 from luce_image.image import Image
 

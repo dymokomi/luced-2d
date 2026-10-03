@@ -3,7 +3,7 @@
 ## wide.
 from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
-import luce_std.math
+from luce_std import math
 
 pub class TextTool: ToolHandler:
     var pressed: bool = false

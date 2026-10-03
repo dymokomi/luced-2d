@@ -8,8 +8,7 @@
 from luce_config.toml import Table
 from workspace import Workspace
 from tools import tools
-import luce_std.files
-import luce_std.paths
+from luce_std import files, paths
 from brush_library import SavedBrush, load_brush, save_brush, quoted
 
 ## Where the options live, beside the settings.

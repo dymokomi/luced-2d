@@ -7,7 +7,7 @@ from tool_handler import ToolHandler, ToolContext
 from guides import GuideDrag
 from transform_box import grab_move, grab_turn
 from brush import max_brush
-import luce_std.math
+from luce_std import math
 
 ## A right-drag with a brushed tool sizes the brush (Shift: its hardness), as
 ## Photoshop's Alt-right-drag does; the outline stays where the drag began.

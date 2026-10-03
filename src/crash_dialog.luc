@@ -2,7 +2,7 @@
 ## the text, where it is kept, and a button that copies it for a bug report.
 from luce_ui.ui import Text, HStack, Size, Spacer, Button, Dialog, TextEditor
 from kit import Kit
-import luce_clipboard.clipboard
+from luce_clipboard import clipboard
 
 pub class CrashDialog:
     pub let dialog: Dialog

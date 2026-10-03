@@ -15,7 +15,7 @@
 ## pixels but the handles, which are hit and drawn at screen size.
 from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Rect, Color
-import luce_std.math
+from luce_std import math
 
 ## What a press on the box grabbed.
 pub let grab_none: int = -1

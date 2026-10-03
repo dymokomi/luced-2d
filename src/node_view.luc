@@ -12,7 +12,7 @@ from node_graph import GraphNode, KindInfo, node_value, shown_number, port_shape
 from node_layout import NodeLayout, node_width, title_height
 from node_gestures import NodeGestures
 import theme
-import luce_std.math
+from luce_std import math
 
 ## Below this size the rows go and the titles stay. At 100%, node text uses
 ## the application's shared UI font.

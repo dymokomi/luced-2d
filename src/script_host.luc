@@ -12,8 +12,7 @@ from workspace import Workspace
 from actions import Actions
 from script_commands import ScriptCommands, parse_line
 from script_api_text import api_source
-import luce_std.files
-import luce_std.paths
+from luce_std import files, paths
 import platform
 import thread
 

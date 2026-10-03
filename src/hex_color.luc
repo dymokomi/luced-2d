@@ -1,8 +1,8 @@
 ## Colors written as sRGB hex, "#rrggbb" — how the picker, the palette's
 ## history and Settings show and take them. The GPU and the canvas work in
 ## linear light; these convert with luce-color's sRGB transfer.
-import luce_color.transfer
-import luce_std.math
+from luce_color import transfer
+from luce_std import math
 
 ## The sRGB components 0..1 of "#rrggbb" (any case, surrounding space
 ## ignored), or none for anything else.

@@ -5,8 +5,8 @@ from luce_image.canvas import Canvas
 from system_hooks import copy_picture, clipboard_picture
 from live import Live
 from layer_picking import LayerPicking
-import luce_std.math
-import luce_ui.ui
+from luce_std import math
+from luce_ui import ui
 
 pub class LayerCommands:
     let live: Live

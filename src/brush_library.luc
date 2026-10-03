@@ -11,9 +11,8 @@ from luce_painting.brush_mask import BrushMask
 from luce_image.brush_files import open_brush_mask, save_brush_mask, brush_mask_png_text, brush_mask_from_png_text
 from brush_dynamics import no_mappings, control_ids, parameter_ids
 from luce_std.files import Entries
-import luce_std.files
-import luce_std.paths
-import luce_ui.ui
+from luce_std import files, paths
+from luce_ui import ui
 
 ## A saved brush: its name, the folder it lives in (a name under the library),
 ## the brush, and the group it is listed under ("" for none): an imported

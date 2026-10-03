@@ -5,7 +5,7 @@
 ## step, Esc or Cancel drops it, and a new drag keeps it and starts another.
 from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Rect, Color
-import luce_std.math
+from luce_std import math
 
 pub class GradientEdit:
     ## The ends, in document pixels: from the first color to the second.

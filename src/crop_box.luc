@@ -6,7 +6,7 @@
 ## outside is shaded. Everything is in whole document pixels.
 from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Rect, Color
-import luce_std.math
+from luce_std import math
 
 pub let crop_none: int = -1
 ## 0..7 are the handles, clockwise from the top-left corner; then these.

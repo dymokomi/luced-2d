@@ -6,7 +6,7 @@ from luce_gpu.gpu import RenderTarget, Rect
 from workspace import Workspace
 from view import CanvasView
 import theme
-import luce_std.math
+from luce_std import math
 
 ## A ruler along the top or the left of the canvas, as Photoshop's: ticks in the
 ## chosen unit from the document's origin, following zoom and pan, labelled at

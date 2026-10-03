@@ -9,7 +9,7 @@ from workspace import Workspace
 from kit import Kit
 from hex_color import parse_hex, hex_of_linear, linear_of_hex
 import theme
-import luce_std.math
+from luce_std import math
 
 pub class SwatchesPanel:
     pub let panel: Panel

@@ -4,9 +4,8 @@
 ## command id (a chord like "cmd+shift+s", "f5" or "none"). Missing keys keep
 ## their defaults; an unreadable file is reported and ignored, never rewritten.
 from luce_config.toml import Table
-import luce_std.files
-import luce_std.paths
-import luce_ui.ui
+from luce_std import files, paths
+from luce_ui import ui
 from units import is_unit
 
 ## The Swatches panel's colors before any are added or deleted: grays, then

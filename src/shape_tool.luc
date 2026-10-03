@@ -11,7 +11,7 @@ from luce_gpu.gpu import Color
 from workspace import Workspace
 from luce_image.canvas import Canvas
 from vectors import vector_layer
-import luce_std.math
+from luce_std import math
 
 ## The shape tools' ids, in the group's order.
 pub func shape_tools() -> list[str]:

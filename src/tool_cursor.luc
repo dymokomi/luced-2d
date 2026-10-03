@@ -7,7 +7,7 @@
 from luce_ui.ui import Painter, Point
 from luce_gpu.gpu import Color
 from luce_window.input import Cursor
-import luce_std.math
+from luce_std import math
 
 ## The system cursor for `tool`; `hidden` where the view draws its own.
 pub func cursor_for(tool: str, panning: bool, space: bool, small_tip: bool) -> Cursor:

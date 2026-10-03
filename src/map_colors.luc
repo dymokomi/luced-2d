@@ -8,7 +8,7 @@ from swatch import Swatch
 from workspace import Workspace
 from kit import Kit
 from hex_color import hex_of_srgb, parse_hex
-import luce_color.transfer
+from luce_color import transfer
 
 pub class MapColors:
     pub let row: HStack

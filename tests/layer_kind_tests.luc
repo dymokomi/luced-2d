@@ -15,15 +15,14 @@ from shape_tool import restyle_selected, draw_shape
 from tools import group_of
 from luce_window.input import Cursor
 from script_commands import parse_line, ScriptCommands
-import luce_std.paths
-import luce_std.files
+from luce_std import paths, files
 from luce_window.input import EventKind, Key
 from alpha_channels import row_shown, row_picked, next_alpha_name
 from vectors import active_element, next_path_name
 from node_view import NodeView
 from free_transform import begin_free_transform
-import luce_std.math
-import luce_window.window
+from luce_std import math
+from luce_window import window
 from test_input import press, drag_to, release, window_command, foreground, blue_box
 
 ## A script's lines are read back exactly; a script run by Luce's interpreter

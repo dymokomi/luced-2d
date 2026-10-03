@@ -7,7 +7,7 @@ from tool_handler import ToolHandler, ToolContext, now_ms
 from selection_drag import SelectionDrag
 from polygon_lasso import PolygonLasso
 from magnetic_lasso import MagneticLasso
-import luce_std.math
+from luce_std import math
 
 ## A selection tool pressed inside the selection drags its outline by whole
 ## pixels; a click without a drag selects again with the wand, or deselects.

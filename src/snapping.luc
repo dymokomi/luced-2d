@@ -4,7 +4,7 @@
 ## the other layers, and the grid when it shows, within 8 screen points.
 ## The targets are gathered once when the gesture starts.
 from workspace import Workspace
-import luce_std.math
+from luce_std import math
 
 pub class Snapper:
     ## Where things pull to, in document pixels: x for vertical lines, y for horizontal.

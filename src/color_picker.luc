@@ -8,14 +8,9 @@ from luce_window.input import EventKind, Cursor
 from interop import Connection
 from workspace import Workspace
 from hex_color import parse_hex, hex_of_srgb
-import luce_color.color as science
-import luce_color.hsl
-import luce_color.lab
-import luce_color.oklab
-import luce_color.space
-import luce_color.transfer
+from luce_color import color as science, hsl, lab, oklab, space, transfer
 import theme
-import luce_std.math
+from luce_std import math
 
 ## A color shown in a rounded well.
 pub class Swatch: Widget:

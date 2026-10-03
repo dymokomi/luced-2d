@@ -3,7 +3,7 @@
 from luce_ui.ui import Theme
 from luce_gpu.gpu import Color
 from hex_color import parse_hex
-import luce_color.transfer
+from luce_color import transfer
 
 func linear(byte: float) -> float:
     return transfer.srgb_decode(byte / 255.0)

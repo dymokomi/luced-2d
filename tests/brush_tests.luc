@@ -15,8 +15,7 @@ from brush_settings import define_tip
 from brushes_panel import BrushesPanel
 from kit import Kit
 from luce_config.toml import Table
-import luce_std.paths
-import luce_std.files
+from luce_std import paths, files
 
 pub func brush_tests(arguments: list[str]) -> unit!:
     let directory = paths.join(arguments[0], "brush-library")

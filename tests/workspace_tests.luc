@@ -13,13 +13,12 @@ from settings import Settings, Store
 from settings_panel import SettingsDialog
 from update_check import newer
 from tool_memory import tools_path, restore_tools, remember_tools
-import luce_std.paths
-import luce_std.files
+from luce_std import paths, files
 from layer_transfer import copy_layers, paste_layers, send_layers
 from brush_dynamics import mapped
 from luce_painting.brush_mask import BrushMask
 from brush_library import brush_text
-import luce_window.window
+from luce_window import window
 from test_input import near
 
 pub func layers() -> unit!:

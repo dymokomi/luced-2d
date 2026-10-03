@@ -3,7 +3,7 @@
 ## canvas and does nothing there.
 from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
-import luce_std.math
+from luce_std import math
 
 ## A pan by dragging: the view follows the pointer.
 pub class PanGesture: ToolHandler:

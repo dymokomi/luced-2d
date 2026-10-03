@@ -4,7 +4,7 @@
 ## keeping the one before.
 from luce_ui.ui import Event
 from tool_handler import ToolHandler, ToolContext
-import luce_std.math
+from luce_std import math
 
 pub class GradientTool: ToolHandler:
     ## A live gradient's end being dragged (the new one's end, or a handle).

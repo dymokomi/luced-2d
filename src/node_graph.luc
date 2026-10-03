@@ -6,7 +6,7 @@
 from workspace import Workspace
 from luce_image.canvas import Canvas
 from vectors import vector_layer
-import luce_std.math
+from luce_std import math
 
 ## What a wire carries, as luce-image numbers it.
 pub let port_shapes: int = 0

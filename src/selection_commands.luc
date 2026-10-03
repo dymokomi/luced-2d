@@ -5,8 +5,8 @@
 from live import Live
 from layer_picking import LayerPicking
 from tool_state import ToolState
-import luce_std.math
-import luce_color.transfer
+from luce_std import math
+from luce_color import transfer
 
 pub class SelectionCommands:
     let live: Live

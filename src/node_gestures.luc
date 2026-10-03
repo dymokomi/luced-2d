@@ -10,7 +10,7 @@ from luce_ui.ui import Event, Point
 from luce_window.input import EventKind, Key, ScrollUnit
 from node_layout import NodeLayout, node_width
 from node_graph import GraphLink, connect, disconnect, rewire, move_nodes, delete_nodes, ports_fit
-import luce_std.math
+from luce_std import math
 
 ## What a drag is doing.
 let idle: int = 0

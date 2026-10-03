@@ -16,7 +16,7 @@ from brush_list import BrushList, stroke_thumbnail
 from brush_settings import BrushSettings
 from kit import Kit
 from theme import Look
-import luce_std.math
+from luce_std import math
 
 pub class BrushesPanel:
     pub let panel: Panel

@@ -5,7 +5,7 @@ from luce_ui.ui import Font
 from workspace import Workspace
 from panels import Panels
 from actions import Actions
-import luce_std.paths
+from luce_std import paths
 
 pub func background_tests(arguments: list[str]) -> unit!:
     refine_in_background()

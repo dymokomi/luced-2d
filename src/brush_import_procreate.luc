@@ -12,8 +12,7 @@ from luce_painting.brush_mask import BrushMask
 from brush_dynamics import no_mappings, mapped
 from luce_image.brush_files import brush_mask_of
 from luce_image.image import Image
-import luce_std.math
-import luce_std.paths
+from luce_std import math, paths
 
 ## Procreate's size at 100%, in pixels, before the brush's own limits.
 let full_size: float = 100.0
