@@ -72,7 +72,7 @@ pub class GuideDrag:
             if self.index >= 0:
                 canvas.remove_guide(self.index)
         elif self.index < 0:
-            discard(canvas.add_guide(self.vertical, self.position))
+            _ = canvas.add_guide(self.vertical, self.position)
         else:
             canvas.move_guide(self.index, self.position)
         workspace.touch()

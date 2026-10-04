@@ -15,7 +15,7 @@ import theme
 from luce_std import crash
 
 ## The version crash reports carry; keep it equal to package.prisma's.
-pub let version: str = "0.2.1"
+pub let version: str = "0.2.2"
 
 pub class Luce2D:
     pub let app: Application
@@ -54,7 +54,7 @@ pub class Luce2D:
         update.start()
         let connections: list[Connection] = []
         connections.append(app.on_frame(func (elapsed: float) -> unit!:
-            discard(elapsed)
+            _ = elapsed
             panels.view.settle()
             panels.view.march()
             panels.show_opening()
@@ -98,9 +98,9 @@ pub class Luce2D:
 
     pub func close(self):
         remember_tools(self.workspace, tools_path()) catch failure:
-            discard(failure)
+            _ = failure
         self.panels.dock_layout.save() catch failure:
-            discard(failure)
+            _ = failure
         self.update.close()
         for connection in self.connections:
             connection.disconnect()

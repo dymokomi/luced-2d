@@ -52,8 +52,8 @@ pub class PolygonLasso:
         if self.xs.length <= 1:
             self.cancel()
             return
-        discard(self.xs.pop())
-        discard(self.ys.pop())
+        _ = self.xs.pop()
+        _ = self.ys.pop()
 
     pub func cancel(self):
         self.active = false

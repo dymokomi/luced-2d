@@ -157,7 +157,7 @@ pub class PenTool:
         if self.edited < 0:
             return
         if self.grab == grab_point and not self.moved and self.anchors.length > 2:
-            discard(self.anchors.remove_at(self.grabbed))
+            _ = self.anchors.remove_at(self.grabbed)
             self.changed = true
         if self.changed:
             self.commit_edit(workspace)

@@ -39,7 +39,7 @@ pub func apply_vector(workspace: Workspace, action: str, fields: list[str]) -> u
         while at + 1 < fields.length:
             # A corner anchor: both handles on its point.
             for repeat in [0, 1, 2]:
-                discard(repeat)
+                _ = repeat
                 canvas.add_point(decimal(fields, at), decimal(fields, at + 1))
             at += 2
         workspace.edits.as_one("Path", func () -> unit!:

@@ -139,7 +139,7 @@ pub class ViewAids:
         let viewport = workspace.viewport
         let diameter = workspace.tools.brush.diameter
         let source = workspace.canvas.clone_preview(workspace.layers.selected_id(), (x - viewport.offset_x) / viewport.zoom, (y - viewport.offset_y) / viewport.zoom, diameter, 0.6) catch failure:
-            discard(failure)
+            _ = failure
             return
         let side = int(math.max(1.0, math.min(1024.0, math.ceil(diameter))))
         if self.clone_side != side:

@@ -209,7 +209,7 @@ pub class SettingsDialog:
     func set_chord(self, id: str, chord: str) -> unit!:
         if let fallback = self.defaults[id]:
             if fallback == chord:
-                discard(self.draft.shortcuts.remove(id))
+                _ = self.draft.shortcuts.remove(id)
             else:
                 self.draft.shortcuts[id] = chord
         self.table.set_rows(self.cells())
@@ -293,7 +293,7 @@ pub class SettingsDialog:
         self.workspace.set_memory_usage(self.settings.memory_usage / 100.0)
         # A folder that is not there keeps the default rather than failing the rest.
         self.workspace.set_scratch_folder(self.settings.scratch) catch failure:
-            discard(failure)
+            _ = failure
         let look = Look(self.settings.accent, self.settings.control_radius)
         self.workspace.look = look
         var recent: list[str] = []
@@ -306,7 +306,7 @@ pub class SettingsDialog:
         for command in self.commands:
             let chord = self.live_chord(command.id())
             let shortcut = Shortcut.parse(chord) catch failure:
-                discard(failure)
+                _ = failure
                 continue
             command.set_shortcut(shortcut)
         if let done = self.applied:

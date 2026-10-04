@@ -5,7 +5,7 @@
 from brush_library import SavedBrush, import_brush, library_path, save_brush, free_folder
 from brush_import_abr import abr_brushes
 from brush_import_procreate import procreate_brush
-from luce_std.files import Entries, FileKind
+from luce_std.files import FileKind
 from luce_std import files, paths
 from luce_ui import ui
 
@@ -64,18 +64,12 @@ pub func run_brush_import(arguments: list[str]) -> int!:
 
 ## `path` into `sources`: a brush file itself, a folder's brush files within.
 func gather(path: str, sources: list[str]) -> unit!:
-    if files.path_kind(path) != FileKind.directory:
+    if files.metadata(path).kind != FileKind.directory:
         sources.append(path)
         return
-    let entries = Entries(path)
-    var names: list[str] = []
-    for index in 0..<entries.count():
-        names.append(entries.name(index))
-    entries.close()
-    names.sort()
-    for name in names:
+    for name in files.list(path):
         let child = paths.join(path, name)
-        if files.path_kind(child) == FileKind.directory:
+        if files.metadata(child).kind == FileKind.directory:
             gather(child, sources)
         elif paths.extension(name).lower() in brush_extensions():
             sources.append(child)

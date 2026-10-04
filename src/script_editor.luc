@@ -45,7 +45,7 @@ pub class ScriptEditor:
         self.highlighter = none
         # Without the grammar the script is plain text, never an error.
         let grammar: Grammar? = Grammar(grammar_source) catch failure:
-            discard(failure)
+            _ = failure
             recover none
         if let loaded = grammar:
             self.highlighter = ScriptHighlighter(self.editor, loaded, workspace.look.accent)

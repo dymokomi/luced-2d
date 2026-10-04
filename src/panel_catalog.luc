@@ -91,7 +91,7 @@ pub class PanelCatalog:
 
     ## A panel's tab was closed: the Window menu no longer ticks it.
     func closed(self, panel: Panel) -> unit!:
-        discard(panel)
+        _ = panel
         self.refresh()
 
     ## Whether panel `id` is open, docked or floating.

@@ -168,7 +168,7 @@ pub func filter_dialogs() -> unit!:
     let before = workspace.canvas.layer_count()
     for kind in [12, 13, 14, 15]:
         let spec = adjustments()[kind]
-        discard(workspace.previews.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults())))
+        _ = workspace.previews.add_adjustment_layer(kind, spec.name, spec.engine(spec.defaults()))
     assert(workspace.canvas.layer_count() == before + 4 and workspace.canvas.layer_adjustment(workspace.layers.selected) == 15)
     panels.close()
 
@@ -258,9 +258,9 @@ pub func replace_color() -> unit!:
     workspace.canvas.pick(48, 32)
     assert(workspace.canvas.undo_name() == "Replace Color" and workspace.canvas.picked_green() < 0.05)
     var refused = false
-    discard(workspace.canvas.add_adjustment_layer("Replace", 17) catch failure:
+    _ = workspace.canvas.add_adjustment_layer("Replace", 17) catch failure:
         refused = true
-        recover 0)
+        recover 0
     assert(refused)
     panels.close()
 

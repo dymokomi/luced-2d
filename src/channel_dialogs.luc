@@ -49,7 +49,7 @@ pub class SaveSelectionDialog:
             if let failed = self.failed:
                 failed(f"Save Selection: {failure.message}")
             return
-        discard(index)
+        _ = index
         if let done = self.applied:
             done()
 

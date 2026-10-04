@@ -18,7 +18,7 @@ pub class UpdateCheck:
     pub func start(self) -> unit!:
         let luc = luce_program("luc")
         self.command = Command(luc, ["latest", "dymokomi/luced-2d"], output_limit = 4096) catch failure:
-            discard(failure)
+            _ = failure
             recover none
 
     ## Look at luc's answer once it has one: true the one time a newer

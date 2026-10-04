@@ -58,7 +58,7 @@ pub class InfoPanel:
         if workspace.canvas.painting() or workspace.canvas.previewing():
             return
         workspace.canvas.pick(int(math.floor(document_x)), int(math.floor(document_y))) catch failure:
-            discard(failure)
+            _ = failure
             return
         let red = workspace.canvas.picked_red()
         let green = workspace.canvas.picked_green()

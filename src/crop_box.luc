@@ -189,8 +189,8 @@ pub class CropBox:
     ## The width follows the height at `ratio`, about the middle (a top or
     ## bottom edge handle dragged).
     func fit_width(self, ratio: float, moves_left: bool, moves_right: bool):
-        discard(moves_left)
-        discard(moves_right)
+        _ = moves_left
+        _ = moves_right
         let new_wide = math.round(math.abs(self.bottom - self.top) * ratio)
         let middle = math.round((self.from_left + self.from_right) * 0.5)
         self.left = middle - math.round(new_wide * 0.5)

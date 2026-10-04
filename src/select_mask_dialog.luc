@@ -70,7 +70,7 @@ pub class SelectMaskDialog:
         self.session.refresh()
 
     pub func changed(self, value: float) -> unit!:
-        discard(value)
+        _ = value
         self.session.request()
         # Wake the loop for the frame that shows it.
         self.view_menu.layout().invalidate()

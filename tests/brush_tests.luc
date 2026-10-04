@@ -189,9 +189,9 @@ func library_round_trip(directory: str) -> unit!:
     assert(found)
     # A value the file gets wrong is an error, not a silent default.
     let wrong = brush_of(Table("[texture]\nkind = \"weave\"\n")) catch failure:
-        discard(failure)
+        _ = failure
         return
-    discard(wrong)
+    _ = wrong
     assert(false)
 
 ## The list groups brushes under folding headers, rows kept by brush index;
@@ -211,9 +211,9 @@ func grouped_list(directory: str) -> unit!:
     rows.fold_all_but([])
     assert(rows.is_folded("Oils"))
     let refused = import_brushes(paths.join(directory, "notes.txt")) catch failure:
-        discard(failure)
+        _ = failure
         return
-    discard(refused)
+    _ = refused
     assert(false)
 
 ## A `.l2dbrush` file carries the brush whole, images included.

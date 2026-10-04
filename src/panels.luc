@@ -262,7 +262,7 @@ pub class Panels:
         for each in align_modes():
             let chosen = each
             kit.bind(actions.aligns[align_index], func () -> unit!:
-                discard(align_layers(self.workspace, chosen))
+                _ = align_layers(self.workspace, chosen)
                 self.refresh())
             align_index += 1
         var window_index = 0
@@ -462,7 +462,7 @@ pub class Panels:
         self.text_editing.close_all()
         if self.workspace.previews.previewing():
             self.workspace.previews.end_preview(false) catch failure:
-                discard(failure)
+                _ = failure
         self.kit.close()
 
     ## Each frame: give the canvas the keys once a pending focus is due.

@@ -226,7 +226,7 @@ pub func alpha_channel_panel(arguments: list[str]) -> unit!:
     canvas.select_rectangle(0, 0, 10, 10)
     channels.show()
     assert(canvas.channel_count() == 1)
-    discard(canvas.new_channel(next_alpha_name(workspace)))
+    _ = canvas.new_channel(next_alpha_name(workspace))
     channels.channel_list.alpha_row = 5
     assert(channels.picked() == 1)
     canvas.rename_channel(1, "Mask")
@@ -488,7 +488,7 @@ pub func node_editor(arguments: list[str]) -> unit!:
     view.refresh()
     var added = 0
     while added < 200:
-        discard(canvas.add_graph_node(workspace.layers.selected_id(), 7, float(added % 20) * 200.0, 1200.0 + float(added // 20) * 120.0))
+        _ = canvas.add_graph_node(workspace.layers.selected_id(), 7, float(added % 20) * 200.0, 1200.0 + float(added // 20) * 120.0)
         added += 1
     workspace.touch()
     let busy = Frame(window.Size(600.0, 320.0, 600.0, 320.0, 1.0))

@@ -92,7 +92,7 @@ pub class MoveTool: ToolHandler:
             context.snapper.enabled = false
         if self.pixels:
             workspace.previews.begin_preview() catch failure:
-                discard(failure)
+                _ = failure
                 self.pixels = false
 
     pub func drag(self, context: ToolContext, event: Event, x: float, y: float) -> unit!:

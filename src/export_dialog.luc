@@ -17,7 +17,7 @@ pub class ExportDialog:
     pub func init(self, kit: Kit) -> unit!:
         self.kit = kit
         self.quality = kit.slider_field(1.0, 100.0, 90.0, 0, "", func (moved: float) -> unit!:
-            discard(moved))
+            _ = moved)
         let white = Command("White", id = "jpeg_matte_white")
         let gray = Command("50% Gray", id = "jpeg_matte_gray")
         let black = Command("Black", id = "jpeg_matte_black")

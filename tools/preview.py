@@ -29,7 +29,7 @@ if arguments.zoom:
     SCENE += '\n            editor.workspace.viewport.zoom = %r' % arguments.zoom
 # Only what the scene uses: Luce rejects an unused import.
 _input = [name for name in ('EventKind', 'ScrollUnit', 'Key') if name in SCENE]
-SCENE_IMPORTS = ('from brush_mask import BrushMask\n' if 'BrushMask' in SCENE else '') + ('from brush import preset\n' if 'preset(' in SCENE else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('from luce_clipboard import clipboard\n' if 'clipboard.' in SCENE else '') + ('from luce_ui.ui import Event\n' if 'Event(' in SCENE else '') + ('from luce_ui.ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from luce_window.input import ' + ', '.join(_input) + '\n' if _input else '')
+SCENE_IMPORTS = ('from luce_painting.brush_mask import BrushMask\n' if 'BrushMask' in SCENE else '') + ('from brush import preset\n' if re.search(r'\bpreset\(', SCENE) else '') + ('from brush_dynamics import mapped\n' if 'mapped(' in SCENE else '') + ('from layer_groups import group_selected\n' if 'group_selected' in SCENE else '') + ('from luce_clipboard import clipboard\n' if 'clipboard.' in SCENE else '') + ('from luce_ui.ui import Event\n' if 'Event(' in SCENE else '') + ('from luce_ui.ui import DockPosition\n' if 'DockPosition' in SCENE else '') + ('from luce_window.input import ' + ', '.join(_input) + '\n' if _input else '')
 with tempfile.TemporaryDirectory(prefix='luced-2d-preview-') as temporary:
     work = Path(temporary)
     shutil.copytree(ROOT / 'src', work / 'src')
@@ -88,7 +88,7 @@ pub func save(path: str) -> !:
     (work / 'src/main.luc').write_text('''import probe
 from app import Luce2D
 ''' + SCENE_IMPORTS + '''pub func main(arguments: list[str]) -> int!:
-    discard(arguments)
+    _ = arguments
     let editor = Luce2D()
     editor.workspace.documents.open("''' + str(ROOT / 'docs/sample.png') + '''")
     editor.workspace.edits.add_layer()
@@ -96,7 +96,7 @@ from app import Luce2D
     var frames = 0
     var captured = false
     let observed = editor.app.on_frame(func (elapsed: float) -> unit!:
-        discard(elapsed)
+        _ = elapsed
         frames += 1
         if frames == 4:
             editor.workspace.colors.set_color(0.8069, 0.3515, 0.0497)

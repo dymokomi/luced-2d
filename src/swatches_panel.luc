@@ -114,7 +114,7 @@ class SwatchGrid: Widget:
         if index < 0:
             return
         if event.button == 1:
-            discard(self.colors.remove_at(index))
+            _ = self.colors.remove_at(index)
         else:
             let linear = linear_of_hex(self.colors[index]) else return
             self.workspace.colors.set_palette(linear[0], linear[1], linear[2], event.alt)

@@ -95,7 +95,7 @@ pub class Kit:
     pub func checkbox(self, label: str, callback: func() -> unit!) -> Checkbox!:
         let box = Checkbox(label, font = self.font)
         self.connections.append(box.on_change(func (value: bool) -> unit!:
-            discard(value)
+            _ = value
             callback()))
         return box
 

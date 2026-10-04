@@ -173,7 +173,7 @@ func quoted(text: str) -> str:
 pub func luce_program(tool: str = "luce") -> str!:
     let home = files.home_directory()
     let installed = paths.join(paths.join(paths.join(paths.join(home, "AppData"), "Local"), "luce"), paths.join("bin", tool + ".exe")) if platform.windows else paths.join(paths.join(paths.join(home, ".local"), "luce"), paths.join("bin", tool))
-    let kind = files.path_kind(installed) catch failure:
-        discard(failure)
+    let kind = files.metadata(installed).kind catch failure:
+        _ = failure
         return tool
     return installed if kind == files.FileKind.regular else tool

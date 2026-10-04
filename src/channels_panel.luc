@@ -37,7 +37,7 @@ pub class ChannelsPanel:
         self.rename_command = Command("Rename Channel…", id = "channel_rename")
         self.delete_command = Command("Delete Channel", id = "channel_delete")
         kit.bind(self.duplicate_command, self.attempting("Duplicate Channel", func () -> unit!:
-            discard(duplicate_channel(self.workspace, self.picked()))))
+            _ = duplicate_channel(self.workspace, self.picked())))
         kit.bind(self.rename_command, func () -> unit!:
             let index = self.picked()
             if index >= 0:
@@ -91,10 +91,10 @@ pub class ChannelsPanel:
 
     ## The footer's Save Selection as Channel: at once, the next "Alpha N".
     func save_new(self) -> unit!:
-        discard(save_selection(self.workspace, next_alpha_name(self.workspace)))
+        _ = save_selection(self.workspace, next_alpha_name(self.workspace))
 
     func new_empty(self) -> unit!:
-        discard(new_channel(self.workspace))
+        _ = new_channel(self.workspace)
 
     func load_picked(self) -> unit!:
         let index = self.picked()

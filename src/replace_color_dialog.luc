@@ -73,7 +73,7 @@ pub class ReplaceColorDialog:
         self.show()
 
     func moved(self, value: float) -> unit!:
-        discard(value)
+        _ = value
         self.show()
 
     ## A color from the canvas (sRGB): 0 samples anew, 1 adds, 2 takes back out.

@@ -35,7 +35,7 @@ pub class Swatch: Widget:
         painter.close()
 
     pub func event(self, event: Event) -> unit!:
-        discard(event)
+        _ = event
 
 ## Photoshop's new-over-current preview: the color being chosen above the one
 ## the picker opened with. Clicking the lower half goes back to it.
@@ -176,7 +176,7 @@ pub class ColorPicker:
             self.radios.append(radio)
             let channel = NumberField(0.0, channel_low(index), channel_high(index), 1.0 if index != 10 else 0.5, decimals = 0 if index != 10 else 1, suffix = suffixes[index], font = font, cells = 6.0)
             self.connections.append(channel.on_change(func (value: float) -> unit!:
-                discard(value)
+                _ = value
                 self.channel_changed(chosen)))
             self.channels.append(channel)
             index += 1

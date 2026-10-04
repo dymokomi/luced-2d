@@ -237,7 +237,7 @@ pub class ScriptCommands:
             if flag(fields, 0) != workspace.canvas.quick_mask():
                 workspace.selection.toggle_quick_mask()
         elif action == "save_selection":
-            discard(save_selection(workspace, field(fields, 0)))
+            _ = save_selection(workspace, field(fields, 0))
         elif action == "load_selection":
             load_selection(workspace, self.channel(field(fields, 0)), number(fields, 1))
         elif action == "delete_channel":
@@ -271,7 +271,7 @@ pub class ScriptCommands:
             if action == "adjust":
                 workspace.previews.adjust(spec.kind, numbers)
             else:
-                discard(workspace.previews.add_adjustment_layer(spec.kind, spec.name, numbers))
+                _ = workspace.previews.add_adjustment_layer(spec.kind, spec.name, numbers)
         elif action == "filter":
             self.filter(field(fields, 0), fields)
         elif action == "resize_image":

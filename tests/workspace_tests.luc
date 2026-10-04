@@ -116,10 +116,10 @@ pub func settings_round_trip() -> unit!:
     assert(reread.shortcuts["save"] == "cmd+shift+s" and reread.shortcuts["swap_colors"] == "none" and reread.shortcuts.length == 2)
     assert(fresh.shortcuts.length == 0)
     var rejected = false
-    discard(Settings("[view]\nunits = \"furlongs\"\n") catch failure:
-        discard(failure)
+    _ = Settings("[view]\nunits = \"furlongs\"\n") catch failure:
+        _ = failure
         rejected = true
-        return)
+        return
     assert(rejected)
 
 ## A checker piece of any fractional size and place maps to a source region of

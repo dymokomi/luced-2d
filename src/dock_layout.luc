@@ -232,7 +232,7 @@ pub class DockLayout:
         # No file yet: the first save writes one. A file that does not read is
         # left as it is until the arrangement changes.
         let text = files.read_text(path, limit = 65536) catch failure:
-            discard(failure)
+            _ = failure
             return
         self.written = self.dock.layout_text()
         let plan = parse_layout(text) else return
@@ -241,7 +241,7 @@ pub class DockLayout:
             return
         self.clear()
         self.build(root, "viewport") catch failure:
-            discard(failure)
+            _ = failure
             self.clear()
             self.arrange_default()
             return

@@ -130,7 +130,7 @@ pub class RulerCorner: Widget:
         painter.close()
 
     pub func event(self, event: Event) -> unit!:
-        discard(event)
+        _ = event
 
 ## Rulers are 18 points thick, as Compositor's.
 pub let thickness: float = 18.0

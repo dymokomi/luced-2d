@@ -240,7 +240,7 @@ pub class BrushesPanel:
         delete_brush(self.library, saved.folder) catch failure:
             self.fail(f"Could not delete the brush: {failure.message}")
             return
-        discard(self.saved.remove_at(row - preset_names().length))
+        _ = self.saved.remove_at(row - preset_names().length)
         if self.workspace.tools.brush.folder == saved.folder:
             self.workspace.tools.brush.folder = ""
             self.workspace.tools.brush.preset = "(unsaved)"

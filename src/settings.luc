@@ -115,7 +115,7 @@ pub class Store:
         self.warning = ""
         # No file yet is the common case: defaults, and nothing written.
         let source = files.read_text(self.path, limit = 65536) catch failure:
-            discard(failure)
+            _ = failure
             return Settings()
         let loaded = Settings(source) catch failure:
             self.warning = f"Settings not read ({self.path}): {failure.message}"

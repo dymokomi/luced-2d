@@ -39,7 +39,7 @@ pub class ColorSliders:
             var channel = 0
             for label in channel_labels(index):
                 let pair = kit.slider_field(channel_low(index)[channel], channel_high(index)[channel], 0.0, 0, channel_suffix(index)[channel], func (value: float) -> unit!:
-                    discard(value)
+                    _ = value
                     self.take())
                 self.fields.append(pair)
                 self.rows.append(kit.dialog_row(label, pair.row, width = 16.0))

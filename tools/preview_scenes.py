@@ -175,14 +175,14 @@ def scenes(sample):
             editor.panels.refresh()''',
     # The Channels panel: a saved ellipse shown red over the picture, and the green channel alone.
     'channels': '''            editor.workspace.canvas.select_ellipse(200, 100, 500, 400)
-            discard(editor.workspace.canvas.save_selection_channel("Alpha 1"))
+            _ = editor.workspace.canvas.save_selection_channel("Alpha 1")
             editor.workspace.canvas.deselect()
             editor.panels.catalog.open("channels")
             editor.workspace.canvas.set_channel_shown(0, true)
             editor.workspace.touch()
             editor.panels.refresh()''',
     'channelgray': '''            editor.workspace.canvas.select_ellipse(200, 100, 500, 400)
-            discard(editor.workspace.canvas.save_selection_channel("Alpha 1"))
+            _ = editor.workspace.canvas.save_selection_channel("Alpha 1")
             editor.panels.catalog.open("channels")
             editor.workspace.canvas.set_composite_view(false, true, false)
             editor.workspace.touch()
@@ -245,17 +245,17 @@ def scenes(sample):
     'channelundo': '''            editor.panels.catalog.open("channels")
             editor.panels.refresh()
             editor.workspace.canvas.select_ellipse(200, 100, 500, 400)
-            discard(editor.workspace.canvas.save_selection_channel("Alpha 1"))
+            _ = editor.workspace.canvas.save_selection_channel("Alpha 1")
             editor.workspace.touch()
             editor.panels.refresh()
-            discard(editor.workspace.canvas.save_selection_channel("Alpha 2"))
+            _ = editor.workspace.canvas.save_selection_channel("Alpha 2")
             editor.workspace.touch()
             editor.panels.refresh()
             editor.workspace.undo()
             editor.panels.refresh()
             editor.workspace.redo()
             editor.panels.refresh()
-            discard(editor.workspace.canvas.save_selection_channel("Alpha 3"))
+            _ = editor.workspace.canvas.save_selection_channel("Alpha 3")
             editor.workspace.touch()
             editor.panels.refresh()''',
     'quickmask': '''            editor.workspace.canvas.select_all()
@@ -267,8 +267,8 @@ def scenes(sample):
             editor.panels.refresh()''',
     'halfstrokes': half_strokes(False),
     'halfstrokeslinear': half_strokes(True),
-    'guides': '''            discard(editor.workspace.canvas.add_guide(true, 700.0))
-            discard(editor.workspace.canvas.add_guide(false, 300.0))
+    'guides': '''            _ = editor.workspace.canvas.add_guide(true, 700.0)
+            _ = editor.workspace.canvas.add_guide(false, 300.0)
             editor.panels.refresh()''',
     # A text layer in a box, centred, being edited, in Georgia Italic.
     'text': '''            editor.workspace.choose_tool("text")

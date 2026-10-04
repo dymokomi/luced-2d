@@ -100,7 +100,7 @@ func load_inverted() -> unit!:
     workspace.canvas.bind_headless()
     let panels = Panels(workspace, Actions(), Font())
     workspace.canvas.select_rectangle(0, 0, 32, 48, 0)
-    discard(workspace.canvas.save_selection_channel("Alpha 1"))
+    _ = workspace.canvas.save_selection_channel("Alpha 1")
     workspace.canvas.deselect()
     let dialog = panels.load_selection
     dialog.open()

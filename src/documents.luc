@@ -38,5 +38,5 @@ pub func title_of(path: str) -> str:
 ## A new untitled canvas of `width` by `height` with one empty Background layer.
 pub func blank_canvas(width: int, height: int) -> Canvas!:
     let canvas = Canvas(width, height)
-    discard(canvas.add_layer("Background"))
+    _ = canvas.add_layer("Background")
     return canvas

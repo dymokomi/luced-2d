@@ -115,7 +115,7 @@ func pin_all(workspace: Workspace, fields: list[str]) -> unit!:
     let canvas = workspace.canvas
     var at = 1
     while at + 3 < fields.length:
-        discard(canvas.puppet_add_pin(decimal(fields, at), decimal(fields, at + 1)))
+        _ = canvas.puppet_add_pin(decimal(fields, at), decimal(fields, at + 1))
         at += 4
     var pin = 0
     at = 1

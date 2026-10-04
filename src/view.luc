@@ -188,7 +188,7 @@ pub class CanvasView: Widget:
             return
         self.workspace.viewport.pan(-dx, -dy)
         shape.drag_again(self.workspace, self.document_x(self.pointer_x), self.document_y(self.pointer_y)) catch failure:
-            discard(failure)
+            _ = failure
         self.box.invalidate()
 
     # -- Drawing.

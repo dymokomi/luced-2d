@@ -20,10 +20,10 @@ pub func tools_path(directory: str = "") -> str!:
 ## The workspace's options as `path` last kept them.
 pub func restore_tools(workspace: Workspace, path: str) -> unit!:
     let source = files.read_text(path, limit = 65536) catch failure:
-        discard(failure)
+        _ = failure
         return
     let table = Table(source) catch failure:
-        discard(failure)
+        _ = failure
         return
     let tool = words(table, "tool.current", workspace.tools.tool)
     for known in tools():
@@ -68,7 +68,7 @@ pub func restore_tools(workspace: Workspace, path: str) -> unit!:
 ## that does not read keeps the brush there is.
 func restore_brush(workspace: Workspace, table: Table, directory: str) -> unit!:
     let saved = load_brush(directory, brush_folder) catch failure:
-        discard(failure)
+        _ = failure
         return
     saved.brush.preset = words(table, "brush.preset", saved.name)
     saved.brush.folder = words(table, "brush.folder", "")

@@ -69,7 +69,7 @@ pub func merge(workspace: Workspace) -> unit!:
     let title = merge_title(workspace)
     workspace.edits.as_one(title, func () -> unit!:
         if title == "Merge Group":
-            discard(merge_group(workspace, workspace.layers.selected_id()))
+            _ = merge_group(workspace, workspace.layers.selected_id())
         elif title == "Merge Layers":
             merge_layers(workspace, workspace.layers.selected_ids())
         else:
@@ -106,7 +106,7 @@ func merge_group(workspace: Workspace, group: int) -> int!:
     let canvas = workspace.canvas
     for member in members(workspace, group):
         if canvas.layer_is_group(workspace.layers.index_of(member)):
-            discard(merge_group(workspace, member))
+            _ = merge_group(workspace, member)
     let inside = members(workspace, group)
     if inside.length == 0:
         return group

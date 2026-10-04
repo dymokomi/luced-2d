@@ -106,10 +106,10 @@ pub class DocumentFiles:
         return true
 
     pub func save(self) -> unit!:
-        discard(self.save_document())
+        _ = self.save_document()
 
     pub func save_as(self) -> unit!:
-        discard(self.save_document_as())
+        _ = self.save_document_as()
 
     ## File › Export PNG…: the flattened picture, transparency kept.
     pub func export_png(self) -> unit!:

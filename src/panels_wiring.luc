@@ -346,7 +346,7 @@ pub class PanelsWiring:
             while channel < 4:
                 workspace.canvas.reset_curve(channel)
                 channel += 1
-        discard(workspace.previews.add_adjustment_layer(kind, spec.name, numbers))
+        _ = workspace.previews.add_adjustment_layer(kind, spec.name, numbers)
 
     ## Copy (Cut with `cut`): the selected pixels, or with none selected the
     ## selected layers whole.

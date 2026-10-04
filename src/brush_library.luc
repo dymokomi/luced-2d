@@ -10,7 +10,6 @@ from brush import Brush, max_brush
 from luce_painting.brush_mask import BrushMask
 from luce_image.brush_files import open_brush_mask, save_brush_mask, brush_mask_png_text, brush_mask_from_png_text
 from brush_dynamics import no_mappings, control_ids, parameter_ids
-from luce_std.files import Entries
 from luce_std import files, paths
 from luce_ui import ui
 
@@ -57,15 +56,12 @@ pub func library_path(directory: str = "") -> str!:
 ## folder that does not read as a brush is passed over.
 pub func load_library(library: str) -> list[SavedBrush]!:
     var found: list[SavedBrush] = []
-    let snapshot = Entries(library) catch failure:
+    let folders = files.list(library) catch failure:
         return found
-    for index in 0..<snapshot.count():
-        let folder = snapshot.name(index) catch _:
-            continue
+    for folder in folders:
         let saved = load_brush(library, folder, images = false) catch _:
             continue
         found.append(saved)
-    snapshot.close()
     return found
 
 ## The brush in `library`'s `folder`, its pictures loaded now or, without
@@ -91,7 +87,7 @@ pub func save_brush(library: str, saved: SavedBrush) -> unit!:
 
 ## Remove `folder` and everything in it from `library`.
 pub func delete_brush(library: str, folder: str) -> unit!:
-    files.delete_path(paths.join(library, folder), recursive = true)
+    files.remove_tree(paths.join(library, folder))
 
 ## A folder name for `name` not yet used in `library`: its letters and digits
 ## in lower case, dashes between, numbered when taken.
@@ -149,7 +145,7 @@ func keep_image(mask: BrushMask?, path: str) -> unit!:
             save_brush_mask(image, path)
             return
     if present(path):
-        files.delete_path(path)
+        files.remove_file(path)
 
 # -- The TOML form.
 
@@ -230,9 +226,9 @@ func index_of(names: list[str], name: str, what: str) -> int!:
 
 ## Whether anything is at `path`.
 func present(path: str) -> bool:
-    let kind = files.path_kind(path) catch _:
+    let kind = files.metadata(path).kind catch _:
         return false
-    discard(kind)
+    _ = kind
     return true
 
 func has_image(mask: BrushMask?) -> bool:
