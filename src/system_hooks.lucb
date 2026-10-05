@@ -17,7 +17,7 @@ pub func connect_engine_wake():
 
 func wake_window():
     window.wake() catch failure:
-        discard(failure)
+        _ = failure
 
 ## Put `picture` on the system clipboard as PNG, with its RGBA for programs
 ## that take pixels.
@@ -62,7 +62,7 @@ pub func announce_copied_layers() -> !:
     defer names.release()
     clipboard.write_text(names.value) catch failure:
         # A clipboard without text (Linux, for now): the layers still paste here.
-        discard(failure)
+        _ = failure
 
 ## Whether Paste should take the copied layers: the system clipboard still
 ## holds what copying them put there, their pixels or their names.

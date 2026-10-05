@@ -1,7 +1,7 @@
 #prisma 4.0
 def package "luced-2d" {
     str owner = "dymokomi"
-    str version = "0.2.2"
+    str version = "0.3.0"
     str kind = "application"
     str language = "luce"
     str description = "An image editor written in Luce: layered GPU documents from luce-image, drawn at any zoom, with the look of a brutalist grey-and-orange tool."
@@ -15,79 +15,79 @@ def package "luced-2d" {
 
     def dependency "luce-ui" {
         str owner = "dymokomi"
-        str version = "^0.13.2"
+        str version = "^0.15.1"
         str path = "../luce-ui"
     }
 
     def dependency "luce-color" {
         str owner = "dymokomi"
-        str version = "^0.3.2"
+        str version = "^0.5.0"
         str path = "../luce-color"
     }
 
     def dependency "luce-config" {
         str owner = "dymokomi"
-        str version = "^0.2.2"
+        str version = "^0.4.0"
         str path = "../luce-config"
     }
 
     def dependency "luce-textmate" {
         str owner = "dymokomi"
-        str version = "^0.3.2"
+        str version = "^0.5.0"
         str path = "../luce-textmate"
     }
 
     def dependency "luce-canvas" {
         str owner = "dymokomi"
-        str version = "^0.2.2"
+        str version = "^0.4.0"
         str path = "../luce-canvas"
     }
 
     def dependency "luce-image" {
         str owner = "dymokomi"
-        str version = "^0.42.2"
+        str version = "^0.43.0"
         str path = "../luce-image"
     }
 
     def dependency "luce-painting" {
         str owner = "dymokomi"
-        str version = "^0.2.2"
+        str version = "^0.4.0"
         str path = "../luce-painting"
     }
 
     def dependency "luce-std" {
         str owner = "dymokomi"
-        str version = "^0.3.2"
+        str version = "^0.5.0"
         str path = "../luce-std"
     }
 
     def dependency "luce-window" {
         str owner = "dymokomi"
-        str version = "^0.2.2"
+        str version = "^0.4.0"
         str path = "../luce-window"
     }
 
     def dependency "luce-gpu" {
         str owner = "dymokomi"
-        str version = "^0.2.2"
+        str version = "^0.4.0"
         str path = "../luce-gpu"
     }
 
     def dependency "luce-clipboard" {
         str owner = "dymokomi"
-        str version = "^0.3.2"
+        str version = "^0.5.0"
         str path = "../luce-clipboard"
     }
 
     def dependency "luce-psd" {
         str owner = "dymokomi"
-        str version = "^0.3.2"
+        str version = "^0.5.0"
         str path = "../luce-psd"
     }
 
     def dependency "luce-procreate" {
         str owner = "dymokomi"
-        str version = "^0.2.2"
+        str version = "^0.4.0"
         str path = "../luce-procreate"
     }
 }
