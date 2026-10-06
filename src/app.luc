@@ -13,6 +13,7 @@ from dock_layout import layout_path
 from update_check import UpdateCheck
 import theme
 from luce_std import crash
+from luce_std.crash import Hook
 from recovery import save_for_recovery
 
 ## The version the update check compares; keep it equal to package.prisma's.
@@ -24,6 +25,8 @@ pub class Luce2D:
     pub let panels: Panels
     let connections: list[Connection]
     let update: UpdateCheck
+    ## The crash hook that saves the document in front; `close` removes it.
+    let recovery: Hook
 
     pub func init(self) -> unit!:
         # Crash reports first, so anything below that traps leaves one. After a
@@ -47,7 +50,7 @@ pub class Luce2D:
         app.focus(panels.view.layout())
         app.set_close_handler(panels.files.can_quit)
         # A trap saves the document in front, if it has unsaved work, for recovery.
-        app.on_crash(func () -> unit!:
+        let recovery = app.on_crash(func () -> unit!:
             save_for_recovery(workspace))
         panels.settings_dialog.app = app
         panels.scripts.app = app
@@ -88,6 +91,7 @@ pub class Luce2D:
         self.panels = panels
         self.connections = connections
         self.update = update
+        self.recovery = recovery
 
     pub func run(self, arguments: list[str]) -> unit!:
         # Luce's `main` gets the arguments without the program: each is a file to open.
@@ -106,6 +110,8 @@ pub class Luce2D:
         for connection in self.connections:
             connection.disconnect()
         self.connections.clear()
+        # the hook holds the workspace: removed before the application closes
+        self.recovery.remove()
         self.panels.close()
         self.app.close()
         # Nothing reads tiles now: the scratch file and its folder can go.
