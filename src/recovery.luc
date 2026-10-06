@@ -1,0 +1,14 @@
+## What luced-2d saves when it traps: the document in front, if it has unsaved
+## work, as an .l2d package in luce-std's recovery directory
+## (~/.luce/recovery/luced-2d), never over the document's own file. The crash
+## window then says where it went. A fatal signal saves nothing (crash.on_crash).
+from luce_std import crash
+from luce_std import paths
+from workspace import Workspace
+
+pub func save_for_recovery(workspace: Workspace) -> unit!:
+    if not workspace.live.canvas.modified():
+        return
+    let path = paths.join(crash.recovery_directory(), workspace.documents.export_name(".l2d"))
+    workspace.live.canvas.save_package(path)
+    crash.note_recovery(path)

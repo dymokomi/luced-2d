@@ -28,7 +28,6 @@ from style_dialog import StyleDialog
 from properties import Properties
 from prompts import Prompts
 from document_files import DocumentFiles
-from crash_dialog import CrashDialog
 from menus import menu_bar
 from layers_panel import LayersPanel
 from size_dialogs import SizeDialogs
@@ -76,7 +75,6 @@ pub class Panels:
     pub let scripts: ScriptEditor
     pub let properties: Properties
     pub let prompts: Prompts
-    pub let crash: CrashDialog
     pub let layers: LayerList
     ## The dock and its panes, each pane's buttons on a shelf at its bottom.
     pub let dock: DStack
@@ -162,7 +160,6 @@ pub class Panels:
         self.properties = Properties(workspace, kit, actions.blends, self.toggle_visibility, self.toggle_clipped, self.toggle_mask, self.style.open)
         self.properties.changed = self.document_changed
         self.properties.refreshed = self.refresh
-        self.crash = CrashDialog(kit)
         self.palette = Palette(workspace)
         self.picker = ColorPicker(workspace, font)
         self.picker.closed = self.refresh
@@ -275,7 +272,7 @@ pub class Panels:
         # The status bar is where a control's hint shows, as in eleusis: no tooltips.
         self.body = VStack([menu_bar(actions, font), self.header.bar, self.dock, Toolbar([self.zoom_field, self.status, Spacer(), self.header.hint], font = font),
                             self.prompts.prompt, self.panel_prompts.mask_prompt, self.adjust.dialog, self.style.dialog, self.scripts.dialog, self.settings_dialog.dialog,
-                            self.document_settings.dialog, self.crash.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
+                            self.document_settings.dialog, self.files.confirm, self.files.export_dialog.dialog, self.text_editing.dialog,
                             self.picker.dialog, self.color_range.dialog, self.replace_color.dialog, self.select_mask.dialog, self.save_selection.dialog, self.load_selection.dialog] + self.size_dialogs.dialogs(), spacing = 0.0)
         self.body.layout().set_flex()
         self.refresh()
@@ -350,10 +347,6 @@ pub class Panels:
         if index >= 0 and index != self.workspace.documents.current:
             send_layers(self.workspace, index)
             self.refresh()
-
-    ## Show a crash report the last run left.
-    pub func show_crash(self, report: str) -> unit!:
-        self.crash.show(report)
 
     # -- Showing the state.
 

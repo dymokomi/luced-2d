@@ -57,7 +57,7 @@ def package "luced-2d" {
 
     def dependency "luce-std" {
         str owner = "dymokomi"
-        str version = "^0.6.0"
+        str version = "^0.6.1"
         str path = "../luce-std"
     }
 

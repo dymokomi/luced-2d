@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-# Crash reports carry app.luc's version: it must be the package's.
+# The update check compares app.luc's version: it must be the package's.
 package_version = re.search(r'^    str version = "([^"]+)"', (ROOT / 'package.prisma').read_text(), re.M).group(1)
 app_version = re.search(r'pub let version: str = "([^"]+)"', (ROOT / 'src/app.luc').read_text()).group(1)
 if app_version != package_version:

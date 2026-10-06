@@ -396,12 +396,6 @@ def scenes(sample):
             editor.workspace.viewport.offset_y = 10.0
             print(f"PAN far {editor.workspace.viewport.offset_x},{editor.workspace.viewport.offset_y} zoom {editor.workspace.viewport.zoom}")
             editor.panels.refresh()''',
-    'crash': '''            editor.panels.show_crash("trap: src/view.luc:1:1: a sample report\\nat frame 0")
-            editor.panels.refresh()
-            let copy = editor.panels.crash.copy.layout().bounds()
-            editor.app.dispatch(Event(kind = EventKind.pointer_down, x = copy.x + 4.0, y = copy.y + 4.0, button = 0))
-            editor.app.dispatch(Event(kind = EventKind.pointer_up, x = copy.x + 4.0, y = copy.y + 4.0, button = 0))
-            editor.panels.refresh()''',
     'drop': '''            editor.workspace.choose_tool("brush")
             editor.panels.refresh()
             let layer_area = editor.panels.layers.layout().bounds()
