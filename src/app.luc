@@ -17,7 +17,7 @@ from luce_std.crash import Hook
 from recovery import save_for_recovery
 
 ## The version the update check compares; keep it equal to package.prisma's.
-pub let version: str = "0.4.0"
+pub let version: str = "0.5.0"
 
 pub class Luce2D:
     pub let app: Application
