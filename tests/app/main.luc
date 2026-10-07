@@ -17,7 +17,7 @@ func application_version(root: str) -> unit!:
 ## drawing on a standalone frame records nothing but must not fail. The checks that write
 ## files get a scratch folder under build/tests/app.
 pub func main(arguments: list[str]) -> int!:
-    let root = files.canonical("../..")
+    let root = files.canonical(".")
     application_version(root)
     let folder = paths.join(root, "build/tests/app/scratch")
     if files.exists(folder):
