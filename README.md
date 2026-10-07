@@ -88,7 +88,7 @@ three native frames and exits; `luc run -- picture.png` opens a picture.
 ## Tests and preview
 
 ```sh
-python3 tests/run.py       # headless: workspace, view and panels
+luc test                  # headless: workspace, view and panels
 python3 tools/preview.py   # macOS: captures a real Metal frame into docs/preview.png
 ```
 

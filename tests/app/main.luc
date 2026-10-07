@@ -1,3 +1,4 @@
+from luce_std import files, paths
 from brush_tests import brush_tests
 from background_tests import background_tests
 from workspace_tests import layers, viewing, contents, settings_round_trip, checker_regions, picking, adjustment_table, unsaved_changes, whole_layers, tool_options_kept, update_versions, opens_photos, settings_save_pending
@@ -6,9 +7,23 @@ from panel_tests import layer_panel_ops, size_dialogs, mask_actions, effect_rows
 from properties_tests import properties_rows
 from layer_kind_tests import scripts, script_editor, groups_and_shapes, alpha_channel_panel, vector_panel, node_editor
 
+## The update check compares src/app.luc's version, which must be the package's.
+func application_version(root: str) -> unit!:
+    let declared = files.read_text(paths.join(root, "package.prisma")).split("    str version = \"")[1].split("\"")[0]
+    let said = files.read_text(paths.join(root, "src/app.luc")).split("pub let version: str = \"")[1].split("\"")[0]
+    assert(said == declared, f"src/app.luc says {said}; package.prisma says {declared}")
+
 ## Headless checks of the workspace and the window contents, without a device:
-## drawing on a standalone frame records nothing but must not fail.
+## drawing on a standalone frame records nothing but must not fail. The checks that write
+## files get a scratch folder under build/tests/app.
 pub func main(arguments: list[str]) -> int!:
+    let root = files.canonical("../..")
+    application_version(root)
+    let folder = paths.join(root, "build/tests/app/scratch")
+    if files.exists(folder):
+        files.remove_tree(folder)
+    files.ensure_directory(folder)
+    let scratch = [folder]
     layers()
     picking()
     viewing()
@@ -20,7 +35,7 @@ pub func main(arguments: list[str]) -> int!:
     corner_modes()
     adjustment_table()
     retouch_tools()
-    unsaved_changes(arguments)
+    unsaved_changes(scratch)
     layer_panel_ops()
     properties_rows()
     size_dialogs()
@@ -52,16 +67,16 @@ pub func main(arguments: list[str]) -> int!:
     navigator_boxes()
     pen_paths()
     aligning()
-    dock_layouts(arguments)
-    settings_save_pending(arguments)
+    dock_layouts(scratch)
+    settings_save_pending(scratch)
     lasso_cycle()
     refining_selections()
     warping()
-    alpha_channel_panel(arguments)
-    vector_panel(arguments)
-    node_editor(arguments)
+    alpha_channel_panel(scratch)
+    vector_panel(scratch)
+    node_editor(scratch)
     color_panel_modes()
-    brush_tests(arguments)
-    background_tests(arguments)
+    brush_tests(scratch)
+    background_tests(scratch)
     print("PASS luced-2d workspace, view and panels")
     return 0
