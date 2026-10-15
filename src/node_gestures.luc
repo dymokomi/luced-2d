@@ -53,6 +53,10 @@ pub class NodeGestures:
     pub func drawing_box(self) -> bool:
         return self.mode == boxing
 
+    ## Whether a drag is under way: panning, moving nodes, or drawing a wire or a box.
+    pub func dragging(self) -> bool:
+        return self.mode != idle
+
     ## The box being dragged out, in view points: left, top, right, bottom.
     pub func box(self) -> list[float]:
         return [math.min(self.press_x, self.pointer_x), math.min(self.press_y, self.pointer_y), math.max(self.press_x, self.pointer_x), math.max(self.press_y, self.pointer_y)]

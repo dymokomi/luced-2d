@@ -170,9 +170,9 @@ pub class CanvasView: Widget:
     pub func march(self):
         if self.workspace.canvas.has_selection():
             self.ants += 1.0
-            self.box.invalidate()
+            self.box.repaint()
         elif self.workspace.canvas.busy():
-            self.box.invalidate()
+            self.box.repaint()
         self.autoscroll()
 
     ## A marquee or lasso dragged past the view's edge pans toward the pointer
@@ -289,6 +289,8 @@ pub class CanvasView: Widget:
             return
         if kind == EventKind.drag_moved or kind == EventKind.drag_left:
             return
+        let was_inside = self.pointer_inside
+        let was_alt = self.alt_held
         if event.cancelled:
             self.cancel()
         elif kind == EventKind.key_down or kind == EventKind.key_up or kind == EventKind.modifiers_changed:
@@ -318,9 +320,25 @@ pub class CanvasView: Widget:
         # Sampling for a dialog (On Image, an eyedropper) shows cross hairs, whatever the tool.
         let panning = self.pan.panning
         self.box.set_cursor(Cursor.crosshair if workspace.eyedroppers.armed() and not panning else cursor_for(workspace.tools.tool, panning, self.keys.space_held, workspace.tools.brush.diameter * workspace.viewport.zoom < 5.0))
-        self.box.invalidate()
-        for linked in self.linked:
-            linked.invalidate()
+        if kind != EventKind.pointer_moved:
+            self.box.invalidate()
+            for linked in self.linked:
+                linked.invalidate()
+        elif was_inside or self.pointer_inside or was_alt != self.alt_held or self.following():
+            # A move changes only what is drawn: the pointer's marks, a drag's work.
+            self.box.repaint()
+            for linked in self.linked:
+                linked.repaint()
+
+    ## Whether something drawn follows the pointer wherever it is: a drag under
+    ## way, or a lasso's or a path's next segment.
+    func following(self) -> bool:
+        if self.polygon.active or self.magnetic.active or self.pen.drawing:
+            return true
+        for gesture in self.gestures:
+            if gesture.active():
+                return true
+        return false
 
     ## The view lost the pointer mid-gesture: end what is in progress.
     func cancel(self) -> unit!:

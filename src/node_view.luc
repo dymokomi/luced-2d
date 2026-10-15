@@ -258,7 +258,11 @@ pub class NodeView: Widget:
             if let failed = self.on_failed:
                 failed(failure.message)
             return
-        self.box.invalidate()
+        if event.kind != EventKind.pointer_moved:
+            self.box.invalidate()
+        elif self.gestures.dragging():
+            # A move shows only under a drag: the view or nodes moving, a wire or box following.
+            self.box.repaint()
         if changed:
             if let tell = self.on_changed:
                 tell()

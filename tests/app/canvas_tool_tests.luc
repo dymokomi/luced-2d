@@ -14,7 +14,7 @@ from crop_box import CropBox, crop_new
 from polygon_lasso import PolygonLasso
 from guides import GuideDrag
 from snapping import Snapper
-from luce_ui.ui import Event
+from luce_ui.ui import Event, Application
 from script_commands import parse_line, ScriptCommands
 from luce_window.input import EventKind, Key
 from luce_std import math
@@ -273,6 +273,42 @@ pub func guides_and_snapping() -> unit!:
     workspace.viewport.snap = false
     snapper.gather(workspace, [], true)
     assert(snapper.snap_x(197.0) == 197.0)
+
+## The run loop draws only for a change that shows (luce-ui's `needs_frame`):
+## a guide pulled out of a ruler and cancelled leaves the view; a move over the
+## canvas marks the pointer on the rulers; one off it with no drag under way
+## draws nothing.
+pub func canvas_redraws() -> unit!:
+    let workspace = Workspace(200, 100)
+    workspace.canvas.bind_headless()
+    let panels = Panels(workspace, Actions(), Font())
+    let app = Application(panels.body)
+    app.layout(900.0, 600.0)
+    drawn(app)
+    let ruler = panels.top_ruler
+    let view = panels.view
+    ruler.event(Event(kind = EventKind.pointer_down, x = 40.0, y = 5.0, button = 0, inside = true))
+    ruler.event(Event(kind = EventKind.pointer_moved, x = 40.0, y = 80.0))
+    assert(view.guides.active and app.needs_frame())
+    drawn(app)
+    ruler.event(Event(cancelled = true))
+    assert(not view.guides.active and app.needs_frame())
+    drawn(app)
+    view.event(Event(kind = EventKind.pointer_moved, x = 50.0, y = 50.0, inside = true))
+    assert(app.needs_frame())
+    view.event(Event(kind = EventKind.pointer_left))
+    drawn(app)
+    view.event(Event(kind = EventKind.pointer_moved, x = -40.0, y = -40.0))
+    assert(not app.needs_frame())
+    app.close()
+    panels.close()
+
+## One turn's drawing, as the run loop does when a frame is due.
+func drawn(app: Application) -> unit!:
+    let frame = Frame(window.Size(900.0, 600.0, 900.0, 600.0, 1.0))
+    app.render(frame.target())
+    frame.close()
+    assert(not app.needs_frame())
 
 ## Live text: a new text layer typed into, committed and named by its words;
 ## edited again with its settings; one left empty goes.

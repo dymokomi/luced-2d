@@ -103,12 +103,14 @@ pub class Ruler: Widget:
             let y = event.y + mine.y - view.y
             let workspace = self.workspace
             guides.drag((x - workspace.viewport.offset_x) / workspace.viewport.zoom, (y - workspace.viewport.offset_y) / workspace.viewport.zoom, x < 0.0 or y < 0.0)
-            self.view.layout().invalidate()
+            self.view.layout().repaint()
         elif event.kind == EventKind.pointer_up and guides.active:
             guides.finish(self.workspace)
             self.view.layout().invalidate()
         elif event.cancelled and guides.active:
+            # The guide being dragged out goes from the view.
             guides.active = false
+            self.view.layout().repaint()
 
 ## The corner where the rulers meet.
 pub class RulerCorner: Widget:
